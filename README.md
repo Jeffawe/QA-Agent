@@ -1,2 +1,2 @@
-# Game-Tester-Agent
-An agent that can play WebGL games
+# Web-Tester-Agent
+An agent that test websites and web apps
