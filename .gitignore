@@ -1,0 +1,81 @@
+# ----------------------------------------
+# Node.js Core
+# ----------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+.pnpm-debug.log
+
+# ----------------------------------------
+# Environment Variables
+# ----------------------------------------
+.env
+.env.*          # For multiple envs like .env.production, .env.local
+
+# ----------------------------------------
+# Build Artifacts
+# ----------------------------------------
+dist/
+build/
+out/
+*.tsbuildinfo
+images/
+train/
+
+# ----------------------------------------
+# TypeScript
+# ----------------------------------------
+*.d.ts
+*.js
+*.js.map
+
+# If using tsx or tsc build folder
+*.cjs
+*.mjs
+
+# ----------------------------------------
+# Puppeteer / Chromium
+# ----------------------------------------
+.chromium/
+.cache/
+puppeteer_dev_chrome_profile-*/ # Puppeteer's temp profile folder
+
+# ----------------------------------------
+# Logs
+# ----------------------------------------
+logs/
+*.log
+*.log.*
+
+# ----------------------------------------
+# OS/System
+# ----------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+*.swp
+*.swo
+
+# ----------------------------------------
+# IDEs/Editors
+# ----------------------------------------
+.vscode/
+.idea/
+*.code-workspace
+
+# ----------------------------------------
+# Testing
+# ----------------------------------------
+coverage/
+.nyc_output/
+
+# ----------------------------------------
+# Misc
+# ----------------------------------------
+*.local
+*.bak
+*.tmp

@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    /* Visit https://aka.ms/tsconfig to read more about this file */
+    "target": "es2016",                                  
+    "moduleDetection": "auto",                        
+
+    /* Modules */
+    "module": "es2020",                               
+    "rootDir": "./",                                 
+    "moduleResolution": "node10",                    
+    "esModuleInterop": true,                           
+    "forceConsistentCasingInFileNames": true,          
+
+    /* Type Checking */
+    "strict": true,                                     
+    "skipLibCheck": true                                 
+  }
+}
