@@ -79,3 +79,4 @@ coverage/
 *.local
 *.bak
 *.tmp
+/python/venv

@@ -266,5 +266,5 @@ export async function processScreenshot(
     });
     
     // Create full report
-    await createAnnotationReport(screenshotPath, elements, outputDir);
+    // await createAnnotationReport(screenshotPath, elements, outputDir);
 }
