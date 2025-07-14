@@ -1,5 +1,5 @@
 import { setTimeout } from 'node:timers/promises';
-import { Action, ClicKType, ElementData, Rect } from '../types';
+import { Action, ClicKType, InteractiveElement, Rect } from '../types';
 import Session from '../models/session';
 import { LogManager } from '../logManager';
 
@@ -12,7 +12,7 @@ export default class ActionService {
     this.session = session;
   }
 
-  async executeAction(action: Action, elementData: any,  offset: Rect = defaultOffset): Promise<void> {
+  async executeAction(action: Action, elementData: InteractiveElement[], offset: Rect = defaultOffset): Promise<void> {
     try {
       switch (action.step) {
         case 'move_mouse_to':
@@ -25,11 +25,10 @@ export default class ActionService {
           break;
 
         case 'click':
-          if(typeof action.args[0] === 'string') {
-            const selector = this.getSelectorByLabel(action.args[0], elementData);
+          if (typeof action.args[0] === 'string') {
+            const selector = this.getSelectorByLabel(elementData, action.args[0]);
             if (!selector) {
-              console.error(`Selector not found for label: ${action.args[0]}`);
-              return;
+              throw new Error(`Selector not found for label: ${action.args[0]}`);
             }
             await this.session.pressSelector(selector);
           } else if (typeof action.args[0] === 'number' && typeof action.args[1] === 'number') {
@@ -38,6 +37,7 @@ export default class ActionService {
           } else {
             console.error('Invalid arguments for click:', action.args);
           }
+          
           break;
 
         case 'press_key':
@@ -68,7 +68,7 @@ export default class ActionService {
       LogManager.log(`Executed action: ${action.step} with args: ${JSON.stringify(action.args)}`);
       LogManager.log(`Reason: ${action.reason}`);
     } catch (error) {
-      console.error('Error executing action:', error);
+      throw error;
     }
   }
 
@@ -76,11 +76,8 @@ export default class ActionService {
     await setTimeout(ms);
   }
 
-  getSelectorByLabel = (clickableElements: any, label: string): string | null => {
-    const match = clickableElements.find((match: any) =>
-      match.openCVBox.label === label
-    );
-
-    return match ? match.domElement.selector : null;
+  getSelectorByLabel = (clickableElements: InteractiveElement[], label: string): string | null => {
+    const element = clickableElements.find(el => el.label === label);
+    return element ? element.selector : null;
   };
 }

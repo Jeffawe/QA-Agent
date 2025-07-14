@@ -1,4 +1,4 @@
-import { Action, State } from "../types";
+import { Action, State } from "../../types";
 import { EventEmitter } from 'events';
 
 // events.ts

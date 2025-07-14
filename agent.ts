@@ -5,12 +5,13 @@ import VisionModel from './models/visionModel';
 import LLMCommander from './models/llmModel';
 import { Thinker } from "./abstract";
 import { LogManager } from "./logManager";
-import { detectUIWithPython, getDOMBoundingBoxes, matchBoxes } from "./models/UIElementDetector";
+import { getInteractiveElements } from "./services/UIElementDetector";
 import { EventBus } from "./utility/events/event";
 import { Action, State, ImageData } from "./types";
 import { CombinedThinker } from "./thinkers/combinedThinker";
 
 import { performance } from 'perf_hooks';
+import { processScreenshot } from "./services/drawOnImage";
 
 export interface AgentDependencies {
   session: Session;
@@ -31,7 +32,7 @@ export default class Agent {
   private readonly bus: EventBus;
 
   // State Data
-  private state: State = State.START;
+  public state: State = State.START;
   private step = 0;
   private response = "";
   private oldPageName = "";
@@ -86,33 +87,13 @@ export default class Agent {
             return State.DONE;
           }
 
-          (this as any).finalFilename = `images/${filename}`;
+          const elements = await getInteractiveElements(this.session.page!);
+          await processScreenshot(`./images/${filename}`, elements);
+          (this as any).clickableElements = elements;
+
+          (this as any).finalFilename = `images/annotated_${filename}`;
           this.bus.emit({ ts: Date.now(), type: "screenshot_taken", filename: (this as any).finalFilename, elapsedMs: 0 });
 
-          const boxes = detectUIWithPython((this as any).finalFilename);
-
-          // Get DOM boxes
-          const domBoxes = await getDOMBoundingBoxes(this.session.page!);
-
-          // Match them
-          const matches = matchBoxes(boxes, domBoxes);
-
-          // Filter for clickable elements
-          const clickableMatches = matches.filter(match => match.domElement.isClickable);
-
-          (this as any).allMatches =  {
-            allMatches: matches,
-            clickableElements: clickableMatches
-          };
-
-          LogManager.log(`✅ UI elements detected: ${clickableMatches}`, this.state, true);
-
-          if (!boxes?.length) {
-            LogManager.error("No UI elements detected; finishing run.", this.state);
-            return State.DONE;
-          }
-          // store for decide phase
-          (this as any).boxes = boxes;
           return State.DECIDE;
         }
 
@@ -121,8 +102,7 @@ export default class Agent {
             goal: "Crawl every internal page of the target site",
             vision: "",
             lastAction: null,
-            memory: [],
-            boxData: (this as any).boxes,
+            memory: []
           };
 
           const imageData: ImageData = {
@@ -145,7 +125,15 @@ export default class Agent {
           const action: Action = (this as any).pendingAction;
           const t0 = Date.now();
           this.bus.emit({ ts: t0, type: "action_started", action });
-          await this.actionService.executeAction(action, (this as any).allMatches.clickableElements);
+
+          try {
+            await this.actionService.executeAction(action, (this as any).clickableElements);
+          } catch (error) {
+            LogManager.error(String(error), this.state, false);
+            this.bus.emit({ ts: Date.now(), type: "error", message: String(error), stack: (error as Error).stack });
+            return State.DONE;
+          }
+
           this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });
           this.response = action.response ?? "";
           this.step++;
@@ -165,7 +153,6 @@ export default class Agent {
       }
     } catch (error) {
       this.bus.emit({ ts: Date.now(), type: "error", message: String(error), stack: (error as Error).stack });
-      LogManager.error(`Agent error: ${error}`, this.state);
       return State.DONE;
     }
   }

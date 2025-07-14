@@ -35,8 +35,7 @@ export class CombinedThinker extends Thinker {
                 - Goal: ${context.goal}
                 - Last Action: ${context.lastAction || "None"}
                 - Memory: ${context.memory.join("; ") || "None"}
-                - Box Data: ${JSON.stringify(context.boxData)} 
-                (When using click action. Put the appropriate label tag for the UI element box here in the args list)
+                (When using click action. Put the appropriate label tag (in the image) for the UI element box in the args list)
 
                 Respond with valid JSON only.
             `;
@@ -46,9 +45,11 @@ export class CombinedThinker extends Thinker {
                 throw new Error("No image data provided.");
             }
 
-            return await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath);
+            const result = await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath);
+            LogManager.log(`LLM response: ${JSON.stringify(result)}`, thinkerState, false);
+            return result;
         } catch (error) {
-            console.error('Error generating next action:', error);
+            LogManager.error(`Error generating next action: ${error}`, State.DECIDE, false);
             return {
                 analysis: {
                     bugs: [],

@@ -3,11 +3,15 @@ import Session, { runTestSession } from './models/session';
 import Agent from './agent';
 import dotenv from 'dotenv';
 
-import { detectUIWithPython } from './models/UIElementDetector';
+import { detectUIWithPython, getInteractiveElements } from './services/UIElementDetector';
 import { LocalEventBus } from './utility/events/event';
+import { LogManager } from './logManager';
+import { processScreenshot } from './services/drawOnImage';
 
 dotenv.config();
 
+const url = "https://www.jeffawe.com";
+const eventBus = new LocalEventBus();
 const app = express();
 const PORT: number = parseInt(process.env.PORT || '3000');
 
@@ -22,11 +26,11 @@ app.get('/start-game/:sessionId', async (req: Request, res: Response) => {
     const gameSession = new Session(sessionId);
     gameAgent = new Agent({
         session: gameSession,
-        eventBus: new LocalEventBus(),
+        eventBus: eventBus,
     });
 
     try {
-        await gameAgent.start('https://4cats.itch.io/dungeon-raid');
+        await gameAgent.start('https://www.jeffawe.com');
         res.send(`Game session ${sessionId} started successfully!`);
     } catch (error) {
         console.error('Error starting game session:', error);
@@ -45,13 +49,28 @@ app.get('/detect-ui', async (req: Request, res: Response) => {
 });
 
 app.get('/test', async (req: Request, res: Response) => {
-    try {       
-        await runTestSession('https://4cats.itch.io/dungeon-raid');
+    try {
+        //await runTestSession(url);
+        const session = new Session("3");
+        const hasStarted = await session.start(url);
+
+        if (!hasStarted) throw new Error('Failed to start test session');
+
+        if (!session.page) throw new Error('Page not initialized');
+        const elements = await getInteractiveElements(session.page);
+
+        await processScreenshot('./images/screenshot_0.png', elements);
         res.send('Test session started successfully!');
     }
     catch (error) {
         console.error('Error in test session:', error);
         res.status(500).send('Failed to start test session.');
+    }
+});
+
+eventBus.on('error', async (evt) => {
+    if (gameAgent) {
+        LogManager.error(`Agent error: ${evt.message}`, gameAgent.state, false);
     }
 });
 

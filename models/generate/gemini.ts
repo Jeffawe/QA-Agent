@@ -4,6 +4,7 @@ import { LLM } from "../../abstract";
 import { Action, AnalysisResponse } from "../../types";
 import fs from 'fs';
 import path from 'path';
+import { LogManager } from "../../logManager";
 
 dotenv.config();
 
@@ -25,8 +26,7 @@ const systemPrompt = String.raw`
                 2. Decide the single next navigation / interaction that keeps the crawl moving inside the site.
 
             ▸ RESOURCES YOU HAVE
-            • Screenshot of the full page (inline image)
-            • Bounding-box data for clickable or interactive elements, including semantic labels if available
+            • Screenshot of the full page (inline image) labelled for the different UI elements
             • Your last action and a short-term memory of prior attempts
 
             ▸ ALLOWED COMMANDS (one per response)
@@ -147,6 +147,10 @@ export class GeminiLLm extends LLM {
             }
         });
 
+        if (!response || !response.candidates || response.candidates.length === 0) {
+            throw new Error("No response from Gemini LLM");
+        }
+        
         return this.parseActionFromResponse(response);
     }
 

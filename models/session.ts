@@ -83,15 +83,46 @@ export default class Session {
     }
   }
 
-  async pressSelector(selector: string): Promise<void> {
+  async pressSelector(selector: string, options?: {
+    timeout?: number;
+    waitForSelector?: boolean;
+    scrollIntoView?: boolean;
+    force?: boolean;
+  }): Promise<void> {
     try {
       if (!this.page) throw new Error('Page not initialized');
+
+      const {
+        timeout = 5000,
+        waitForSelector = true,
+        scrollIntoView = true
+      } = options || {};
+
+      // Wait for selector to be available if requested
+      if (waitForSelector) {
+        await this.page.waitForSelector(selector, { timeout });
+      }
+
+      // Scroll element into view if requested
+      if (scrollIntoView) {
+        await this.page.evaluate((sel) => {
+          const element = document.querySelector(sel);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, selector);
+      }
+
+      // Click the element
       await this.page.click(selector);
-      console.log(`Pressed selector: ${selector}`);
+      console.log(`Successfully pressed selector: ${selector}`);
+
     } catch (error) {
-      console.error('Error pressing selector:', error);
+      console.error(`Error pressing selector "${selector}":`, error);
+      throw error; // Re-throw to allow caller to handle
     }
   }
+
 
   async click(x: number, y: number): Promise<void> {
     try {

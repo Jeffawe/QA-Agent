@@ -28,8 +28,7 @@ export class DefaultThinker extends Thinker {
             goal: nextActionContext.goal,
             vision: analysis,
             lastAction: nextActionContext.lastAction,
-            memory: nextActionContext.memory,
-            boxData: nextActionContext.boxData
+            memory: nextActionContext.memory
         });
 
         if (!command || !command.step) {

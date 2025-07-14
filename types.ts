@@ -33,7 +33,6 @@ export interface GetNextActionContext {
     vision: string;
     lastAction: string | null;
     memory: string[];
-    boxData: Box[];
 }
 
 export interface ImageData {
@@ -87,20 +86,20 @@ export enum State {
   NOTFOUND = "NOTFOUND"
 }
 
-export interface ElementData {
-    index: number;
+export interface InteractiveElement {
+    id: string;
     selector: string;
     tagName: string;
+    label: string;
     rect: Rect;
-    label?: string;
-    text: string;
-    isClickable: boolean;
     attributes: {
         id: string;
         className: string;
-        'aria-label': string;
-        'data-testid': string;
         href: string;
         type: string;
+        role: string;
+        'aria-label': string;
+        'data-testid': string;
     };
+    isVisible: boolean;
 }
