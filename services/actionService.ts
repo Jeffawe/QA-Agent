@@ -1,5 +1,5 @@
 import { setTimeout } from 'node:timers/promises';
-import { Action, ClicKType, InteractiveElement, Rect } from '../types';
+import { Action, ClicKType, InteractiveElement, Rect, State } from '../types';
 import Session from '../models/session';
 import { LogManager } from '../logManager';
 
@@ -65,8 +65,8 @@ export default class ActionService {
           break;
       }
 
-      LogManager.log(`Executed action: ${action.step} with args: ${JSON.stringify(action.args)}`);
-      LogManager.log(`Reason: ${action.reason}`);
+      LogManager.log(`Executed action: ${action.step} with args: ${JSON.stringify(action.args)}`, State.ACT);
+      LogManager.log(`Reason: ${action.reason}`, State.ACT);
     } catch (error) {
       throw error;
     }

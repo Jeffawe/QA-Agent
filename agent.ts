@@ -7,11 +7,13 @@ import { Thinker } from "./abstract";
 import { LogManager } from "./logManager";
 import { getInteractiveElements } from "./services/UIElementDetector";
 import { EventBus } from "./utility/events/event";
-import { Action, State, ImageData } from "./types";
+import { Action, State, ImageData, PageDetails } from "./types";
 import { CombinedThinker } from "./thinkers/combinedThinker";
 
 import { performance } from 'perf_hooks';
-import { processScreenshot } from "./services/drawOnImage";
+import { getImageHash, processScreenshot } from "./services/imageProcessor";
+import NavigationTree from "./services/navigationTree";
+import { StaticMemory } from "./services/memory/staticMemory";
 
 export interface AgentDependencies {
   session: Session;
@@ -35,7 +37,7 @@ export default class Agent {
   public state: State = State.START;
   private step = 0;
   private response = "";
-  private oldPageName = "";
+  private currentPage: PageDetails | null = null;
   private timeTaken = 0;
 
   constructor({
@@ -57,8 +59,7 @@ export default class Agent {
   /** Public API */
   async start(url: string): Promise<void> {
     LogManager.initialize();
-    this.oldPageName = "Landing Page";
-    LogManager.addInitialPage("Landing Page");
+    NavigationTree.initialize();
     const started = await this.session.start(url);
     if (!started) return;
 
@@ -89,10 +90,22 @@ export default class Agent {
 
           const elements = await getInteractiveElements(this.session.page!);
           await processScreenshot(`./images/${filename}`, elements);
+
+          LogManager.log(`Elements detected: ${elements.length} are: ${JSON.stringify(elements)}`, this.state, false);
           (this as any).clickableElements = elements;
+
+          (this as any).labels = elements.map((element) => element.label);
+          LogManager.log(`Labels detected: ${(this as any).labels.length} are: ${JSON.stringify((this as any).labels)}`, this.state, false);
 
           (this as any).finalFilename = `images/annotated_${filename}`;
           this.bus.emit({ ts: Date.now(), type: "screenshot_taken", filename: (this as any).finalFilename, elapsedMs: 0 });
+
+          this.currentPage = {
+            url: this.session.page?.url(),
+            title: "",
+            uniqueID: getImageHash(`./images/${filename}`),
+            description: "",
+          };
 
           return State.DECIDE;
         }
@@ -102,7 +115,8 @@ export default class Agent {
             goal: "Crawl every internal page of the target site",
             vision: "",
             lastAction: null,
-            memory: []
+            memory: [],
+            possibleLabels: (this as any).labels,
           };
 
           const imageData: ImageData = {
@@ -117,7 +131,12 @@ export default class Agent {
             return State.DONE;
           }
           (this as any).pendingAction = command.action;
-          (this as any).pageName = command.pageName;
+
+          if (this.currentPage) {
+            this.currentPage.title = this.resolvePageTitle(command.pageDetails?.pageName || " ", this.currentPage.url || "");
+            this.currentPage.description = command.pageDetails?.description || ""
+          }
+
           return State.ACT;
         }
 
@@ -139,12 +158,16 @@ export default class Agent {
           this.step++;
           await setTimeout(1000);
 
-          // LogManager.addNavigation(this.oldPageName, (this as any).pageName);
-          // this.oldPageName = (this as any).pageName;
-
           const endTime = performance.now();
           this.timeTaken = endTime - (this as any).startTime;
           LogManager.log(`Time taken: ${this.timeTaken.toFixed(2)} ms`, this.state, false);
+
+          if (this.currentPage) {
+            NavigationTree.addPage(this.currentPage.title, this.currentPage.description, this.currentPage.url || "", { loadTime: `${this.timeTaken.toFixed(2)} ms` });
+          }
+
+          StaticMemory.addPage(this.currentPage!);
+
           return State.OBSERVE;
         }
 
@@ -155,5 +178,21 @@ export default class Agent {
       this.bus.emit({ ts: Date.now(), type: "error", message: String(error), stack: (error as Error).stack });
       return State.DONE;
     }
+  }
+
+  async stop(): Promise<void> {
+    this.state = State.DONE;
+  }
+
+  async cleanup(): Promise<void> {}
+
+  resolvePageTitle(title: string, uniqueID: string): string {
+    const matchByID = StaticMemory.pages.find(p => p.uniqueID === uniqueID);
+    if (matchByID) return matchByID.title;
+
+    const titleExists = StaticMemory.pages.some(p => p.title === title);
+    if (titleExists) return uniqueID;
+
+    return title || uniqueID;
   }
 }

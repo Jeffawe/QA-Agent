@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import { detectUIWithPython, getInteractiveElements } from './services/UIElementDetector';
 import { LocalEventBus } from './utility/events/event';
 import { LogManager } from './logManager';
-import { processScreenshot } from './services/drawOnImage';
+import { processScreenshot } from './services/imageProcessor';
 
 dotenv.config();
 

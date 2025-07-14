@@ -26,6 +26,7 @@ export interface Analysis {
 export interface AnalysisResponse {
     analysis: Analysis;
     action: Action;
+    pageDetails?: LLMPageResult;
 }
 
 export interface GetNextActionContext {
@@ -33,6 +34,7 @@ export interface GetNextActionContext {
     vision: string;
     lastAction: string | null;
     memory: string[];
+    possibleLabels: string[];
 }
 
 export interface ImageData {
@@ -40,12 +42,17 @@ export interface ImageData {
     imageUrl?: string;
 }
 
+interface LLMPageResult {
+    pageName?: string;
+    description?: string;
+}
+
 export interface ThinkResult {
     action: Action;
     confidence?: number;
     memoryPatch?: string;
     notes?: string;
-    pageName?: string;
+    pageDetails?: LLMPageResult;
 }
 
 export interface Box {
@@ -77,13 +84,13 @@ export enum ClicKType {
  * Finite‑state machine representing the agent lifecycle.
  */
 export enum State {
-  START = "START",
-  OBSERVE = "OBSERVE",
-  DECIDE = "DECIDE",
-  ACT = "ACT",
-  DONE = "DONE",
-  ERROR = "ERROR",
-  NOTFOUND = "NOTFOUND"
+    START = "START",
+    OBSERVE = "OBSERVE",
+    DECIDE = "DECIDE",
+    ACT = "ACT",
+    DONE = "DONE",
+    ERROR = "ERROR",
+    NOTFOUND = "NOTFOUND"
 }
 
 export interface InteractiveElement {
@@ -102,4 +109,11 @@ export interface InteractiveElement {
         'data-testid': string;
     };
     isVisible: boolean;
+}
+
+export interface PageDetails {
+    title: string;
+    url?: string;
+    uniqueID: string;
+    description: string;
 }

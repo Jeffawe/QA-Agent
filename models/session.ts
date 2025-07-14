@@ -1,7 +1,8 @@
 import puppeteer, { Browser, Page, ElementHandle, KeyInput, Frame } from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
-import { ClicKType, Rect } from '../types';
+import { ClicKType, Rect, State } from '../types';
+import { LogManager } from '../logManager';
 
 export default class Session {
   private sessionId: string;
@@ -115,10 +116,10 @@ export default class Session {
 
       // Click the element
       await this.page.click(selector);
-      console.log(`Successfully pressed selector: ${selector}`);
+      LogManager.log(`Successfully pressed selector: ${selector}`, State.ACT, false);
 
     } catch (error) {
-      console.error(`Error pressing selector "${selector}":`, error);
+      LogManager.error(`Error pressing selector "${selector}": ${error}`, State.ACT);
       throw error; // Re-throw to allow caller to handle
     }
   }

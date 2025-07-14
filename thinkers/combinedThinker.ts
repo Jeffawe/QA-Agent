@@ -14,7 +14,8 @@ export class CombinedThinker extends Thinker {
     async think(nextActionContext: GetNextActionContext, imageData: ImageData, extraInfo: string): Promise<ThinkResult> {
         const analysis = await this.getNextAction(nextActionContext, imageData);
         return {
-            action: analysis.action || { step: 'no_op', args: [], reason: 'No command returned' }
+            action: analysis.action || { step: 'no_op', args: [], reason: 'No command returned' },
+            pageDetails: analysis.pageDetails || { pageName: "", description: "" }
         };
     }
 
@@ -35,6 +36,7 @@ export class CombinedThinker extends Thinker {
                 - Goal: ${context.goal}
                 - Last Action: ${context.lastAction || "None"}
                 - Memory: ${context.memory.join("; ") || "None"}
+                - Possible Labels: ${context.possibleLabels.join("; ") || "None"}
                 (When using click action. Put the appropriate label tag (in the image) for the UI element box in the args list)
 
                 Respond with valid JSON only.
