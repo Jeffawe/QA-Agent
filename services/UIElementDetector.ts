@@ -2,7 +2,7 @@ import { spawnSync } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { Box, InteractiveElement, Rect, State } from '../types';
-import { LogManager } from '../logManager';
+import { LogManager } from '../utility/logManager';
 import { Page } from 'puppeteer';
 
 const __filename = fileURLToPath(import.meta.url);

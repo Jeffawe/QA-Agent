@@ -1,71 +1,14 @@
 import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genai";
-import dotenv, { config } from 'dotenv';
-import { LLM } from "../../abstract";
+import dotenv from 'dotenv';
+import { LLM } from "../../utility/abstract";
 import { Action, AnalysisResponse } from "../../types";
 import fs from 'fs';
 import path from 'path';
-import { LogManager } from "../../logManager";
+import { systemPrompt, systemActionPrompt } from "./prompts";
 
 dotenv.config();
 
 const genAi = new GoogleGenAI({ apiKey: process.env.GOOGLE_GENAI_API_KEY });
-
-const systemPrompt = String.raw`
-            You are a website-auditing autonomous agent.
-
-            ▸ MISSION
-            Your current mission will be given as goal. (external redirects are forbidden except for the login flow).
-            For **each page you land on**, do two things:
-
-                1. Analyse—
-                • Look for functional bugs (broken links, console errors, 404s, JS exceptions)
-                • Flag UX / UI issues (misaligned elements, unreadable contrast, missing alt text, CLS jank, etc.)
-                • Note performance hints (large images, long TTFB)
-                • Record any helpful contextual info (page purpose, detected frameworks, etc.)
-
-                2. Decide the single next navigation / interaction that keeps the crawl moving inside the site.
-
-            ▸ RESOURCES YOU HAVE
-            • Screenshot of the full page (inline image) labelled for the different UI elements
-            • Your last action and a short-term memory of prior attempts
-            • A list of possible labels to pick from (UI elements in the page. Don't pick outside of it when using click)
-
-            ▸ ALLOWED COMMANDS (one per response)
-            - click (buttons, links)
-            - scroll (up/down)
-            - type (text input, search fields)
-            - navigate (back to a previous page / forward in args)
-            - wait
-            - done   (when the entire site has been audited)
-
-            Arguments for each command should be in the args array.
-
-            ▸ RESPONSE FORMAT  
-            Return **exactly one** JSON object, no commentary, in this schema:
-
-            \`\`\`json
-            {
-                "analysis": {
-                    "bugs": [
-                        { "description": "...", "selector": "#btn-signup", "severity": "high" }
-                    ],
-                    "ui_issues": [
-                        { "description": "...", "selector": ".nav", "severity": "medium" }
-                    ],
-                    "notes": "Any extra observations about this page"
-                },
-                "action": {
-                    "step": "command_name",
-                    "args": [/* arguments */],
-                    "reason": "Why this command keeps the crawl progressing"
-                },
-                "pageDetails": {
-                    pageName: "Name of the page you are currently on",
-                    description: "Short description of the page you are currently on"
-                }
-            }
-            \`\`\`
-            `;
 
 export class GeminiLLm extends LLM {
     async generateTextResponse(prompt: string): Promise<Action> {
@@ -129,7 +72,7 @@ export class GeminiLLm extends LLM {
        * @param prompt  textual instructions
        * @param imagePath path to png/jpg
        */
-    async generateMultimodalAction(prompt: string, imagePath: string): Promise<AnalysisResponse> {
+    async generateMultimodalAction(prompt: string, imagePath: string, recurrent: boolean = false): Promise<AnalysisResponse> {
         if (!fs.existsSync(imagePath)) throw new Error(`Image not found at ${imagePath}`);
 
         const mimeType = path.extname(imagePath).toLowerCase() === ".png" ? "image/png" : "image/jpeg";
@@ -148,20 +91,20 @@ export class GeminiLLm extends LLM {
                 ]),
             ],
             config: {
-                systemInstruction: systemPrompt
+                systemInstruction: recurrent ? systemActionPrompt : systemPrompt
             }
         });
 
         if (!response || !response.candidates || response.candidates.length === 0) {
             throw new Error("No response from Gemini LLM");
         }
-        
-        return this.parseActionFromResponse(response);
+
+        return recurrent ? this.parseActionFromResponse(response) : this.parseDecisionFromResponse(response);
     }
 
     // ---------------- private helpers ----------------
 
-    private parseActionFromResponse(raw: any): AnalysisResponse {
+    private parseDecisionFromResponse(raw: any): AnalysisResponse {
         try {
             if (!raw?.candidates?.length) throw new Error("No candidates returned");
             const responseText: string | undefined = raw.candidates[0]?.content?.parts?.[0]?.text;
@@ -185,6 +128,39 @@ export class GeminiLLm extends LLM {
                     args: [],
                 }
             } satisfies AnalysisResponse;
+        }
+    }
+
+    private parseActionFromResponse(raw: any): AnalysisResponse {
+        // --- defaults -------------------------------------------------------------
+        const defaultResponse: AnalysisResponse = {
+            analysis: { bugs: [], ui_issues: [], notes: "" },
+            action: {
+                step: "no_op",
+                args: [],
+                reason: "LLM produced invalid JSON"
+            }
+        };
+
+        try {
+            const text: string | undefined =
+                raw?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!text) throw new Error("Empty response text");
+
+            // grab the first JSON object that appears in the text
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error("No JSON object found in response");
+
+            const parsed = JSON.parse(jsonMatch[0]);
+
+            // The model might return either the full AnalysisResponse
+            // or just the Action object; handle both cases gracefully.
+            const action: Action = parsed.action ?? parsed;
+
+            return { ...defaultResponse, action };
+        } catch (err) {
+            console.error("Failed to parse LLM response:", err);
+            return defaultResponse; // fall back to the no-op action
         }
     }
 }

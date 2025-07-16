@@ -1,7 +1,8 @@
-import { Thinker } from "../abstract";
-import { LogManager } from "../logManager";
-import { GeminiLLm } from "../models/generate/gemini";
-import { GetNextActionContext, State, ThinkResult, ImageData, Action, AnalysisResponse } from "../types";
+import { Thinker } from "../../utility/abstract";
+import { LogManager } from "../../utility/logManager";
+import { GeminiLLm } from "../../models/generate/gemini";
+import { StaticMemory } from "../memory/staticMemory";
+import { GetNextActionContext, State, ThinkResult, ImageData, AnalysisResponse } from "../../types";
 
 const thinkerState = State.DECIDE
 
@@ -11,8 +12,8 @@ export class CombinedThinker extends Thinker {
         this.modelClient = new GeminiLLm();
     }
 
-    async think(nextActionContext: GetNextActionContext, imageData: ImageData, extraInfo: string): Promise<ThinkResult> {
-        const analysis = await this.getNextAction(nextActionContext, imageData);
+    async think(nextActionContext: GetNextActionContext, imageData: ImageData, extraInfo: string, recurrent: boolean = false): Promise<ThinkResult> {
+        const analysis = await this.getNextDecision(nextActionContext, imageData, recurrent);
         return {
             action: analysis.action || { step: 'no_op', args: [], reason: 'No command returned' },
             pageDetails: analysis.pageDetails || { pageName: "", description: "" }
@@ -25,7 +26,7 @@ export class CombinedThinker extends Thinker {
          * @param imageData - The image data.
          * @returns The next action for the agent.
     */
-    async getNextAction(context: GetNextActionContext, imageData: ImageData): Promise<AnalysisResponse> {
+    async getNextDecision(context: GetNextActionContext, imageData: ImageData, recurrent: boolean): Promise<AnalysisResponse> {
         if (!this.modelClient) {
             throw new Error("Model client is not loaded. Please load the model first.");
         }
@@ -37,7 +38,7 @@ export class CombinedThinker extends Thinker {
                 - Last Action: ${context.lastAction || "None"}
                 - Memory: ${context.memory.join("; ") || "None"}
                 - Possible Labels: ${context.possibleLabels.join("; ") || "None"}
-                (When using click action. Put the appropriate label tag (in the image) for the UI element box in the args list)
+                (When using click action. Put the appropriate label tag (it must be in the list of possible labels provided) for the UI element box in the args list)
 
                 Respond with valid JSON only.
             `;
@@ -47,7 +48,7 @@ export class CombinedThinker extends Thinker {
                 throw new Error("No image data provided.");
             }
 
-            const result = await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath);
+            const result = await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath, recurrent);
             LogManager.log(`LLM response: ${JSON.stringify(result)}`, thinkerState, false);
             return result;
         } catch (error) {

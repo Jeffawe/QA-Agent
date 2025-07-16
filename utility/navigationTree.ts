@@ -1,5 +1,6 @@
 import * as fs from 'fs';
-import * as path from 'path';
+import { join, isAbsolute } from "path";
+import { LogManager } from './logManager';
 
 interface PageNode {
     type: 'page';
@@ -43,8 +44,12 @@ class NavigationTree {
     /**
      * Initialize the navigation tree with optional output file path
      */
-    static initialize(outputFilePath: string = 'navigation_tree.md'): void {
-        this.outputFile = outputFilePath;
+    static initialize(outputFilePath: string = "logs/navigation_tree.md"): void {
+        const fullPath = isAbsolute(outputFilePath)
+            ? outputFilePath
+            : join(LogManager.PROJECT_ROOT, outputFilePath);
+
+        this.outputFile = fullPath;
         this.tree = [];
         this.currentPath = [];
         this.pageVisitCounts.clear();
@@ -74,7 +79,7 @@ class NavigationTree {
         this.tree.push(pageNode);
         this.currentPath = [this.tree.length - 1]; // Update current path to this page
         this.updateMarkdownFile();
-        
+
         return pageNode;
     }
 
@@ -99,7 +104,7 @@ class NavigationTree {
 
         currentPage.actions.push(actionNode);
         this.updateMarkdownFile();
-        
+
         return actionNode;
     }
 
@@ -157,7 +162,7 @@ class NavigationTree {
         const totalPages = this.tree.length;
         const totalActions = this.tree.reduce((sum, page) => sum + page.actions.length, 0);
         const uniquePages = new Set(this.tree.map(page => page.url)).size;
-        
+
         return {
             totalPages,
             totalActions,
@@ -178,7 +183,7 @@ class NavigationTree {
         markdown += `- Unique Pages: ${stats.uniquePages}\n`;
         markdown += `- Total Actions: ${stats.totalActions}\n`;
         markdown += `- Average Actions per Page: ${stats.averageActionsPerPage}\n\n`;
-        
+
         markdown += `## Navigation Flow\n\n`;
 
         this.tree.forEach((page, index) => {
@@ -186,7 +191,7 @@ class NavigationTree {
             markdown += `- **URL:** ${page.url}\n`;
             markdown += `- **Description:** ${page.description}\n`;
             markdown += `- **Timestamp:** ${page.timestamp}\n`;
-            
+
             if (Object.keys(page.extraInfo).length > 0) {
                 markdown += `- **Extra Info:** ${JSON.stringify(page.extraInfo, null, 2)}\n`;
             }
@@ -201,7 +206,7 @@ class NavigationTree {
                     }
                 });
             }
-            
+
             markdown += `\n---\n\n`;
         });
 
@@ -231,7 +236,7 @@ class NavigationTree {
         };
 
         const jsonString = JSON.stringify(exportData, null, 2);
-        
+
         if (filePath) {
             try {
                 fs.writeFileSync(filePath, jsonString, 'utf8');
@@ -264,7 +269,7 @@ class NavigationTree {
      * Find pages by name
      */
     static findPagesByName(name: string): PageNode[] {
-        return this.tree.filter(page => 
+        return this.tree.filter(page =>
             page.name.toLowerCase().includes(name.toLowerCase())
         );
     }

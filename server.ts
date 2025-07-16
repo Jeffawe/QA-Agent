@@ -1,12 +1,13 @@
 import express, { Request, Response } from 'express';
 import Session, { runTestSession } from './models/session';
-import Agent from './agent';
 import dotenv from 'dotenv';
 
 import { detectUIWithPython, getInteractiveElements } from './services/UIElementDetector';
-import { LocalEventBus } from './utility/events/event';
-import { LogManager } from './logManager';
+import { LocalEventBus } from './services/events/event';
+import { LogManager } from './utility/logManager';
 import { processScreenshot } from './services/imageProcessor';
+import BossAgent from './agent';
+import { State } from './types';
 
 dotenv.config();
 
@@ -15,16 +16,16 @@ const eventBus = new LocalEventBus();
 const app = express();
 const PORT: number = parseInt(process.env.PORT || '3000');
 
-let gameAgent: Agent | null = null;
+let gameAgent: BossAgent | null = null;
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Hello, World!');
 });
 
-app.get('/start-game/:sessionId', async (req: Request, res: Response) => {
+app.get('/start/:sessionId', async (req: Request, res: Response) => {
     const sessionId = req.params.sessionId;
     const gameSession = new Session(sessionId);
-    gameAgent = new Agent({
+    gameAgent = new BossAgent({
         session: gameSession,
         eventBus: eventBus,
     });
@@ -70,7 +71,7 @@ app.get('/test', async (req: Request, res: Response) => {
 
 eventBus.on('error', async (evt) => {
     if (gameAgent) {
-        LogManager.error(`Agent error: ${evt.message}`, gameAgent.state, false);
+        LogManager.error(`Agent error: ${evt.message}`, State.ERROR, false);
     }
 });
 

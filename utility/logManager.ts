@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { State } from './types';
+import { NamespacedState, State } from '../types';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,17 +13,21 @@ interface Entry {
   status: MissionStatus;
 }
 
-interface NavigationNode {
-  page: string;
-  children: Set<string>;
-  visitCount: number;
-}
-
 export class LogManager {
   private static logs: string[] = [];
-  private static logFilePath: string = path.join('logs', 'agent.log');
-  private static filePath = path.join(__dirname, path.join('logs', 'mission_log.md'));
-  private static navigationTree: Map<string, NavigationNode> = new Map();
+  public static PROJECT_ROOT = process.cwd()
+  private static logFilePath = path.join(LogManager.PROJECT_ROOT, "logs", "agent.log");
+  private static filePath = path.join(LogManager.PROJECT_ROOT, "logs", "mission_log.md");
+
+  private static resolveState(
+    state?: NamespacedState | State,
+    fallback: State = State.ERROR
+  ): string {
+    if (state && typeof state === "string") {
+      return state; // could be NamespacedState or a State string
+    }
+    return fallback;
+  }
 
   /**
    * Logs a message with a timestamp and agent state.
@@ -32,18 +36,22 @@ export class LogManager {
    * @param state - The current state of the agent (default is ERROR).
    * @param logToConsole - Whether to print to console (default: true).
    */
-  static log(message: string, state: State = State.ERROR, logToConsole: boolean = true): void {
-    const timestamped = `[${new Date().toISOString()}] [state: ${state}] ${message}`;
+  static log(
+    message: string,
+    state?: NamespacedState | State,
+    logToConsole: boolean = true
+  ): void {
+    const resolvedState = LogManager.resolveState(state, State.ERROR);
+    const timestamped = `[${new Date().toISOString()}] [state: ${resolvedState}] ${message}`;
     LogManager.logs.push(timestamped);
 
     if (logToConsole) console.log(timestamped);
 
-    // Ensure log folder exists and write to file
     try {
       fs.mkdirSync(path.dirname(LogManager.logFilePath), { recursive: true });
-      fs.appendFileSync(LogManager.logFilePath, timestamped + '\n');
+      fs.appendFileSync(LogManager.logFilePath, timestamped + "\n");
     } catch (err) {
-      console.error('Error writing to log file:', err);
+      console.error("Error writing to log file:", err);
     }
   }
 
@@ -54,10 +62,18 @@ export class LogManager {
    * @param state - The state where the error occurred (default is ERROR).
    * @param logToConsole - Whether to print to console (default: true).
   */
-  static error(message: string, state: State = State.ERROR, logToConsole: boolean = true): void {
-    const errorMessage = `[ERROR] ${message} at [state: ${state}] `;
+  static error(
+    message: string,
+    state?: NamespacedState | State,
+    logToConsole: boolean = true
+  ): void {
+    const resolvedState = LogManager.resolveState(state, State.ERROR);
+    const errorMessage = `[ERROR] ${message} at [state: ${resolvedState}]`;
     LogManager.logs.push(errorMessage);
-    console.error(errorMessage);
+
+    if (logToConsole) {
+      console.error(errorMessage);
+    }
   }
 
   /**
@@ -99,6 +115,19 @@ export class LogManager {
   static addMission(text: string, status: MissionStatus = 'pending') {
     const data = fs.readFileSync(this.filePath, 'utf-8');
     const section = this.sections.mission;
+    const newEntry = `- [${status === 'done' ? 'x' : ' '}] ${text}`;
+
+    const updated = data.replace(
+      new RegExp(`(${section})([\\s\\S]*?)(?=\\n##|$)`),
+      `$1\n\n${newEntry}\n`
+    );
+
+    fs.writeFileSync(this.filePath, updated.trimEnd() + '\n', 'utf-8');
+  }
+
+  static addSubMission(text: string, status: MissionStatus = 'pending') {
+    const data = fs.readFileSync(this.filePath, 'utf-8');
+    const section = this.sections.subMissions;
     const newEntry = `- [${status === 'done' ? 'x' : ' '}] ${text}`;
 
     const updated = data.replace(

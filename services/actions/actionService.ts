@@ -1,18 +1,27 @@
 import { setTimeout } from 'node:timers/promises';
-import { Action, ClicKType, InteractiveElement, Rect, State } from '../types';
-import Session from '../models/session';
-import { LogManager } from '../logManager';
+import { Action, ActionResult, ClicKType, InteractiveElement, Rect, State } from '../../types';
+import Session from '../../models/session';
+import { LogManager } from '../../utility/logManager';
 
 const defaultOffset: Rect = { x: 0, y: 0, width: 0, height: 0 };
 
 export default class ActionService {
   private session: Session;
 
+  //If the new page that will be clicked is an internal page or external page
+  private intOrext: string = '';
+  private baseUrl: string = '';
+
   constructor(session: Session) {
     this.session = session;
   }
 
-  async executeAction(action: Action, elementData: InteractiveElement[], offset: Rect = defaultOffset): Promise<void> {
+  public setBaseUrl(url: string) {
+    this.baseUrl = url;
+  }
+
+  async executeAction(action: Action, elementData: InteractiveElement[], offset: Rect = defaultOffset): Promise<ActionResult> {
+    this.intOrext = "internal";
     try {
       switch (action.step) {
         case 'move_mouse_to':
@@ -26,6 +35,10 @@ export default class ActionService {
 
         case 'click':
           if (typeof action.args[0] === 'string') {
+            const isExternal = this.isExternalByLabel(elementData, action.args[0], this.baseUrl!);
+            if (isExternal) {
+              this.intOrext = "external";
+            }
             const selector = this.getSelectorByLabel(elementData, action.args[0]);
             if (!selector) {
               throw new Error(`Selector not found for label: ${action.args[0]}`);
@@ -37,7 +50,7 @@ export default class ActionService {
           } else {
             console.error('Invalid arguments for click:', action.args);
           }
-          
+
           break;
 
         case 'press_key':
@@ -67,6 +80,8 @@ export default class ActionService {
 
       LogManager.log(`Executed action: ${action.step} with args: ${JSON.stringify(action.args)}`, State.ACT);
       LogManager.log(`Reason: ${action.reason}`, State.ACT);
+
+      return { success: true, message: this.intOrext };
     } catch (error) {
       throw error;
     }
@@ -76,8 +91,47 @@ export default class ActionService {
     await setTimeout(ms);
   }
 
-  getSelectorByLabel = (clickableElements: InteractiveElement[], label: string): string | null => {
-    const element = clickableElements.find(el => el.label === label);
-    return element ? element.selector : null;
+  getSelectorByLabel = (
+    clickableElements: InteractiveElement[],
+    label: string
+  ): string | null => {
+    for (const el of clickableElements) {
+      if (
+        el.label === label ||
+        el.attributes["aria-label"] === label ||
+        el.attributes["data-testid"] === label
+      ) {
+        return el.selector;
+      }
+    }
+    return null;
   };
+
+  isExternalByLabel(
+    elements: InteractiveElement[],
+    label: string,
+    baseURL: string
+  ): boolean {
+    const match = elements.find(
+      el =>
+        el.label === label ||
+        el.attributes["aria-label"] === label ||
+        el.attributes["data-testid"] === label
+    );
+
+    if (!match) return false; // can't find it = assume safe
+
+    const href = match.attributes.href?.trim();
+
+    if (!href) return false; // no href = internal (modal, etc.)
+
+    const isExternal =
+      href.startsWith("http") || href.startsWith("/") || href.startsWith("./");
+
+    // If it's a full URL but still matches your own base URL, it's internal
+    if (href.startsWith(baseURL)) return false;
+
+    return isExternal;
+  }
+
 }

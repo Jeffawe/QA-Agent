@@ -1,13 +1,82 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { Analysis, PageDetails } from '../../types';
+import { Analysis, LinkInfo, PageDetails } from '../../types';
 
 export class StaticMemory {
-  public static pages: PageDetails[] = [];
-  public static analysis: Analysis[] = [];
+  private static pages: Record<string, PageDetails> = {};
+  private static navStack: string[] = [];
 
-  static addPage(page: PageDetails) {
-    if(StaticMemory.pages.some(p => p.uniqueID === page.uniqueID)) return;
-    StaticMemory.pages.push(page);
+  static addPage(details: PageDetails) {
+    if (!details.url) return;
+    if (!this.pages[details.url]) {
+      this.pages[details.url] = details;
+    }
+  }
+
+  static addPage2(details: Omit<PageDetails, 'links'>, links: Omit<LinkInfo, 'visited'>[]) {
+    if (!details.url) return;
+    if (!this.pages[details.url]) {
+      this.pages[details.url] = {
+        visited: false,
+        title: details.title,
+        url: details.url,
+        uniqueID: details.uniqueID,
+        description: details.description,
+        links: links.map(link => ({ ...link, visited: false })),
+      }
+    }
+  }
+
+  static markPageVisited(url: string) {
+    if (this.pages[url]) {
+      this.pages[url].visited = true;
+    }
+  }
+
+  static markLinkVisited(url: string, identifier: string) {
+    const page = this.pages[url];
+    if (!page) return;
+    const link = page.links.find(
+      l => l.text === identifier || l.href === identifier
+    );
+    if (link) link.visited = true;
+  }
+
+  static getNextUnvisitedLink(url: string): LinkInfo | null {
+    const page = this.pages[url];
+    if (!page) return null;
+    return page.links.find(link => !link.visited) || null;
+  }
+
+  static pageExists(url: string): boolean {
+    return !!this.pages[url];
+  }
+
+  static isFullyExplored(url: string): boolean {
+    const page = this.pages[url];
+    if (!page) return true;
+    return page.links.every(link => link.visited);
+  }
+
+  static getAllUnvisitedLinks(url: string): LinkInfo[] {
+    const page = this.pages[url];
+    if (!page) return [];
+    return page.links.filter(link => !link.visited);
+  }
+
+  static pushToStack(url: string) {
+    this.navStack.push(url);
+  }
+
+  static popFromStack(): string | undefined {
+    return this.navStack.pop();
+  }
+
+  static hasStack(): boolean {
+    return this.navStack.length > 0;
+  }
+
+  static isPageVisited(url: string): boolean {
+    return this.pages[url]?.visited || false;
   }
 }

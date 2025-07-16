@@ -2,7 +2,7 @@ import { createCanvas, loadImage, CanvasRenderingContext2D } from 'canvas';
 import fs from 'fs';
 import path from 'path';
 import { InteractiveElement, State } from '../types';
-import { LogManager } from '../logManager';
+import { LogManager } from '../utility/logManager';
 import crypto from 'crypto';
 
 type HashAlgorithm = 'md5' | 'sha1' | 'sha256';
@@ -70,8 +70,6 @@ export async function annotateImage(
     // Save the annotated image
     const buffer = canvas.toBuffer('image/png');
     fs.writeFileSync(outputPath, buffer);
-
-    LogManager.log(`Annotated image saved to: ${outputPath}`, State.OBSERVE, true);
 }
 
 function drawElementAnnotation(

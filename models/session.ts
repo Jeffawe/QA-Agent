@@ -2,7 +2,7 @@ import puppeteer, { Browser, Page, ElementHandle, KeyInput, Frame } from 'puppet
 import fs from 'fs';
 import path from 'path';
 import { ClicKType, Rect, State } from '../types';
-import { LogManager } from '../logManager';
+import { LogManager } from '../utility/logManager';
 
 export default class Session {
   private sessionId: string;
@@ -36,7 +36,7 @@ export default class Session {
       return false;
     }
   }
-
+  
   async takeScreenshot(
     folderName: string,
     basicFilename: string,

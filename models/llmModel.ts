@@ -1,4 +1,4 @@
-import { LLM } from '../abstract';
+import { LLM } from '../utility/abstract';
 import { Action } from '../types';
 import { GetNextActionContext } from '../types';
 
@@ -69,7 +69,6 @@ export default class LLMCommander {
             - Vision Analysis: ${context.vision}
             - Last Action: ${context.lastAction || 'None'}
             - Memory: ${context.memory || 'None'}
-            - Box Data: ${JSON.stringify(context.boxData)}
             
             What should I do next? Respond with valid JSON only.
         `;

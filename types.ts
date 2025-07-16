@@ -2,7 +2,13 @@ export interface Action {
     step: 'move_mouse_to' | 'click' | 'press_key' | 'wait' | 'no_op' | string;
     args: any[];
     reason: string;
-    response?: string;
+    newGoal?: string;
+    nextLink?: string;
+}
+
+export interface ActionResult {
+    success: boolean;
+    message: string;
 }
 
 export interface Bug {
@@ -90,8 +96,17 @@ export enum State {
     ACT = "ACT",
     DONE = "DONE",
     ERROR = "ERROR",
-    NOTFOUND = "NOTFOUND"
+    NOTFOUND = "NOTFOUND",
+    VISIT = "VISIT",
+    EVALUATE = "EVALUATE",
+    WAIT = "WAIT",
+    INFO = "INFO"
 }
+
+type StateValue = `${State}`;
+export type Namespaces = "Crawler" | "Tester"; // add more if needed
+
+export type NamespacedState = `${Namespaces}.${StateValue}`;
 
 export interface InteractiveElement {
     id: string;
@@ -116,4 +131,13 @@ export interface PageDetails {
     url?: string;
     uniqueID: string;
     description: string;
+    visited: boolean;
+    links: LinkInfo[];
+}
+
+export interface LinkInfo {
+  text: string;
+  selector: string;
+  href: string;
+  visited: boolean;
 }
