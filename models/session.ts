@@ -36,6 +36,11 @@ export default class Session {
       return false;
     }
   }
+
+  async close(): Promise<void> {
+    if (this.page) await this.page.close();
+    if (this.browser) await this.browser.close();
+  }
   
   async takeScreenshot(
     folderName: string,
@@ -116,7 +121,6 @@ export default class Session {
 
       // Click the element
       await this.page.click(selector);
-      LogManager.log(`Successfully pressed selector: ${selector}`, State.ACT, false);
 
     } catch (error) {
       LogManager.error(`Error pressing selector "${selector}": ${error}`, State.ACT);

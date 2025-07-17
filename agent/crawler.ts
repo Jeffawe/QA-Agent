@@ -53,7 +53,7 @@ export class Crawler extends Agent {
                     this.currentUrl = page.url();
                     if (!StaticMemory.pageExists(this.currentUrl)) {
                         const elements = await getInteractiveElements(this.session.page!);
-                        const links = this.convertInteractiveElementsToLinks(elements, this.baseUrl!);
+                        const links = this.convertInteractiveElementsToLinks(elements, this.baseUrl!, this.currentUrl);
                         LogManager.log(`Links detected: ${links.length} are: ${JSON.stringify(links)}`, this.buildState(), false);
                         const pageDetails = {
                             title: this.currentUrl,
@@ -63,7 +63,7 @@ export class Crawler extends Agent {
                             visited: false,
                         };
                         StaticMemory.addPage2(pageDetails, links);
-                        CrawlMap.markVisited(this.currentUrl);
+                        CrawlMap.recordPage({ ...pageDetails, links });
                     }
                     this.setState(State.EVALUATE);
                     break;
@@ -85,11 +85,12 @@ export class Crawler extends Agent {
                 case State.VISIT: {
                     let isVisited = true;
                     const unvisited = StaticMemory.getAllUnvisitedLinks(this.currentUrl);
-                    LogManager.log(`Visiting ${unvisited.length} unvisited links: ${JSON.stringify(unvisited)}`, this.buildState(), false);
+                    LogManager.log(`Visiting ${unvisited.length} unvisited linkson page ${this.currentUrl}: ${JSON.stringify(unvisited)}`, this.buildState(), false);
                     if (!StaticMemory.isPageVisited(this.currentUrl)) {
                         for (const l of unvisited) CrawlMap.addEdge(this.currentUrl!, l.href);
                         StaticMemory.markPageVisited(this.currentUrl);
                         isVisited = false;
+                        CrawlMap.recordPage(StaticMemory.pages[this.currentUrl]);
                     }
                     this.tester.enqueue(unvisited, isVisited);
                     this.setState(State.WAIT);
@@ -110,6 +111,7 @@ export class Crawler extends Agent {
                     const next = this.tester.nextLink;
                     if (next) {
                         StaticMemory.markLinkVisited(this.currentUrl, next.text || next.href);
+                        CrawlMap.recordPage(StaticMemory.pages[this.currentUrl]);
                         StaticMemory.pushToStack(this.currentUrl);
                         CrawlMap.addEdge(this.currentUrl!, next.href);
                         this.setState(State.START);
@@ -140,46 +142,75 @@ export class Crawler extends Agent {
         } catch (err) {
             LogManager.error(`Crawler error on ${this.currentUrl}: ${err}`, this.buildState());
             this.setState(State.ERROR);
-            this.bus.emit({ ts: Date.now(), type: "error", message: String(err), stack: (err as Error).stack });
         }
     }
 
+    /**
+     * Convert DOM‐level interactive elements to LinkInfo objects.
+     * – Keeps only internal links
+     * – Deduplicates by absolute URL (ignoring #hash)
+     * – Drops links that point to the current page
+     */
     convertInteractiveElementsToLinks(
         elements: InteractiveElement[],
-        baseURL: string
+        baseURL: string,       // e.g. "https://example.com"
+        currentURL: string     // e.g. "https://example.com/foo/bar"
     ): LinkInfo[] {
         const links: LinkInfo[] = [];
+        const seen = new Set<string>();          // absolute URLs we’ve already emitted
+        const current = this.normalise(currentURL, baseURL); // for self-link check
 
-        for (const element of elements) {
-            const href = element.attributes.href;
-            let include = true;
+        for (const el of elements) {
+            const rawHref = el.attributes.href?.trim();
+            if (!rawHref) continue;                // no href → nothing to follow
 
-            if (href) {
-                const isInternal =
-                    href.startsWith(baseURL) ||
-                    href.startsWith("/") ||
-                    (!href.startsWith("http") && !href.startsWith("https"));
+            // Internal / external check stays exactly as before
+            const isInternal =
+                rawHref.startsWith(baseURL) ||
+                rawHref.startsWith("/") ||
+                (!rawHref.startsWith("http") && !rawHref.startsWith("https"));
 
-                if (!isInternal) {
-                    include = false;
-                }
-            }
+            if (!isInternal) continue;
 
-            if (include) {
-                links.push({
-                    text:
-                        element.label ||
-                        element.attributes["aria-label"] ||
-                        element.attributes["data-testid"] ||
-                        "",
-                    selector: element.selector,
-                    href: href || "", // fallback to empty string if not present
-                    visited: false,
-                });
-            }
+            // Resolve to an absolute URL and normalise for comparisons
+            const absHref = this.normalise(rawHref, baseURL);
+
+            // Skip if it’s the page we’re already on
+            if (absHref === current) continue;
+
+            // Skip duplicates (buttons/links that hit the same endpoint)
+            if (seen.has(absHref)) continue;
+            seen.add(absHref);
+
+            // Emit the first one we encounter
+            links.push({
+                text:
+                    el.label ||
+                    el.attributes["aria-label"] ||
+                    el.attributes["data-testid"] ||
+                    "",
+                selector: el.selector,
+                href: absHref,
+                visited: false
+            });
         }
 
         return links;
+    }
+
+    /** Normalise a URL: resolve relative → absolute, strip hash, trim trailing “/” */
+    normalise(href: string, base: string): string {
+        try {
+            const url = new URL(href, base);
+            url.hash = "";                           // ignore in-page anchors
+            if (url.pathname.endsWith("/") && url.pathname !== "/") {
+                url.pathname = url.pathname.slice(0, -1); // /foo/ → /foo
+            }
+            return url.href;
+        } catch {
+            // Invalid URL? fall back to raw string so the caller can decide
+            return href;
+        }
     }
 
     async cleanup(): Promise<void> {

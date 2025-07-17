@@ -3,20 +3,23 @@ import Session, { runTestSession } from './models/session';
 import dotenv from 'dotenv';
 
 import { detectUIWithPython, getInteractiveElements } from './services/UIElementDetector';
-import { LocalEventBus } from './services/events/event';
 import { LogManager } from './utility/logManager';
 import { processScreenshot } from './services/imageProcessor';
 import BossAgent from './agent';
 import { State } from './types';
+import { eventBus } from './services/events/eventBus';
+import { ActionSpamValidator } from './services/validators/actionValidator';
 
 dotenv.config();
 
 const url = "https://www.jeffawe.com";
-const eventBus = new LocalEventBus();
 const app = express();
 const PORT: number = parseInt(process.env.PORT || '3000');
 
 let gameAgent: BossAgent | null = null;
+
+///Validators
+new ActionSpamValidator(eventBus);
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Hello, World!');

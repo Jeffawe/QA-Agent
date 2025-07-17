@@ -13,7 +13,7 @@ export class CombinedThinker extends Thinker {
     }
 
     async think(nextActionContext: GetNextActionContext, imageData: ImageData, extraInfo: string, recurrent: boolean = false): Promise<ThinkResult> {
-        const analysis = await this.getNextDecision(nextActionContext, imageData, recurrent);
+        const analysis = await this.getNextDecision(nextActionContext, imageData, recurrent, extraInfo);
         return {
             action: analysis.action || { step: 'no_op', args: [], reason: 'No command returned' },
             pageDetails: analysis.pageDetails || { pageName: "", description: "" }
@@ -26,7 +26,7 @@ export class CombinedThinker extends Thinker {
          * @param imageData - The image data.
          * @returns The next action for the agent.
     */
-    async getNextDecision(context: GetNextActionContext, imageData: ImageData, recurrent: boolean): Promise<AnalysisResponse> {
+    async getNextDecision(context: GetNextActionContext, imageData: ImageData, recurrent: boolean, extraInfo?: string): Promise<AnalysisResponse> {
         if (!this.modelClient) {
             throw new Error("Model client is not loaded. Please load the model first.");
         }
@@ -39,6 +39,7 @@ export class CombinedThinker extends Thinker {
                 - Memory: ${context.memory.join("; ") || "None"}
                 - Possible Labels: ${context.possibleLabels.join("; ") || "None"}
                 (When using click action. Put the appropriate label tag (it must be in the list of possible labels provided) for the UI element box in the args list)
+                - Extra Info: ${extraInfo || "None"}
 
                 Respond with valid JSON only.
             `;

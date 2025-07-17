@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { NamespacedState, State } from '../types';
+import { eventBus } from '../services/events/eventBus';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,6 +71,7 @@ export class LogManager {
     const resolvedState = LogManager.resolveState(state, State.ERROR);
     const errorMessage = `[ERROR] ${message} at [state: ${resolvedState}]`;
     LogManager.logs.push(errorMessage);
+    //eventBus.emit({ ts: Date.now(), type: "error", message: String(message), stack: new Error().stack });
 
     if (logToConsole) {
       console.error(errorMessage);

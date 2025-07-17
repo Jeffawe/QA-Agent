@@ -28,19 +28,23 @@ export abstract class Agent {
 
     protected timeTaken = 0;
     protected bus: EventBus | null = null;
+    protected response: string = "";
 
     protected constructor(name: Namespaces, bus: EventBus) {
         this.name = name;
         this.bus = bus;
+        bus.on("validator_warning", (evt) => {
+            this.response = evt.message;
+            this.setState(State.START);
+        });
     }
 
     /** Advance the agent by **exactly one** state transition */
     public abstract tick(): Promise<void>;
 
     /** Return `true` when the agent has finished all work (or failed) */
-    public isDone() { 
+    public isDone() {
         const result = this.state === State.DONE || this.state === State.ERROR;
-        if (result) this.cleanup();
         return result;
     }
 

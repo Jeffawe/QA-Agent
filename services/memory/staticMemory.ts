@@ -1,9 +1,8 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { Analysis, LinkInfo, PageDetails } from '../../types';
+import { LinkInfo, PageDetails } from '../../types';
+import { LogManager } from '../../utility/logManager';
 
 export class StaticMemory {
-  private static pages: Record<string, PageDetails> = {};
+  public static pages: Record<string, PageDetails> = {};
   private static navStack: string[] = [];
 
   static addPage(details: PageDetails) {
@@ -39,7 +38,10 @@ export class StaticMemory {
     const link = page.links.find(
       l => l.text === identifier || l.href === identifier
     );
-    if (link) link.visited = true;
+    if (link){
+      LogManager.log(`Marking link ${link.href} for page ${url} as visited`, 'Crawler.ACT', false);
+      link.visited = true;
+    }
   }
 
   static getNextUnvisitedLink(url: string): LinkInfo | null {

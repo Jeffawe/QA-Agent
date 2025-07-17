@@ -26,7 +26,6 @@ export default class Tester extends Agent {
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
 
     private step = 0;
-    private response = "";
     private queue: LinkInfo[] = [];
     private goal: string = "";
     private visitedPage: boolean = false;
@@ -52,6 +51,8 @@ export default class Tester extends Agent {
         this.visitedPage = visitedPage;
         if (this.state === State.DONE || this.state === State.WAIT) {
             this.setState(State.START);
+        }else{
+            LogManager.log("Tester is already running or cannot start up", this.buildState(), true);
         }
     }
 
@@ -65,6 +66,9 @@ export default class Tester extends Agent {
                 /*────────── READY → RUN ──────────*/
                 case State.START:
                     (this as any).startTime = performance.now();
+                    if(this.visitedPage){
+                        LogManager.log("I Have visited page before", this.buildState(), true);
+                    }
                     this.goal = "Crawl the given page";
                     this.step = 0;
                     LogManager.log(`Start testing ${this.queue.length} links`, this.buildState(), true);
@@ -100,12 +104,14 @@ export default class Tester extends Agent {
                 }
 
                 case State.DECIDE: {
+                    const labels = this.queue.map((link) => link.text)
+                    LogManager.log(`Remaining links: ${labels.length} are: ${JSON.stringify(labels)}`, this.buildState(), false);
                     const nextActionContext = {
                         goal: this.goal,
                         vision: "",
                         lastAction: null,
                         memory: [],
-                        possibleLabels: this.queue.map((link) => link.text),
+                        possibleLabels: labels,
                     };
 
                     const imageData: ImageData = {
@@ -133,7 +139,7 @@ export default class Tester extends Agent {
                     let result: ActionResult | null = null
 
                     try {
-                        result = await this.actionService.executeAction(action, (this as any).clickableElements);
+                        result = await this.actionService.executeAction(action, (this as any).clickableElements, this.buildState());
                     } catch (error) {
                         LogManager.error(String(error), this.state, false);
                         this.bus.emit({ ts: Date.now(), type: "error", message: String(error), stack: (error as Error).stack });
@@ -142,12 +148,12 @@ export default class Tester extends Agent {
                     }
 
                     this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });
-                    this.response = action.newGoal ?? "Crawl the given page";
-                    if (this.response != "Crawl the given page") {
-                        LogManager.addSubMission(this.response);
-                        LogManager.log(`New Goal set as ${this.response}`, this.buildState(), false);
+                    const newGoal = action.newGoal ?? "Crawl the given page";
+                    if (newGoal != "Crawl the given page") {
+                        LogManager.addSubMission(this.goal);
+                        LogManager.log(`New Goal set as ${this.goal}`, this.buildState(), false);
                     }
-                    this.goal = this.response;
+                    this.goal = newGoal;
                     this.step++;
                     await setTimeout(1000);
 
@@ -173,7 +179,7 @@ export default class Tester extends Agent {
                     break;
             }
         } catch (error) {
-            this.bus.emit({ ts: Date.now(), type: "error", message: String(error), stack: (error as Error).stack });
+            LogManager.error(String(error), this.buildState(), false);
             this.setState(State.ERROR);
         }
     }

@@ -1,5 +1,5 @@
 import { setTimeout } from 'node:timers/promises';
-import { Action, ActionResult, ClicKType, InteractiveElement, Rect, State } from '../../types';
+import { Action, ActionResult, ClicKType, InteractiveElement, NamespacedState, Rect, State } from '../../types';
 import Session from '../../models/session';
 import { LogManager } from '../../utility/logManager';
 
@@ -20,7 +20,7 @@ export default class ActionService {
     this.baseUrl = url;
   }
 
-  async executeAction(action: Action, elementData: InteractiveElement[], offset: Rect = defaultOffset): Promise<ActionResult> {
+  async executeAction(action: Action, elementData: InteractiveElement[], state: State | NamespacedState = State.ACT, offset: Rect = defaultOffset): Promise<ActionResult> {
     this.intOrext = "internal";
     try {
       switch (action.step) {
@@ -78,8 +78,8 @@ export default class ActionService {
           break;
       }
 
-      LogManager.log(`Executed action: ${action.step} with args: ${JSON.stringify(action.args)}`, State.ACT);
-      LogManager.log(`Reason: ${action.reason}`, State.ACT);
+      LogManager.log(`Executed action: ${action.step} with args: ${JSON.stringify(action.args)}`, state, true);
+      LogManager.log(`Reason: ${action.reason}`, state, true);
 
       return { success: true, message: this.intOrext };
     } catch (error) {

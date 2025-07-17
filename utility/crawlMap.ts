@@ -1,80 +1,103 @@
 /* infrastructure/logging/crawlMap.ts
-   ----------------------------------------------------------- */
+   ---------------------------------------------------------------------- */
 /* eslint-disable no-console */
 import { writeFileSync, existsSync } from "node:fs";
-import { dirname } from "node:path";
-import { join, isAbsolute } from "path";
-import { mkdirSync } from "fs";
+import { join, dirname, isAbsolute } from "node:path";
+import { mkdirSync } from "node:fs";
+import type { PageDetails, LinkInfo } from "../types";
 import { LogManager } from "./logManager";
 
 export interface Edge { from: string; to: string }
 
+/** Pretty, page-centric crawl map for debugging */
 export class CrawlMap {
-  // ───────── config ─────────
+  /* ───── internal state ───── */
   private static file = "crawl_map.md";
-  private static edges: Set<string> = new Set();     // "from --> to"
-  private static visited: Set<string> = new Set();   // visited node URLs
+
+  /** order of visitation (urls) */
+  private static navOrder: string[] = [];
+
+  /** url → PageDetails */
+  private static pages = new Map<string, PageDetails>();
+
+  /** “from-->to” edge list (kept for completeness) */
+  private static edges: Set<string> = new Set();
+
   private static initialised = false;
 
-  /** Call once at program start (optionally pass a custom path) */
+  /* ───── public API ───── */
+
+  /** Call once at program start (optional custom path) */
   static init(filePath = "crawl_map.md") {
-    // Resolve to absolute path based on PROJECT_ROOT
-    const fullPath = isAbsolute(filePath)
+    const full = isAbsolute(filePath)
       ? filePath
       : join(LogManager.PROJECT_ROOT, filePath);
+    this.file = full;
 
-    this.file = fullPath;
-
-    const dir = dirname(fullPath);
+    const dir = dirname(full);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
     this.initialised = true;
-    this.write(); // create or clear the file
+    this.write();        // create / clear file
   }
 
-  /** Register every hyperlink the crawler traverses */
+  /** Register page details (call as soon as PageDetails is ready) */
+  static recordPage(page: PageDetails) {
+    if (!this.initialised) this.init();
+    if (!this.pages.has(page.url ?? page.uniqueID)) {
+      this.navOrder.push(page.url ?? page.uniqueID);
+    }
+    this.pages.set(page.url ?? page.uniqueID, page);
+    this.write();
+  }
+
+  /** Optional: keep edge list if you still need it elsewhere */
   static addEdge(from: string, to: string) {
     if (!this.initialised) this.init();
     this.edges.add(`${from}-->${to}`);
-    this.write();
+    // we *don’t* write() here; recordPage will write soon anyway
   }
 
-  /** Mark a page as “visited” (green in the graph) */
-  static markVisited(url: string) {
-    if (!this.initialised) this.init();
-    this.visited.add(url);
-    this.write();
-  }
+  /* ───── markdown writer ───── */
 
-  /* ───────── internal helpers ───────── */
-
-  /** Turn any URL into a Mermaid-safe identifier */
-  private static nodeId(url: string) {
-    return url.replace(/[^a-zA-Z0-9]/g, "_");
-  }
-
-  /** Regenerates the entire .md file from current in-memory state */
   private static write() {
-    let md = `# Crawl Map\n\n` +
-      `> Auto-generated – refresh to see the latest crawl state\n\n` +
-      "```mermaid\ngraph LR\n";
+    let md = `# Crawl Map  \n_Auto-generated – refresh to see the latest state_\n\n`;
 
-    // draw edges
-    for (const line of this.edges) {
-      const [from, to] = line.split("-->");
-      md += `    ${this.nodeId(from)}("${from}") --> ${this.nodeId(to)}("${to}")\n`;
+    /* ---------- quick overview ---------- */
+    md += "## Quick overview\n\n";
+    for (const url of this.navOrder) {
+      const title = this.pages.get(url)?.title ?? url;
+      md += `| - ${title}\n`;
     }
+    md += "\n---\n";
 
-    // highlight visited nodes
-    if (this.visited.size) {
-      md += "\n    %% visited pages\n";
-      for (const url of this.visited) {
-        md += `    class ${this.nodeId(url)} visited;\n`;
+    /* ---------- per-page blocks ---------- */
+    this.navOrder.forEach((url, idx) => {
+      const page = this.pages.get(url);
+      if (!page) return;
+
+      const heading = `### ${idx + 1}. ${page.title || "(untitled)"}  \n`;
+      const sub = page.url ? `**URL:** ${page.url}  \n` : "";
+      const desc = page.description ? `${page.description}\n` : "";
+
+      md += `${heading}${sub}${desc}\n`;
+
+      // links
+      md += "**Links:**\n\n";
+      if (page.links.length === 0) {
+        md += "_(none)_\n\n";
+      } else {
+        for (const link of page.links) {
+          const box = link.visited ? "[x]" : "[ ]";
+          const label = link.text || link.href;
+          md += `- ${box} **${label}** → \`${link.href}\`\n`;
+        }
+        md += "\n";
       }
-      md += "    classDef visited fill:#b6fcb6,stroke:#333;\n";
-    }
 
-    md += "```\n";
+      md += "---\n";
+    });
+
     writeFileSync(this.file, md);
   }
 }

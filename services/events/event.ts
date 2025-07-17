@@ -8,7 +8,8 @@ export type Event =
     | { ts: number; type: 'action_finished'; action: Action; elapsedMs: number }
     | { ts: number; type: 'llm_call'; promptTokens: number; respTokens: number }
     | { ts: number; type: 'screenshot_taken'; filename: string; elapsedMs: number }
-    | { ts: number; type: 'error'; message: string; stack?: string };
+    | { ts: number; type: 'error'; message: string; stack?: string }
+    | { ts:number; type:'validator_warning'; message:string };
 
 /** Interface the Agent depends on */
 export interface EventBus {

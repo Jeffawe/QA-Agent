@@ -8,7 +8,6 @@ import { EventBus } from "./services/events/event";
 import { State } from "./types";
 import { CombinedThinker } from "./services/thinkers/combinedThinker";
 
-import { performance } from 'perf_hooks';
 import NavigationTree from "./utility/navigationTree";
 
 import { Agent } from "./utility/abstract"
@@ -59,7 +58,7 @@ export default class BossAgent {
 
     this.tester = new Tester({ session: this.session, thinker: this.thinker, actionService: this.actionService, eventBus: this.bus });
     this.crawler = new Crawler(this.session, this.tester, this.bus);
-    
+
     this.agents = [this.crawler, this.tester];
   }
 
@@ -82,6 +81,7 @@ export default class BossAgent {
     }
 
     LogManager.log("Done", State.DONE, true);
+    this.stop();
   }
 
   async stop(): Promise<void> {
@@ -89,5 +89,6 @@ export default class BossAgent {
     for (const a of this.agents) {
       await a.cleanup();
     }
+    this.session.close();
   }
 }
