@@ -1,5 +1,5 @@
 export interface Action {
-    step: 'move_mouse_to' | 'click' | 'press_key' | 'wait' | 'no_op' | string;
+    step: 'move_mouse_to' | 'click' | 'press_key' | 'wait' | 'no_op' | 'done' | string;
     args: any[];
     reason: string;
     newGoal?: string;
@@ -57,7 +57,7 @@ export interface ThinkResult {
     action: Action;
     confidence?: number;
     memoryPatch?: string;
-    notes?: string;
+    analysis?: Analysis;
     pageDetails?: LLMPageResult;
 }
 
@@ -100,7 +100,8 @@ export enum State {
     VISIT = "VISIT",
     EVALUATE = "EVALUATE",
     WAIT = "WAIT",
-    INFO = "INFO"
+    INFO = "INFO",
+    MANUAL_DECIDE = "MANUAL_DECIDE"
 }
 
 type StateValue = `${State}`;
@@ -130,6 +131,8 @@ export interface PageDetails {
     title: string;
     url?: string;
     uniqueID: string;
+    screenshot?: string;
+    analysis?: Analysis;
     description: string;
     visited: boolean;
     links: LinkInfo[];

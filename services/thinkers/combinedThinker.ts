@@ -1,10 +1,9 @@
 import { Thinker } from "../../utility/abstract";
 import { LogManager } from "../../utility/logManager";
 import { GeminiLLm } from "../../models/generate/gemini";
-import { StaticMemory } from "../memory/staticMemory";
-import { GetNextActionContext, State, ThinkResult, ImageData, AnalysisResponse } from "../../types";
+import { GetNextActionContext, State, ThinkResult, ImageData, AnalysisResponse, NamespacedState } from "../../types";
 
-const thinkerState = State.DECIDE
+const thinkerState: NamespacedState = "Tester.DECIDE";
 
 export class CombinedThinker extends Thinker {
     constructor() {
@@ -16,7 +15,8 @@ export class CombinedThinker extends Thinker {
         const analysis = await this.getNextDecision(nextActionContext, imageData, recurrent, extraInfo);
         return {
             action: analysis.action || { step: 'no_op', args: [], reason: 'No command returned' },
-            pageDetails: analysis.pageDetails || { pageName: "", description: "" }
+            pageDetails: analysis.pageDetails || { pageName: "", description: "" },
+            analysis: analysis.analysis
         };
     }
 

@@ -17,6 +17,7 @@ export const systemPrompt = String.raw`
             • Screenshot of the full page (inline image) labelled for the different UI elements
             • Your last action and a short-term memory of prior attempts
             • A list of possible labels to pick from (UI elements in the page. Don't pick outside of it when using click)
+            • A validator may sometimes give messages on issues you made
 
             ▸ ALLOWED COMMANDS (one per response)
             - click (buttons, links)
@@ -45,7 +46,7 @@ export const systemPrompt = String.raw`
                 "action": {
                     "step": "command_name",
                     "args": [/* arguments */],
-                    "reason": "Why this command keeps the crawl progressing",
+                    "reason": "Why this command keeps the crawl progressing (Make it short)",
                     "newGoal": "New mission goal for the next step",
                     "nextLink": "The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)"
                 },
@@ -71,6 +72,7 @@ export const systemActionPrompt = String.raw`
             • Screenshot of the full page (inline image) labelled for the different UI elements
             • Your last action and a short-term memory of prior attempts
             • A list of possible labels to pick from (UI elements in the page. Don't pick outside of it when using click)
+            • A validator may sometimes give messages on issues you made
 
             ▸ ALLOWED COMMANDS (one per response)
             - click (buttons, links)
@@ -89,7 +91,7 @@ export const systemActionPrompt = String.raw`
             {
                 "step": "command_name",
                 "args": [/* arguments */],
-                "reason": "Why this command keeps the crawl progressing",
+                "reason": "Why this command keeps the crawl progressing (Make it short)",
                 "newGoal": "New mission goal for the next step",
                 "nextLink": "The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)"
             }

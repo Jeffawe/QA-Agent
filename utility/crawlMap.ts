@@ -6,6 +6,7 @@ import { join, dirname, isAbsolute } from "node:path";
 import { mkdirSync } from "node:fs";
 import type { PageDetails, LinkInfo } from "../types";
 import { LogManager } from "./logManager";
+import { eventBus } from "../services/events/eventBus";
 
 export interface Edge { from: string; to: string }
 
@@ -44,6 +45,7 @@ export class CrawlMap {
   /** Register page details (call as soon as PageDetails is ready) */
   static recordPage(page: PageDetails) {
     if (!this.initialised) this.init();
+    eventBus.emit({ ts: Date.now(), type: "crawl_map_updated", page });
     if (!this.pages.has(page.url ?? page.uniqueID)) {
       this.navOrder.push(page.url ?? page.uniqueID);
     }
@@ -61,7 +63,8 @@ export class CrawlMap {
   /* ───── markdown writer ───── */
 
   private static write() {
-    let md = `# Crawl Map  \n_Auto-generated – refresh to see the latest state_\n\n`;
+    let md =
+      `# Crawl Map  \n_Auto-generated – refresh to see the latest state_\n\n`;
 
     /* ---------- quick overview ---------- */
     md += "## Quick overview\n\n";
@@ -79,25 +82,59 @@ export class CrawlMap {
       const heading = `### ${idx + 1}. ${page.title || "(untitled)"}  \n`;
       const sub = page.url ? `**URL:** ${page.url}  \n` : "";
       const desc = page.description ? `${page.description}\n` : "";
+      const shot = page.screenshot ? `![screenshot](${page.screenshot})\n\n` : "";
 
-      md += `${heading}${sub}${desc}\n`;
+      md += `${heading}${sub}${desc}${shot}`;
 
-      // links
+      /* ----- links ----- */
       md += "**Links:**\n\n";
       if (page.links.length === 0) {
         md += "_(none)_\n\n";
       } else {
-        for (const link of page.links) {
-          const box = link.visited ? "[x]" : "[ ]";
-          const label = link.text || link.href;
-          md += `- ${box} **${label}** → \`${link.href}\`\n`;
+        for (const l of page.links) {
+          const box = l.visited ? "[x]" : "[ ]";
+          const label = l.text || l.href;
+          md += `- ${box} **${label}** → \`${l.href}\`\n`;
         }
         md += "\n";
+      }
+
+      /* ----- analysis ----- */
+      if (page.analysis) {
+        md += "**Analysis:**\n\n";
+
+        const { bugs, ui_issues, notes } = page.analysis;
+
+        if (bugs.length) {
+          md += "_Bugs_\n";
+          bugs.forEach(b =>
+            md += `- **(${b.severity})** ${b.description}  \n  ↳ \`${b.selector}\`\n`
+          );
+          md += "\n";
+        }
+
+        if (ui_issues.length) {
+          md += "_UI issues_\n";
+          ui_issues.forEach(u =>
+            md += `- **(${u.severity})** ${u.description}  \n  ↳ \`${u.selector}\`\n`
+          );
+          md += "\n";
+        }
+
+        if (notes.trim()) {
+          md += "_Notes_\n";
+          md += `${this.indent(notes)}\n\n`;
+        }
       }
 
       md += "---\n";
     });
 
     writeFileSync(this.file, md);
+  }
+
+  /* helper – indent multi-line notes for nicer MD block */
+  static indent(txt: string, spaces = 2) {
+    return txt.split("\n").map(l => " ".repeat(spaces) + l).join("\n");
   }
 }

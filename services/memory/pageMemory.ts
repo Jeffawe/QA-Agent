@@ -1,7 +1,8 @@
 import { LinkInfo, PageDetails } from '../../types';
+import { CrawlMap } from '../../utility/crawlMap';
 import { LogManager } from '../../utility/logManager';
 
-export class StaticMemory {
+export class PageMemory {
   public static pages: Record<string, PageDetails> = {};
   private static navStack: string[] = [];
 
@@ -19,6 +20,7 @@ export class StaticMemory {
         visited: false,
         title: details.title,
         url: details.url,
+        screenshot: details.screenshot,
         uniqueID: details.uniqueID,
         description: details.description,
         links: links.map(link => ({ ...link, visited: false })),
@@ -30,6 +32,24 @@ export class StaticMemory {
     if (this.pages[url]) {
       this.pages[url].visited = true;
     }
+  }
+
+  static addPageScreenshot(url: string, screenshot: string) {
+    if (this.pages[url]) {
+      this.pages[url].screenshot = screenshot;
+    }
+  }
+
+  static addAnalysis(url: string, analysis: any) {
+    if (this.pages[url]) {
+      this.pages[url].analysis = analysis;
+      CrawlMap.recordPage(this.pages[url]);
+    }
+  }
+
+  ///True if there is a screenshot. False if not or doesn't exist
+  static hasPageScreenshot(url: string): boolean {
+    return !!this.pages[url]?.screenshot;
   }
 
   static markLinkVisited(url: string, identifier: string) {

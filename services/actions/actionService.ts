@@ -70,7 +70,11 @@ export default class ActionService {
           break;
 
         case 'no_op':
-          // Do nothing
+          this.intOrext = "external";
+          break;
+
+        case 'done':
+          this.intOrext = "external";
           break;
 
         default:

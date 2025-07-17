@@ -1,4 +1,4 @@
-import { Action, State } from "../../types";
+import { Action, PageDetails, State } from "../../types";
 import { EventEmitter } from 'events';
 
 // events.ts
@@ -9,7 +9,8 @@ export type Event =
     | { ts: number; type: 'llm_call'; promptTokens: number; respTokens: number }
     | { ts: number; type: 'screenshot_taken'; filename: string; elapsedMs: number }
     | { ts: number; type: 'error'; message: string; stack?: string }
-    | { ts:number; type:'validator_warning'; message:string };
+    | { ts:number; type:'validator_warning'; message:string }
+    | { ts:number; type:'crawl_map_updated'; page: PageDetails };
 
 /** Interface the Agent depends on */
 export interface EventBus {

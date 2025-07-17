@@ -7,6 +7,9 @@ import { LinkInfo, NamespacedState, State, ImageData, Action, ActionResult } fro
 import { LogManager } from "../utility/logManager";
 import { processScreenshot } from "../services/imageProcessor";
 import { getInteractiveElements } from "../services/UIElementDetector";
+import { fileExists } from "../utility/functions";
+import { PageMemory } from "../services/memory/pageMemory";
+import { CrawlMap } from "../utility/crawlMap";
 
 
 export interface TesterDependencies {
@@ -29,6 +32,7 @@ export default class Tester extends Agent {
     private queue: LinkInfo[] = [];
     private goal: string = "";
     private visitedPage: boolean = false;
+    private lastAction: string = "";
 
     constructor({
         session,
@@ -51,7 +55,7 @@ export default class Tester extends Agent {
         this.visitedPage = visitedPage;
         if (this.state === State.DONE || this.state === State.WAIT) {
             this.setState(State.START);
-        }else{
+        } else {
             LogManager.log("Tester is already running or cannot start up", this.buildState(), true);
         }
     }
@@ -66,7 +70,7 @@ export default class Tester extends Agent {
                 /*────────── READY → RUN ──────────*/
                 case State.START:
                     (this as any).startTime = performance.now();
-                    if(this.visitedPage){
+                    if (this.visitedPage) {
                         LogManager.log("I Have visited page before", this.buildState(), true);
                     }
                     this.goal = "Crawl the given page";
@@ -82,21 +86,24 @@ export default class Tester extends Agent {
                 case State.OBSERVE: {
                     await this.session.clearAllClickPoints();
                     const filename = `screenshot_${this.step}.png`;
-                    const success = await this.session.takeScreenshot("images", filename);
-                    if (!success) {
-                        LogManager.error("Screenshot failed", this.state);
-                        this.setState(State.DONE);
-                        break;
-                    }
+                    (this as any).finalFilename = `images/annotated_${filename}`;
 
-                    const elements = await getInteractiveElements(this.session.page!);
-                    await processScreenshot(`./images/${filename}`, elements);
+                    const elements = await getInteractiveElements(this.session.page!)
+                    if (!this.visitedPage || !(await fileExists((this as any).finalFilename))) {
+                        const success = await this.session.takeScreenshot("images", filename);
+                        if (!success) {
+                            LogManager.error("Screenshot failed", this.state);
+                            this.setState(State.DONE);
+                            break;
+                        }
+
+                        await processScreenshot(`./images/${filename}`, elements);
+                    }
 
                     (this as any).clickableElements = elements;
 
-                    LogManager.log(`Elements detected: ${elements.length} are: ${JSON.stringify(elements)}`, this.buildState(), false);
+                    // LogManager.log(`Elements detected: ${elements.length} are: ${JSON.stringify(elements)}`, this.buildState(), false);
 
-                    (this as any).finalFilename = `images/annotated_${filename}`;
                     this.bus.emit({ ts: Date.now(), type: "screenshot_taken", filename: (this as any).finalFilename, elapsedMs: 0 });
 
                     this.setState(State.DECIDE);
@@ -109,7 +116,7 @@ export default class Tester extends Agent {
                     const nextActionContext = {
                         goal: this.goal,
                         vision: "",
-                        lastAction: null,
+                        lastAction: this.lastAction || null,
                         memory: [],
                         possibleLabels: labels,
                     };
@@ -126,6 +133,11 @@ export default class Tester extends Agent {
                         this.setState(State.ERROR);
                         break;
                     }
+
+                    if(command.analysis) {
+                        PageMemory.addAnalysis(this.session.page!.url(), command.analysis);
+                    }
+
                     (this as any).pendingAction = command.action;
 
                     this.setState(State.ACT);
@@ -134,6 +146,30 @@ export default class Tester extends Agent {
 
                 case State.ACT: {
                     const action: Action = (this as any).pendingAction;
+
+                    if (action.step === "click" && !this.checkifLabelValid(action.args[0])) {
+                        LogManager.error("Label is not valid", State.ERROR, false);
+                        this.response = "Validator warns that Label provided is not among the valid list. Return done step if there is nothing other to do"
+                        this.setState(State.OBSERVE);
+                        break;
+                    }
+
+                    if (action.step === 'done') {
+                        this.setState(State.DONE);
+                        const leftovers = PageMemory.getAllUnvisitedLinks(this.session.page!.url());
+                        leftovers.forEach(l => PageMemory.markLinkVisited(this.session.page!.url(), l.text || l.href));
+                        CrawlMap.recordPage(PageMemory.pages[this.session.page!.url()]);
+                        LogManager.log("All links have been tested", this.buildState(), true);
+                        this.nextLink = null;
+                        const endTime = performance.now();
+                        this.timeTaken = endTime - (this as any).startTime;
+
+                        LogManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
+                        break;
+                    }
+
+                    this.lastAction = `Action ${action.step} with args (${action.args.join(",")}) was last taken because of ${action.reason}`;
+
                     const t0 = Date.now();
                     this.bus.emit({ ts: t0, type: "action_started", action });
                     let result: ActionResult | null = null
@@ -189,6 +225,12 @@ export default class Tester extends Agent {
         this.queue = [];
         this.step = 0;
         this.goal = "Crawl the given page";
+        this.state = State.START;
+    }
+
+    checkifLabelValid(label: string): boolean {
+        if (!label) return false;
+        return this.queue.map((link) => link.text).includes(label);
     }
 
     getLinkInfoWithoutVisited(
