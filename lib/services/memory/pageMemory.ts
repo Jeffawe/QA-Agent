@@ -34,6 +34,16 @@ export class PageMemory {
     }
   }
 
+  static isLinkVisited(url: string, identifier: string): boolean {
+    const page = this.pages[url];
+    if (!page) return false;
+    const link = page.links.find(
+      l => l.text === identifier || l.href === identifier
+    );
+    if (!link) return false;
+    return link.visited;
+  }
+
   static addPageScreenshot(url: string, screenshot: string) {
     if (this.pages[url]) {
       this.pages[url].screenshot = screenshot;
@@ -42,7 +52,10 @@ export class PageMemory {
 
   static addAnalysis(url: string, analysis: any) {
     if (this.pages[url]) {
-      this.pages[url].analysis = analysis;
+      this.pages[url].analysis = {
+        ...this.pages[url].analysis,
+        ...analysis
+      };
       CrawlMap.recordPage(this.pages[url]);
     }
   }

@@ -5,6 +5,7 @@
     "canvas": "^3.1.2",
     "dotenv": "^17.0.1",
     "express": "^5.1.0",
+    "minimist": "^1.2.8",
     "openai": "^5.8.2",
     "puppeteer": "^24.11.2"
   },
@@ -17,6 +18,9 @@
     "start": "node dist/server.js",
     "dev": "nodemon",
     "build": "tsc"
+  },
+  "bin": {
+    "agent-run": "./bin/index.js"
   },
   "author": "Jeffery Ozoekwe-Awagu",
   "license": "ISC",

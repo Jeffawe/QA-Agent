@@ -1,4 +1,4 @@
-import puppeteer, { Browser, Page, ElementHandle, KeyInput, Frame } from 'puppeteer';
+import puppeteer, { Browser, Page, KeyInput, Frame } from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 import { ClicKType, Rect, State } from '../types';

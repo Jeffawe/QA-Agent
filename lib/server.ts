@@ -6,13 +6,14 @@ import { detectUIWithPython, getInteractiveElements } from './services/UIElement
 import { LogManager } from './utility/logManager';
 import { processScreenshot } from './services/imageProcessor';
 import BossAgent from './agent';
-import { State } from './types';
 import { eventBus } from './services/events/eventBus';
 import { ActionSpamValidator } from './services/validators/actionValidator';
+import { ErrorValidator } from './services/validators/errorValidator';
+import { LLMUsageValidator } from './services/validators/llmValidator';
 
 dotenv.config();
 
-const url = "https://www.jeffawe.com";
+const url = process.env.BASE_URL || 'https://www.jeffawe.com';
 const app = express();
 const PORT: number = parseInt(process.env.PORT || '3000');
 
@@ -20,6 +21,8 @@ let gameAgent: BossAgent | null = null;
 
 ///Validators
 new ActionSpamValidator(eventBus);
+new ErrorValidator(eventBus);
+new LLMUsageValidator(eventBus);
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Hello, World!');
@@ -34,21 +37,11 @@ app.get('/start/:sessionId', async (req: Request, res: Response) => {
     });
 
     try {
-        await gameAgent.start('https://www.jeffawe.com');
+        await gameAgent.start(url);
         res.send(`Game session ${sessionId} started successfully!`);
     } catch (error) {
         console.error('Error starting game session:', error);
         res.status(500).send('Failed to start game session.');
-    }
-});
-
-app.get('/detect-ui', async (req: Request, res: Response) => {
-    try {
-        const uiElements = detectUIWithPython('./images/screenshot_7.png');
-        res.json(uiElements);
-    } catch (error) {
-        console.error('Error detecting UI:', error);
-        res.status(500).send('Failed to detect UI elements.');
     }
 });
 
@@ -63,18 +56,12 @@ app.get('/test', async (req: Request, res: Response) => {
         if (!session.page) throw new Error('Page not initialized');
         const elements = await getInteractiveElements(session.page);
 
-        await processScreenshot('./images/screenshot_0.png', elements);
+        //await processScreenshot('./images/screenshot_0.png', elements);
         res.send('Test session started successfully!');
     }
     catch (error) {
         console.error('Error in test session:', error);
         res.status(500).send('Failed to start test session.');
-    }
-});
-
-eventBus.on('error', async (evt) => {
-    if (gameAgent) {
-        LogManager.error(`Agent error: ${evt.message}`, State.ERROR, false);
     }
 });
 

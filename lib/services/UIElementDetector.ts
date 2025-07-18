@@ -1,7 +1,7 @@
 import { spawnSync } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { Box, InteractiveElement, Rect, State } from '../types';
+import { Box, InteractiveElement, State } from '../types';
 import { LogManager } from '../utility/logManager';
 import { Page } from 'puppeteer';
 

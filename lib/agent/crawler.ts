@@ -7,6 +7,7 @@ import { InteractiveElement, LinkInfo, State } from "../types";
 import { EventBus } from "../services/events/event";
 import Tester from "./tester";
 import { CrawlMap } from "../utility/crawlMap";
+import { setTimeout } from "node:timers/promises";
 
 export class Crawler extends Agent {
     currentUrl: string | null = null;
@@ -112,9 +113,12 @@ export class Crawler extends Agent {
                     const next = this.tester.nextLink;
                     if (next) {
                         PageMemory.markLinkVisited(this.currentUrl, next.text || next.href);
+                        const finalUrl = page.url();
                         CrawlMap.recordPage(PageMemory.pages[this.currentUrl]);
                         PageMemory.pushToStack(this.currentUrl);
                         CrawlMap.addEdge(this.currentUrl!, next.href);
+
+                        this.currentUrl = finalUrl;
                         this.setState(State.START);
                     } else {
                         // dead-end → backtrack
@@ -123,6 +127,7 @@ export class Crawler extends Agent {
                         if (back) {
                             LogManager.log(`Backtracking to ${back}`, this.buildState(), false);
                             await page.goto(back, { waitUntil: "networkidle0" });
+                            this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: back, page: page });
                             this.setState(State.START);
                         } else {
                             this.setState(State.DONE);
@@ -132,6 +137,7 @@ export class Crawler extends Agent {
                     const endTime = performance.now();
                     this.timeTaken = endTime - (this as any).startTime;
                     LogManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
+                    await setTimeout(500);
                     break;
                 }
 
@@ -172,6 +178,14 @@ export class Crawler extends Agent {
                 (!rawHref.startsWith("http") && !rawHref.startsWith("https"));
 
             if (!isInternal) continue;
+
+            if (rawHref.startsWith("mailto:") ||
+                rawHref.startsWith("tel:") ||
+                rawHref.startsWith("javascript:") ||
+                rawHref.startsWith("#") ||                        // internal page jump
+                rawHref.includes("logout") ||                     // avoid logouts
+                new URL(rawHref, baseURL).host !== new URL(baseURL).host  // cross-domain
+            ) continue;
 
             // Resolve to an absolute URL and normalise for comparisons
             const absHref = this.normalise(rawHref, baseURL);

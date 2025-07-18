@@ -33,6 +33,7 @@ export default class Tester extends Agent {
     private goal: string = "";
     private visitedPage: boolean = false;
     private lastAction: string = "";
+    private currentUrl: string = "";
 
     constructor({
         session,
@@ -85,6 +86,7 @@ export default class Tester extends Agent {
 
                 case State.OBSERVE: {
                     await this.session.clearAllClickPoints();
+                    this.currentUrl = this.session.page.url();
                     const filename = `screenshot_${this.step}.png`;
                     (this as any).finalFilename = `images/annotated_${filename}`;
 
@@ -134,8 +136,8 @@ export default class Tester extends Agent {
                         break;
                     }
 
-                    if(command.analysis) {
-                        PageMemory.addAnalysis(this.session.page!.url(), command.analysis);
+                    if (command.analysis) {
+                        PageMemory.addAnalysis(this.currentUrl, command.analysis);
                     }
 
                     (this as any).pendingAction = command.action;
@@ -156,9 +158,9 @@ export default class Tester extends Agent {
 
                     if (action.step === 'done') {
                         this.setState(State.DONE);
-                        const leftovers = PageMemory.getAllUnvisitedLinks(this.session.page!.url());
-                        leftovers.forEach(l => PageMemory.markLinkVisited(this.session.page!.url(), l.text || l.href));
-                        CrawlMap.recordPage(PageMemory.pages[this.session.page!.url()]);
+                        const leftovers = PageMemory.getAllUnvisitedLinks(this.currentUrl);
+                        leftovers.forEach(l => PageMemory.markLinkVisited(this.currentUrl, l.text || l.href));
+                        CrawlMap.recordPage(PageMemory.pages[this.currentUrl]);
                         LogManager.log("All links have been tested", this.buildState(), true);
                         this.nextLink = null;
                         const endTime = performance.now();
@@ -178,23 +180,39 @@ export default class Tester extends Agent {
                         result = await this.actionService.executeAction(action, (this as any).clickableElements, this.buildState());
                     } catch (error) {
                         LogManager.error(String(error), this.state, false);
-                        this.bus.emit({ ts: Date.now(), type: "error", message: String(error), stack: (error as Error).stack });
+                        this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
                         this.setState(State.ERROR);
                         break;
+                    }
+
+                    if (this.currentUrl && result.message == "external") {
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.session.page.url(), page: this.session.page});
                     }
 
                     this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });
                     const newGoal = action.newGoal ?? "Crawl the given page";
                     if (newGoal != "Crawl the given page") {
-                        LogManager.addSubMission(this.goal);
-                        LogManager.log(`New Goal set as ${this.goal}`, this.buildState(), false);
+                        LogManager.addSubMission(newGoal);
+                        LogManager.addSubMission(this.goal, "done");
+                        LogManager.log(`New Goal set as ${newGoal}`, this.buildState(), false);
                     }
+
                     this.goal = newGoal;
                     this.step++;
                     await setTimeout(1000);
 
                     const endTime = performance.now();
                     this.timeTaken = endTime - (this as any).startTime;
+
+                    const nextLabel = action.nextLink || "";
+
+                    // Check if the link has already been visited
+                    const alreadyVisited = PageMemory.isLinkVisited(this.currentUrl, nextLabel);
+                    if (alreadyVisited) {
+                        this.setState(State.DONE);
+                        break;
+                    }
+
                     this.nextLink = this.getLinkInfoWithoutVisited(this.queue, action.nextLink || "");
 
                     if (result && result.message == "internal") {
@@ -226,6 +244,9 @@ export default class Tester extends Agent {
         this.step = 0;
         this.goal = "Crawl the given page";
         this.state = State.START;
+        this.lastAction = "";
+        this.visitedPage = false;
+        this.response = "";
     }
 
     checkifLabelValid(label: string): boolean {

@@ -5,6 +5,7 @@ import { Action, AnalysisResponse } from "../../types";
 import fs from 'fs';
 import path from 'path';
 import { systemPrompt, systemActionPrompt } from "./prompts";
+import { eventBus } from "../../services/events/eventBus";
 
 dotenv.config();
 
@@ -98,6 +99,25 @@ export class GeminiLLm extends LLM {
         if (!response || !response.candidates || response.candidates.length === 0) {
             throw new Error("No response from Gemini LLM");
         }
+
+        if (response.candidates[0]?.content?.parts?.[0]?.text) {
+            eventBus.emit({
+                ts: Date.now(),
+                type: "llm_call",
+                model_name: "gemini-2.5-flash",
+                promptTokens: prompt.length, // approximate: 1 token ~ 4 characters
+                respTokens: response.candidates[0].content.parts[0]?.text?.length ?? 0, // approximate again
+            });
+        }else{
+            eventBus.emit({
+                ts: Date.now(),
+                type: "llm_call",
+                model_name: "gemini-2.5-flash",
+                promptTokens: prompt.length, // approximate: 1 token ~ 4 characters
+                respTokens: 0, // approximate again
+            });
+        }
+
 
         return recurrent ? this.parseActionFromResponse(response) : this.parseDecisionFromResponse(response);
     }

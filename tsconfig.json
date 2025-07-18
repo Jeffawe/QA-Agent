@@ -2,7 +2,8 @@
   "compilerOptions": {
     /* Visit https://aka.ms/tsconfig to read more about this file */
     "target": "es2016",                                  
-    "moduleDetection": "auto",                        
+    "moduleDetection": "auto",
+    "outDir": "./dist",                        
 
     /* Modules */
     "module": "es2020",                               
@@ -14,5 +15,6 @@
     /* Type Checking */
     "strict": true,                                     
     "skipLibCheck": true                                 
-  }
+  },
+  "include": ["lib/**/*"]
 }

@@ -1,6 +1,5 @@
 import { LLM } from '../utility/abstract';
-import { Action } from '../types';
-import { GetNextActionContext } from '../types';
+import { GetNextActionContext, Action } from '../types';
 
 export default class LLMCommander {
     private modelClient: LLM | null;

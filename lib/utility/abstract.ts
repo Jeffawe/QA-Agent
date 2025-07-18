@@ -29,13 +29,14 @@ export abstract class Agent {
     protected timeTaken = 0;
     protected bus: EventBus | null = null;
     protected response: string = "";
+    protected validatorWarningState: State = State.START;
 
     protected constructor(name: Namespaces, bus: EventBus) {
         this.name = name;
         this.bus = bus;
         bus.on("validator_warning", (evt) => {
             this.response = evt.message;
-            this.setState(State.START);
+            this.setState(this.validatorWarningState);
         });
     }
 

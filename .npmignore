@@ -1,0 +1,7 @@
+node_modules/
+lib/
+*.ts
+tsconfig.json
+nodemon.json
+images/
+logs/
