@@ -1,8 +1,8 @@
 import { createCanvas, loadImage, CanvasRenderingContext2D } from 'canvas';
 import fs from 'fs';
 import path from 'path';
-import { InteractiveElement, State } from '../types';
-import { LogManager } from '../utility/logManager';
+import { InteractiveElement, State } from '../types.js';
+import { LogManager } from '../utility/logManager.js';
 import crypto from 'crypto';
 
 type HashAlgorithm = 'md5' | 'sha1' | 'sha256';

@@ -1,8 +1,8 @@
 import { spawnSync } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { Box, InteractiveElement, State } from '../types';
-import { LogManager } from '../utility/logManager';
+import { Box, InteractiveElement, State } from '../types.js';
+import { LogManager } from '../utility/logManager.js';
 import { Page } from 'puppeteer';
 
 const __filename = fileURLToPath(import.meta.url);

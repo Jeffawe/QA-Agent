@@ -1,12 +1,12 @@
-import { Agent } from "../utility/abstract";
-import { LogManager } from "../utility/logManager";
-import Session from "../models/session";
-import { PageMemory } from "../services/memory/pageMemory";
-import { getInteractiveElements } from "../services/UIElementDetector";
-import { InteractiveElement, LinkInfo, State } from "../types";
-import { EventBus } from "../services/events/event";
-import Tester from "./tester";
-import { CrawlMap } from "../utility/crawlMap";
+import { Agent } from "../utility/abstract.js";
+import { LogManager } from "../utility/logManager.js";
+import Session from "../models/session.js";
+import { PageMemory } from "../services/memory/pageMemory.js";
+import { getInteractiveElements } from "../services/UIElementDetector.js";
+import { InteractiveElement, LinkInfo, State } from "../types.js";
+import { EventBus } from "../services/events/event.js";
+import Tester from "./tester.js";
+import { CrawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
 
 export class Crawler extends Agent {

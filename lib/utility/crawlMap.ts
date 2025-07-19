@@ -4,9 +4,9 @@
 import { writeFileSync, existsSync } from "node:fs";
 import { join, dirname, isAbsolute } from "node:path";
 import { mkdirSync } from "node:fs";
-import type { PageDetails, LinkInfo } from "../types";
-import { LogManager } from "./logManager";
-import { eventBus } from "../services/events/eventBus";
+import type { PageDetails, LinkInfo } from "../types.js";
+import { LogManager } from "./logManager.js";
+import { eventBus } from "../services/events/eventBus.js";
 
 export interface Edge { from: string; to: string }
 

@@ -1,5 +1,5 @@
 import { Page } from "puppeteer";
-import { Action, PageDetails, State } from "../../types";
+import { Action, PageDetails, State } from "../../types.js";
 import { EventEmitter } from 'events';
 
 // events.ts
@@ -12,6 +12,7 @@ export type Event =
     | { ts: number; type: 'error'; message: string; error?: Error }
     | { ts:number; type:'validator_warning'; message:string }
     | { ts:number; type:'crawl_map_updated'; page: PageDetails }
+    | { ts:number; type:'new_log'; message: string; }
     | { ts:number; type:'new_page_visited'; oldPage: string; newPage: string; page: Page };
 
 /** Interface the Agent depends on */

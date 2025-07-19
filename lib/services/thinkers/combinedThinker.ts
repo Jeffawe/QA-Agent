@@ -1,7 +1,7 @@
-import { Thinker } from "../../utility/abstract";
-import { LogManager } from "../../utility/logManager";
-import { GeminiLLm } from "../../models/generate/gemini";
-import { GetNextActionContext, State, ThinkResult, ImageData, AnalysisResponse, NamespacedState } from "../../types";
+import { Thinker } from "../../utility/abstract.js";
+import { LogManager } from "../../utility/logManager.js";
+import { GeminiLLm } from "../../models/generate/gemini.js";
+import { GetNextActionContext, State, ThinkResult, ImageData, AnalysisResponse, NamespacedState } from "../../types.js";
 
 const thinkerState: NamespacedState = "Tester.DECIDE";
 

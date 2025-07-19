@@ -1,5 +1,5 @@
-import { Action } from "../../types";
-import { EventBus } from "../events/event";
+import { Action } from "../../types.js";
+import { EventBus } from "../events/event.js";
 
 export class ActionSpamValidator {
   // keep last N actions per agent

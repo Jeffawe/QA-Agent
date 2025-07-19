@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import { join, isAbsolute } from "path";
-import { LogManager } from './logManager';
+import { LogManager } from './logManager.js';
 
 interface PageNode {
     type: 'page';

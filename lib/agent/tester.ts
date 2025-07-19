@@ -1,15 +1,15 @@
 import { setTimeout } from "node:timers/promises";
-import Session from "../models/session";
-import { Agent, Thinker } from "../utility/abstract";
-import ActionService from "../services/actions/actionService";
-import { EventBus } from "../services/events/event";
-import { LinkInfo, NamespacedState, State, ImageData, Action, ActionResult } from "../types";
-import { LogManager } from "../utility/logManager";
-import { processScreenshot } from "../services/imageProcessor";
-import { getInteractiveElements } from "../services/UIElementDetector";
-import { fileExists } from "../utility/functions";
-import { PageMemory } from "../services/memory/pageMemory";
-import { CrawlMap } from "../utility/crawlMap";
+import Session from "../models/session.js";
+import { Agent, Thinker } from "../utility/abstract.js";
+import ActionService from "../services/actions/actionService.js";
+import { EventBus } from "../services/events/event.js";
+import { LinkInfo, NamespacedState, State, ImageData, Action, ActionResult } from "../types.js";
+import { LogManager } from "../utility/logManager.js";
+import { processScreenshot } from "../services/imageProcessor.js";
+import { getInteractiveElements } from "../services/UIElementDetector.js";
+import { fileExists } from "../utility/functions.js";
+import { PageMemory } from "../services/memory/pageMemory.js";
+import { CrawlMap } from "../utility/crawlMap.js";
 
 
 export interface TesterDependencies {

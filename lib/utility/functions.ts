@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join, isAbsolute } from "node:path";
-import { LogManager } from "./logManager";      // adjust import path if needed
+import { LogManager } from "./logManager.js";      // adjust import path if needed
 
 /** Check whether a file exists under PROJECT_ROOT */
 export async function fileExists(pathFromRoot: string): Promise<boolean> {

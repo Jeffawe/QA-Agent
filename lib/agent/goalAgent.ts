@@ -1,12 +1,12 @@
-import { Agent, Thinker } from "../utility/abstract";
-import Session from "../models/session";
-import { EventBus } from "../services/events/event";
-import { getInteractiveElements } from "../services/UIElementDetector";
-import { Action, ImageData, State } from "../types";
-import { LogManager } from "../utility/logManager";
-import { processScreenshot } from "../services/imageProcessor";
+import { Agent, Thinker } from "../utility/abstract.js";
+import Session from "../models/session.js";
+import { EventBus } from "../services/events/event.js";
+import { getInteractiveElements } from "../services/UIElementDetector.js";
+import { Action, ImageData, State } from "../types.js";
+import { LogManager } from "../utility/logManager.js";
+import { processScreenshot } from "../services/imageProcessor.js";
 import { setTimeout } from "node:timers/promises";
-import ActionService from "../services/actions/actionService";
+import ActionService from "../services/actions/actionService.js";
 
 export class GoalAgent extends Agent {
     private goal: string;

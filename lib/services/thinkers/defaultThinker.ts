@@ -1,9 +1,9 @@
-import { Thinker } from "../../utility/abstract";
-import { GeminiLLm } from "../../models/generate/gemini";
-import { LogManager } from "../../utility/logManager";
-import { GetNextActionContext, ThinkResult, ImageData, State } from "../../types";
-import LLMCommander from "../../models/llmModel";
-import VisionModel from "../../models/visionModel";
+import { Thinker } from "../../utility/abstract.js";
+import { GeminiLLm } from "../../models/generate/gemini.js";
+import { LogManager } from "../../utility/logManager.js";
+import { GetNextActionContext, ThinkResult, ImageData, State } from "../../types.js";
+import LLMCommander from "../../models/llmModel.js";
+import VisionModel from "../../models/visionModel.js";
 import { performance } from 'perf_hooks';
 
 const thinkerState = State.DECIDE

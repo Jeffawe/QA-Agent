@@ -29,7 +29,6 @@ train/
 # TypeScript
 # ----------------------------------------
 *.d.ts
-*.js
 *.js.map
 
 # If using tsx or tsc build folder

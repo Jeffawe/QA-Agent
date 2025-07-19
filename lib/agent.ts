@@ -1,19 +1,19 @@
-import ActionService from './services/actions/actionService';
+import ActionService from './services/actions/actionService.js';
 import Session from './models/session.js';
-import VisionModel from './models/visionModel';
-import LLMCommander from './models/llmModel';
-import { Thinker } from "./utility/abstract";
-import { LogManager } from "./utility/logManager";
-import { EventBus } from "./services/events/event";
-import { State } from "./types";
-import { CombinedThinker } from "./services/thinkers/combinedThinker";
+import VisionModel from './models/visionModel.js';
+import LLMCommander from './models/llmModel.js';
+import { Thinker } from "./utility/abstract.js";
+import { LogManager } from "./utility/logManager.js";
+import { EventBus } from "./services/events/event.js";
+import { State } from "./types.js";
+import { CombinedThinker } from "./services/thinkers/combinedThinker.js";
 
-import NavigationTree from "./utility/navigationTree";
+import NavigationTree from "./utility/navigationTree.js";
 
-import { Agent } from "./utility/abstract"
-import { Crawler } from "./agent/crawler";
-import Tester from "./agent/tester";
-import { CrawlMap } from './utility/crawlMap';
+import { Agent } from "./utility/abstract.js"
+import { Crawler } from "./agent/crawler.js";
+import Tester from "./agent/tester.js";
+import { CrawlMap } from './utility/crawlMap.js';
 
 export interface AgentDependencies {
   session: Session;

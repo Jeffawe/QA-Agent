@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { LLM } from '../utility/abstract';
+import { LLM } from '../utility/abstract.js';
 
 export default class VisionModel {
     private modelClient: LLM | null = null;

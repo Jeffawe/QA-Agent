@@ -1,6 +1,6 @@
 import { Page } from "puppeteer";
-import Session from "../../models/session";
-import { EventBus } from "../events/event";
+import Session from "../../models/session.js";
+import { EventBus } from "../events/event.js";
 
 export class NewPageValidator {
     constructor(private bus: EventBus, private session: Session) {

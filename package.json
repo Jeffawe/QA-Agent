@@ -1,4 +1,43 @@
 {
+  "name": "qa-agent",
+  "version": "1.0.0-beta.1",
+  "description": "AI-powered QA agent using LLM models for automated testing and web interaction",
+  "main": "dist/server.js",
+  "type": "module",
+  "bin": {
+    "agent-run": "./bin/index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node dist/server.js",
+    "dev": "nodemon",
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "qa",
+    "agent",
+    "llm",
+    "ai",
+    "testing",
+    "automation",
+    "puppeteer",
+    "web-scraping",
+    "google-genai"
+  ],
+  "author": "Jeffery Ozoekwe-Awagu",
+  "license": "ISC",
+  "homepage": "https://github.com/yourusername/qa-agent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/qa-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/qa-agent/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@google/genai": "^1.8.0",
     "axios": "^1.10.0",
@@ -7,31 +46,24 @@
     "express": "^5.1.0",
     "minimist": "^1.2.8",
     "openai": "^5.8.2",
-    "puppeteer": "^24.11.2"
+    "puppeteer": "^24.11.2",
+    "ws": "^8.18.3"
   },
-  "type": "module",
-  "name": "puppeteer_test",
-  "version": "1.0.0",
-  "main": "server.ts",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node dist/server.js",
-    "dev": "nodemon",
-    "build": "tsc"
-  },
-  "bin": {
-    "agent-run": "./bin/index.js"
-  },
-  "author": "Jeffery Ozoekwe-Awagu",
-  "license": "ISC",
-  "description": "",
   "devDependencies": {
     "@types/express": "^5.0.3",
     "@types/node": "^24.0.10",
+    "@types/ws": "^8.18.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   },
+  "files": [
+    "bin/",
+    "dist/",
+    "lib/",
+    "README.md",
+    "LICENSE"
+  ],
   "ts-node": {
     "esm": true
   }

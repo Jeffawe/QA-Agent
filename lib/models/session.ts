@@ -1,8 +1,8 @@
 import puppeteer, { Browser, Page, KeyInput, Frame } from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
-import { ClicKType, Rect, State } from '../types';
-import { LogManager } from '../utility/logManager';
+import { ClicKType, Rect, State } from '../types.js';
+import { LogManager } from '../utility/logManager.js';
 
 export default class Session {
   private sessionId: string;

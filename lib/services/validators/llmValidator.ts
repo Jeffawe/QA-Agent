@@ -1,6 +1,6 @@
-import { State } from "../../types";
-import { LogManager } from "../../utility/logManager";
-import { EventBus } from "../events/event";
+import { State } from "../../types.js";
+import { LogManager } from "../../utility/logManager.js";
+import { EventBus } from "../events/event.js";
 
 export class LLMUsageValidator {
     private totalPromptTokens = 0;

@@ -1,5 +1,5 @@
-import { GetNextActionContext, ThinkResult, ImageData, Action, AnalysisResponse, NamespacedState, State, Namespaces } from "../types";
-import { EventBus } from "../services/events/event";
+import { GetNextActionContext, ThinkResult, ImageData, Action, AnalysisResponse, NamespacedState, State, Namespaces } from "../types.js";
+import { EventBus } from "../services/events/event.js";
 
 export abstract class Thinker {
     protected modelClient: LLM | null = null;

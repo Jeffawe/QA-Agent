@@ -1,28 +1,32 @@
 import express, { Request, Response } from 'express';
-import Session, { runTestSession } from './models/session';
+import Session, { runTestSession } from './models/session.js';
 import dotenv from 'dotenv';
 
-import { detectUIWithPython, getInteractiveElements } from './services/UIElementDetector';
-import { LogManager } from './utility/logManager';
-import { processScreenshot } from './services/imageProcessor';
-import BossAgent from './agent';
-import { eventBus } from './services/events/eventBus';
-import { ActionSpamValidator } from './services/validators/actionValidator';
-import { ErrorValidator } from './services/validators/errorValidator';
-import { LLMUsageValidator } from './services/validators/llmValidator';
+import { getInteractiveElements } from './services/UIElementDetector.js';
+import BossAgent from './agent.js';
+import { eventBus } from './services/events/eventBus.js';
+
+import { ActionSpamValidator } from './services/validators/actionValidator.js';
+import { ErrorValidator } from './services/validators/errorValidator.js';
+import { LLMUsageValidator } from './services/validators/llmValidator.js';
+import { WebSocketEventBridge } from './services/events/webSockets.js';
 
 dotenv.config();
 
 const url = process.env.BASE_URL || 'https://www.jeffawe.com';
 const app = express();
-const PORT: number = parseInt(process.env.PORT || '3000');
+const PORT: number = parseInt(process.env.PORT || '3001');
+const WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
 
 let gameAgent: BossAgent | null = null;
 
-///Validators
+// Validators
 new ActionSpamValidator(eventBus);
 new ErrorValidator(eventBus);
 new LLMUsageValidator(eventBus);
+
+// Setup WebSockets
+new WebSocketEventBridge(eventBus, WebSocket_PORT);
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Hello, World!');
@@ -68,3 +72,7 @@ app.get('/test', async (req: Request, res: Response) => {
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
+
+eventBus.on('crawl_map_updated', async (evt) => {
+
+})

@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { NamespacedState, State } from '../types';
-import { eventBus } from '../services/events/eventBus';
+import { NamespacedState, State } from '../types.js';
+import { eventBus } from '../services/events/eventBus.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,6 +47,7 @@ export class LogManager {
     LogManager.logs.push(timestamped);
 
     if (logToConsole) console.log(timestamped);
+    eventBus.emit({ ts: Date.now(), type: "new_log", message: String(message) });
 
     try {
       fs.mkdirSync(path.dirname(LogManager.logFilePath), { recursive: true });
@@ -71,6 +72,7 @@ export class LogManager {
     const resolvedState = LogManager.resolveState(state, State.ERROR);
     const errorMessage = `[ERROR] ${message} at [state: ${resolvedState}]`;
     LogManager.logs.push(errorMessage);
+    eventBus.emit({ ts: Date.now(), type: "new_log", message: String(message) });
     //eventBus.emit({ ts: Date.now(), type: "error", message: String(message), stack: new Error().stack });
 
     if (logToConsole) {

@@ -1,11 +1,11 @@
 import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genai";
 import dotenv from 'dotenv';
-import { LLM } from "../../utility/abstract";
-import { Action, AnalysisResponse } from "../../types";
+import { LLM } from "../../utility/abstract.js";
+import { Action, AnalysisResponse } from "../../types.js";
 import fs from 'fs';
 import path from 'path';
-import { systemPrompt, systemActionPrompt } from "./prompts";
-import { eventBus } from "../../services/events/eventBus";
+import { systemPrompt, systemActionPrompt } from "./prompts.js";
+import { eventBus } from "../../services/events/eventBus.js";
 
 dotenv.config();
 
