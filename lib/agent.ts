@@ -10,15 +10,13 @@ import { CombinedThinker } from "./services/thinkers/combinedThinker.js";
 
 import NavigationTree from "./utility/navigationTree.js";
 
-import { Agent } from "./utility/abstract.js"
+import { Agent } from "./utility/abstract.js";
 import { Crawler } from "./agent/crawler.js";
 import Tester from "./agent/tester.js";
 import { CrawlMap } from './utility/crawlMap.js';
 
 export interface AgentDependencies {
   session: Session;
-  visionModel?: VisionModel;
-  llmCommander?: LLMCommander;
   thinker?: Thinker;
   actionService?: ActionService;
   eventBus: EventBus;
@@ -26,16 +24,14 @@ export interface AgentDependencies {
 }
 
 export default class BossAgent {
-  private readonly session: Session;
   private readonly thinker: Thinker;
   private readonly actionService: ActionService;
-  private readonly visionModel: VisionModel;
-  private readonly llmCommander: LLMCommander;
   private readonly bus: EventBus;
 
   private readonly crawler: Crawler;
   private readonly tester: Tester;
 
+  public session: Session;
   public agents: Agent[] = [];
 
   // State Data
@@ -43,15 +39,11 @@ export default class BossAgent {
 
   constructor({
     session,
-    visionModel = new VisionModel(),
-    llmCommander = new LLMCommander(),
     thinker,
     actionService,
     eventBus
   }: AgentDependencies) {
     this.session = session;
-    this.visionModel = visionModel;
-    this.llmCommander = llmCommander;
     this.thinker = thinker ?? new CombinedThinker();
     this.actionService = actionService ?? new ActionService(this.session);
     this.bus = eventBus;
@@ -84,11 +76,19 @@ export default class BossAgent {
     this.stop();
   }
 
-  async stop(): Promise<void> {
-    this.state = State.DONE;
-    for (const a of this.agents) {
-      await a.cleanup();
+  async stop(): Promise<boolean> {
+    try {
+      this.state = State.DONE;
+      for (const a of this.agents) {
+        await a.cleanup();
+        a.state = State.DONE;
+      }
+      this.session.close();
+      LogManager.log("All Services have been stopped", State.DONE, true);
+      return true;
+    } catch (err) {
+      LogManager.error(`Error stopping agent: ${err}`, State.ERROR, true);
+      return false;
     }
-    this.session.close();
   }
 }

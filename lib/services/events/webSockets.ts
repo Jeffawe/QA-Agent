@@ -1,24 +1,32 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import { EventBus } from './event.js';
 import { PageDetails } from '../../types.js';
+import { LogManager } from '../../utility/logManager.js';
+import { CrawlMap } from '../../utility/crawlMap.js';
 
-interface WebSocketData { 
-  message?: string; 
-  timestamp: number; 
-  page?: PageDetails; 
+interface WebSocketData {
+    message?: string;
+    timestamp: number;
+    page?: PageDetails;
 }
 
 // Add interface for connection message data
 interface ConnectionData {
-  status: string;
-  message: string;
+    status: string;
+    message: string;
+}
+
+interface FirstConnectionData {
+    pages: PageDetails[];
+    messages: string[];
+    timestamp: number;
 }
 
 // Add interface for the complete message structure
 interface WebSocketMessage {
-  type: string;
-  data: WebSocketData | ConnectionData;
-  timestamp: string;
+    type: string;
+    data: WebSocketData | ConnectionData | FirstConnectionData;
+    timestamp: string;
 }
 
 export class WebSocketEventBridge {
@@ -42,6 +50,12 @@ export class WebSocketEventBridge {
             this.sendToClient(ws, 'CONNECTION', {
                 status: 'connected',
                 message: 'WebSocket connected successfully'
+            });
+
+            this.sendToClient(ws, 'INITIAL_DATA', {
+                messages: LogManager.getLogs(),
+                pages: CrawlMap.getPages(),
+                timestamp: Date.now()
             });
 
             // Handle client disconnect
@@ -81,7 +95,7 @@ export class WebSocketEventBridge {
     }
 
     // Send message to specific client - now properly typed
-    sendToClient(ws: WebSocket, type: string, data: ConnectionData) {
+    sendToClient(ws: WebSocket, type: string, data: ConnectionData | FirstConnectionData) {
         if (ws.readyState === WebSocket.OPEN) {
             const message: WebSocketMessage = {
                 type: type,

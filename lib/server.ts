@@ -10,6 +10,8 @@ import { ActionSpamValidator } from './services/validators/actionValidator.js';
 import { ErrorValidator } from './services/validators/errorValidator.js';
 import { LLMUsageValidator } from './services/validators/llmValidator.js';
 import { WebSocketEventBridge } from './services/events/webSockets.js';
+import { LogManager } from './utility/logManager.js';
+import { State } from './types.js';
 
 dotenv.config();
 
@@ -19,6 +21,7 @@ const PORT: number = parseInt(process.env.PORT || '3001');
 const WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
 
 let gameAgent: BossAgent | null = null;
+let sessions = new Map<string, BossAgent>();
 
 // Validators
 new ActionSpamValidator(eventBus);
@@ -34,11 +37,17 @@ app.get('/', (req: Request, res: Response) => {
 
 app.get('/start/:sessionId', async (req: Request, res: Response) => {
     const sessionId = req.params.sessionId;
+    if (sessions.has(sessionId)) {
+        LogManager.error('Game session already started.', State.ERROR, true);
+        res.status(400).send('Game session already started.');
+        return;
+    }
     const gameSession = new Session(sessionId);
     gameAgent = new BossAgent({
         session: gameSession,
         eventBus: eventBus,
     });
+    sessions.set(sessionId, gameAgent);
 
     try {
         await gameAgent.start(url);
@@ -52,7 +61,15 @@ app.get('/start/:sessionId', async (req: Request, res: Response) => {
 app.get('/test', async (req: Request, res: Response) => {
     try {
         //await runTestSession(url);
-        const session = new Session("3");
+        let session: Session;
+        if (sessions.size > 0) {
+            const firstAgent = sessions.values().next().value;
+            session = firstAgent!.session;
+        } else {
+            session = new Session('1');
+            sessions.set('1', new BossAgent({ session: session, eventBus: eventBus }));
+        }
+
         const hasStarted = await session.start(url);
 
         if (!hasStarted) throw new Error('Failed to start test session');
@@ -69,10 +86,20 @@ app.get('/test', async (req: Request, res: Response) => {
     }
 });
 
+app.get('/stop/:sessionId', async (req: Request, res: Response) => {
+    try {
+        const hasStopped = await gameAgent?.stop();
+
+        if (!hasStopped) throw new Error('Failed to stop game session');
+
+        sessions.delete(req.params.sessionId);
+        res.send('Game session stopped successfully!');
+    } catch (error) {
+        LogManager.error('Error stopping game session: error', State.ERROR, true);
+        res.status(500).send('Failed to stop game session.');
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
-
-eventBus.on('crawl_map_updated', async (evt) => {
-
-})
