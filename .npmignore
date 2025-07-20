@@ -5,3 +5,6 @@ tsconfig.json
 nodemon.json
 images/
 logs/
+.github/
+.env
+.gitignore

@@ -27,13 +27,13 @@
   ],
   "author": "Jeffery Ozoekwe-Awagu",
   "license": "ISC",
-  "homepage": "https://github.com/yourusername/qa-agent#readme",
+  "homepage": "https://github.com/Jeffawe/QA-Agent-React#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/qa-agent.git"
+    "url": "git+https://github.com/Jeffawe/QA-Agent-React"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/qa-agent/issues"
+    "url": "https://github.com/Jeffawe/QA-Agent-React/issues"
   },
   "engines": {
     "node": ">=18.0.0"
