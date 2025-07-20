@@ -101,7 +101,7 @@ export enum State {
     EVALUATE = "EVALUATE",
     WAIT = "WAIT",
     INFO = "INFO",
-    MANUAL_DECIDE = "MANUAL_DECIDE"
+    VALIDATE = "VALIDATE",
 }
 
 type StateValue = `${State}`;

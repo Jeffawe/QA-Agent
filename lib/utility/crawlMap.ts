@@ -42,6 +42,8 @@ export class CrawlMap {
     this.write();        // create / clear file
   }
 
+  static getPages() : PageDetails[] { return Array.from(this.pages.values()); }
+
   /** Register page details (call as soon as PageDetails is ready) */
   static recordPage(page: PageDetails) {
     if (!this.initialised) this.init();

@@ -8,14 +8,17 @@ import { EventBus } from "../services/events/event.js";
 import Tester from "./tester.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
+import ManualTester from "./manualTester.js";
 
 export class Crawler extends Agent {
     currentUrl: string | null = null;
     public baseUrl: string | null = null;
+    isCurrentPageVisited = false;
 
     constructor(
         private session: Session,
         private tester: Tester,
+        private manualTester: ManualTester,
         eventBus: EventBus
     ) {
         super("Crawler", eventBus);
@@ -94,23 +97,39 @@ export class Crawler extends Agent {
                         isVisited = false;
                         CrawlMap.recordPage(PageMemory.pages[this.currentUrl]);
                     }
-                    this.tester.enqueue(unvisited, isVisited);
+
+                    if (isVisited) {
+                        this.manualTester.enqueue(unvisited, isVisited);
+                    } else {
+                        this.tester.enqueue(unvisited, isVisited);
+                    }
+
+                    this.isCurrentPageVisited = isVisited;
                     this.setState(State.WAIT);
                     break;
                 }
 
                 case State.WAIT: {
                     LogManager.log("Waiting for tester to finish", this.buildState(), false);
-                    if (this.tester.isDone()) {
-                        LogManager.log("Tester finished", this.buildState(), false);
-                        this.setState(State.ACT);
+
+                    if (this.isCurrentPageVisited) {
+                        if (this.manualTester.isDone()) {
+                            LogManager.log("Manual tester finished", this.buildState(), false);
+                            this.setState(State.ACT);
+                        }
+                    } else {
+                        if (this.tester.isDone()) {
+                            LogManager.log("Tester finished", this.buildState(), false);
+                            this.setState(State.ACT);
+                        }
                     }
+
                     break;
                 }
 
                 /*────────── 4. ACT → (START | DONE) ─*/
                 case State.ACT: {
-                    const next = this.tester.nextLink;
+                    const next = this.isCurrentPageVisited ? this.manualTester.nextLink : this.tester.nextLink;
                     if (next) {
                         PageMemory.markLinkVisited(this.currentUrl, next.text || next.href);
                         const finalUrl = page.url();

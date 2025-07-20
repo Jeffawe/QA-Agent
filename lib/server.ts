@@ -20,7 +20,6 @@ const app = express();
 const PORT: number = parseInt(process.env.PORT || '3001');
 const WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
 
-let gameAgent: BossAgent | null = null;
 let sessions = new Map<string, BossAgent>();
 
 // Validators
@@ -43,7 +42,7 @@ app.get('/start/:sessionId', async (req: Request, res: Response) => {
         return;
     }
     const gameSession = new Session(sessionId);
-    gameAgent = new BossAgent({
+    const gameAgent = new BossAgent({
         session: gameSession,
         eventBus: eventBus,
     });
@@ -75,9 +74,9 @@ app.get('/test', async (req: Request, res: Response) => {
         if (!hasStarted) throw new Error('Failed to start test session');
 
         if (!session.page) throw new Error('Page not initialized');
-        const elements = await getInteractiveElements(session.page);
+        // const elements = await getInteractiveElements(session.page);
 
-        //await processScreenshot('./images/screenshot_0.png', elements);
+        // await processScreenshot('./images/screenshot_0.png', elements);
         res.send('Test session started successfully!');
     }
     catch (error) {
@@ -88,6 +87,13 @@ app.get('/test', async (req: Request, res: Response) => {
 
 app.get('/stop/:sessionId', async (req: Request, res: Response) => {
     try {
+        if (!sessions.has(req.params.sessionId)) {
+            LogManager.error('Game session not found.', State.ERROR, true);
+            res.status(404).send('Game session not found.');
+            return;
+        }
+
+        const gameAgent = sessions.get(req.params.sessionId);
         const hasStopped = await gameAgent?.stop();
 
         if (!hasStopped) throw new Error('Failed to stop game session');

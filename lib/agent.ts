@@ -14,6 +14,7 @@ import { Agent } from "./utility/abstract.js";
 import { Crawler } from "./agent/crawler.js";
 import Tester from "./agent/tester.js";
 import { CrawlMap } from './utility/crawlMap.js';
+import ManualTester from './agent/manualTester.js';
 
 export interface AgentDependencies {
   session: Session;
@@ -30,6 +31,7 @@ export default class BossAgent {
 
   private readonly crawler: Crawler;
   private readonly tester: Tester;
+  private readonly manualTester: ManualTester;
 
   public session: Session;
   public agents: Agent[] = [];
@@ -48,10 +50,12 @@ export default class BossAgent {
     this.actionService = actionService ?? new ActionService(this.session);
     this.bus = eventBus;
 
+    // Agents
     this.tester = new Tester({ session: this.session, thinker: this.thinker, actionService: this.actionService, eventBus: this.bus });
-    this.crawler = new Crawler(this.session, this.tester, this.bus);
+    this.manualTester = new ManualTester({ session: this.session, actionService: this.actionService, eventBus: this.bus });
+    this.crawler = new Crawler(this.session, this.tester, this.manualTester, this.bus);
 
-    this.agents = [this.crawler, this.tester];
+    this.agents = [this.crawler, this.tester, this.manualTester];
   }
 
   /** Public API */

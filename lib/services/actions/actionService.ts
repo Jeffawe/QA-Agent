@@ -95,6 +95,10 @@ export default class ActionService {
     await setTimeout(ms);
   }
 
+  public async clickSelector(selector: string): Promise<void> {
+    await this.session.pressSelector(selector);
+  }
+
   getSelectorByLabel = (
     clickableElements: InteractiveElement[],
     label: string
