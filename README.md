@@ -26,12 +26,6 @@ You can install the package globally:
 npm install -g qa-agent
 ```
 
-And then to start the server
-```bash
-curl http://localhost:3001/start/1
-```
-
-
 ## 🛠️ Usage
 
 Run the agent with your desired configuration:
@@ -39,6 +33,12 @@ Run the agent with your desired configuration:
 ```bash
 agent-run --goal "Test all interactive elements" --url https://example.com --port 3001 --key <GOOGLE_GENAI_API_KEY>
 ```
+
+And then start the server
+```bash
+curl http://localhost:3001/start/1
+```
+
 
 ### CLI Arguments
 
