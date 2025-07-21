@@ -108,7 +108,17 @@ export class LogManager {
   // Initialize the markdown file with empty sections
   static initialize() {
     const content = `${this.sections.mission}\n\n${this.sections.subMissions}\n\n${this.sections.extraInfo}\n`;
-    fs.writeFileSync(this.filePath, content, 'utf-8');
+
+    // Create directory if it doesn't exist
+    const dir = path.dirname(this.filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    // Create file only if it doesn't exist
+    if (!fs.existsSync(this.filePath)) {
+      fs.writeFileSync(this.filePath, content, 'utf-8');
+    }
   }
 
   /**

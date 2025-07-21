@@ -37,11 +37,6 @@ export default class Session {
     }
   }
 
-  async close(): Promise<void> {
-    if (this.page) await this.page.close();
-    if (this.browser) await this.browser.close();
-  }
-  
   async takeScreenshot(
     folderName: string,
     basicFilename: string,
@@ -262,6 +257,97 @@ export default class Session {
     }
     catch (error) {
       console.error('Error clearing click indicators:', error);
+    }
+  }
+
+  async close(): Promise<void> {
+    LogManager.log(`Closing session ${this.sessionId}...`);
+
+    const errors: Error[] = [];
+
+    try {
+      // Clear any visual click indicators first
+      await this.clearAllClickPoints();
+    } catch (error) {
+      console.warn('Warning: Failed to clear click indicators:', error);
+      errors.push(error as Error);
+    }
+
+    // Clean up frame reference
+    if (this.frame) {
+      try {
+        // The frame will be cleaned up when the page closes, but we can null the reference
+        this.frame = null;
+        LogManager.log('Frame reference cleared');
+      } catch (error) {
+        console.warn('Warning: Error clearing frame reference:', error);
+        errors.push(error as Error);
+      }
+    }
+
+    // Clean up page
+    if (this.page) {
+      try {
+        // Remove all listeners to prevent memory leaks
+        this.page.removeAllListeners();
+
+        // Close the page
+        await this.page.close();
+        this.page = null;
+        LogManager.log('Page closed successfully');
+      } catch (error) {
+        LogManager.error(`Error closing page: ${error}`, State.ERROR, true);
+        errors.push(error as Error);
+
+        // Force null the reference even if close failed
+        this.page = null;
+      }
+    }
+
+    // Clean up browser
+    if (this.browser) {
+      try {
+        // Get all pages to ensure they're all closed
+        const pages = await this.browser.pages();
+
+        // Close any remaining pages
+        for (const page of pages) {
+          try {
+            if (!page.isClosed()) {
+              page.removeAllListeners();
+              await page.close();
+            }
+          } catch (pageError) {
+            console.warn('Warning: Error closing individual page:', pageError);
+            errors.push(pageError as Error);
+          }
+        }
+
+        // Remove all browser listeners
+        this.browser.removeAllListeners();
+
+        // Close the browser
+        await this.browser.close();
+        this.browser = null;
+        LogManager.log('Browser closed successfully');
+      } catch (error) {
+        LogManager.error(`Error closing browser: ${error}`, State.ERROR, true);
+        errors.push(error as Error);
+
+        // Force null the reference even if close failed
+        this.browser = null;
+      }
+    }
+
+    // Clean up other references
+    this.rect = null;
+
+    LogManager.log(`Session ${this.sessionId} cleanup completed`);
+
+    // If there were any errors during cleanup, log them but don't throw
+    // This ensures the cleanup process completes even if some steps fail
+    if (errors.length > 0) {
+      console.warn(`Session ${this.sessionId} cleanup completed with ${errors.length} warnings:`, errors);
     }
   }
 }

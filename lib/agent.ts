@@ -1,7 +1,5 @@
 import ActionService from './services/actions/actionService.js';
 import Session from './models/session.js';
-import VisionModel from './models/visionModel.js';
-import LLMCommander from './models/llmModel.js';
 import { Thinker } from "./utility/abstract.js";
 import { LogManager } from "./utility/logManager.js";
 import { EventBus } from "./services/events/event.js";

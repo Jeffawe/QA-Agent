@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { join, isAbsolute } from "path";
+import { join, isAbsolute, dirname } from "path";
 import { LogManager } from './logManager.js';
 
 interface PageNode {
@@ -41,6 +41,7 @@ class NavigationTree {
     private static pageVisitCounts: Map<string, number> = new Map();
     private static outputFile: string = 'navigation_tree.md';
 
+
     /**
      * Initialize the navigation tree with optional output file path
      */
@@ -48,6 +49,12 @@ class NavigationTree {
         const fullPath = isAbsolute(outputFilePath)
             ? outputFilePath
             : join(LogManager.PROJECT_ROOT, outputFilePath);
+
+        // Create directory if it doesn't exist
+        const dir = dirname(fullPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
 
         this.outputFile = fullPath;
         this.tree = [];

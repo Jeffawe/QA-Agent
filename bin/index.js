@@ -63,6 +63,11 @@ if (args.help || args.h) {
   process.exit(0);
 }
 
+if(port === websocket) {
+  console.error('❌ Port and WebSocket port cannot be the same.');
+  process.exit(1);
+}
+
 // Validate required arguments
 if (!goal) {
   console.error('❌ Please provide a --goal argument.');
@@ -116,7 +121,10 @@ process.env.WEBSOCKET_PORT = String(websocket);
 
 console.log('🚀 Starting server...');
 console.log(`✅ Agent server running on http://localhost:${port}`);
+console.log(`✅  WebSocket server running on ws://localhost:${websocket}`);
 console.log(`➡️  Run: curl http://localhost:${port}/start/1 to start the agent.`);
+console.log(`➡️  Run: curl http://localhost:${port}/stop to stop the agent.`);
+
 
 // Import and run the actual server
 import('../dist/lib/server.js');

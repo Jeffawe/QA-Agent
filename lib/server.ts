@@ -2,7 +2,6 @@ import express, { Request, Response } from 'express';
 import Session, { runTestSession } from './models/session.js';
 import dotenv from 'dotenv';
 
-import { getInteractiveElements } from './services/UIElementDetector.js';
 import BossAgent from './agent.js';
 import { eventBus } from './services/events/eventBus.js';
 
@@ -31,29 +30,39 @@ new LLMUsageValidator(eventBus);
 new WebSocketEventBridge(eventBus, WebSocket_PORT);
 
 app.get('/', (req: Request, res: Response) => {
-    res.send('Hello, World!');
+    res.send('Welcome to QA-Agent! Go to https://qa-agent-react.vercel.app to start testing.');
+});
+
+app.get('/start', (req: Request, res: Response) => {
+    res.send('To start a session, use /start/:sessionId endpoint, where sessionId is a unique identifier for the session.');
+});
+
+app.get('/status', (req: Request, res: Response) => {
+    res.json({
+        sessions: Array.from(sessions.keys()),
+    });
 });
 
 app.get('/start/:sessionId', async (req: Request, res: Response) => {
     const sessionId = req.params.sessionId;
     if (sessions.has(sessionId)) {
-        LogManager.error('Game session already started.', State.ERROR, true);
-        res.status(400).send('Game session already started.');
+        LogManager.error('Session already started.', State.ERROR, true);
+        res.status(400).send('Session already started.');
         return;
     }
-    const gameSession = new Session(sessionId);
-    const gameAgent = new BossAgent({
-        session: gameSession,
+    const session = new Session(sessionId);
+    const agent = new BossAgent({
+        session: session,
         eventBus: eventBus,
     });
-    sessions.set(sessionId, gameAgent);
+    sessions.set(sessionId, agent);
 
     try {
-        await gameAgent.start(url);
-        res.send(`Game session ${sessionId} started successfully!`);
+        await agent.start(url);
+        res.send(`Session ${sessionId} started successfully!`);
     } catch (error) {
-        console.error('Error starting game session:', error);
-        res.status(500).send('Failed to start game session.');
+        console.error('Error starting session:', error);
+        res.status(500).send('Failed to start session.');
     }
 });
 
@@ -88,23 +97,43 @@ app.get('/test', async (req: Request, res: Response) => {
 app.get('/stop/:sessionId', async (req: Request, res: Response) => {
     try {
         if (!sessions.has(req.params.sessionId)) {
-            LogManager.error('Game session not found.', State.ERROR, true);
-            res.status(404).send('Game session not found.');
+            LogManager.error('Session not found.', State.ERROR, true);
+            res.status(404).send('Session not found.');
             return;
         }
 
-        const gameAgent = sessions.get(req.params.sessionId);
-        const hasStopped = await gameAgent?.stop();
+        const agent = sessions.get(req.params.sessionId);
+        const hasStopped = await agent?.stop();
 
-        if (!hasStopped) throw new Error('Failed to stop game session');
+        if (!hasStopped) throw new Error('Failed to stop session');
 
         sessions.delete(req.params.sessionId);
-        res.send('Game session stopped successfully!');
+        console.log(`Session ${req.params.sessionId} stopped successfully.`);
+        res.send('Session stopped successfully!');
     } catch (error) {
-        LogManager.error('Error stopping game session: error', State.ERROR, true);
-        res.status(500).send('Failed to stop game session.');
+        LogManager.error('Error stopping session: error', State.ERROR, true);
+        res.status(500).send('Failed to stop session.');
     }
 });
+
+app.get('/stop', async (req: Request, res: Response) => {
+    try {
+        if (sessions.size === 0) {
+            LogManager.error('No active sessions to stop.', State.ERROR, true);
+            res.status(404).send('No active sessions to stop.');
+            return;
+        }
+        for (const agent of sessions.values()) {
+            await agent.stop();
+        }
+        sessions.clear();
+        console.log('All sessions stopped successfully.');
+        res.send('All sessions stopped successfully!');
+    } catch (error) {
+        LogManager.error('Error stopping sessions: error', State.ERROR, true);
+        res.status(500).send('Failed to stop sessions.');
+    }
+})
 
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
