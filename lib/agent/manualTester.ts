@@ -1,9 +1,9 @@
-import Session from "../models/session";
-import ActionService from "../services/actions/actionService";
-import { EventBus } from "../services/events/event";
-import { Action, ActionResult, LinkInfo, NamespacedState, State } from "../types";
-import { Agent } from "../utility/abstract";
-import { LogManager } from "../utility/logManager";
+import Session from "../models/session.js";
+import ActionService from "../services/actions/actionService.js";
+import { EventBus } from "../services/events/event.js";
+import { LinkInfo, NamespacedState, State } from "../types.js";
+import { Agent } from "../utility/abstract.js";
+import { LogManager } from "../utility/logManager.js";
 
 export interface ManualTesterDependencies {
     session: Session;
