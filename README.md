@@ -4,7 +4,7 @@
 ![license](https://img.shields.io/npm/l/qa-agent)
 ![build](https://img.shields.io/github/workflow/status/yourusername/qa-agent/CI)
 
-A powerful CLI tool that uses autonomous agents to crawl, analyse, and test the interactive components of any given website or web application. It's designed for developers and QA teams who want an automated assistant to navigate and evaluate webpages for interactivity, functionality, and structural issues. Check out the site at [QA Agent](https://qa-agent-react.vercel.app) for more detailed info and steps
+A powerful CLI tool that uses autonomous agents to crawl, analyse, and test the interactive components of any given website or web application. It's designed for developers and QA teams who want an automated assistant to navigate and evaluate webpages for interactivity, functionality, and structural issues. Check out the site at [QA Agent](https://www.qa-agent.site/) for more detailed info and steps
 
 ---
 
@@ -32,11 +32,6 @@ Run the agent with your desired configuration:
 
 ```bash
 agent-run --goal "Test all interactive elements" --url https://example.com --port 3001 --key <GOOGLE_GENAI_API_KEY>
-```
-
-And then start the server
-```bash
-curl http://localhost:3001/start/1
 ```
 
 

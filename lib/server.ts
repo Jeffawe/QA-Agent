@@ -135,6 +135,30 @@ app.get('/stop', async (req: Request, res: Response) => {
     }
 })
 
+app.get('/test/:key', async (req: Request, res: Response) => {
+    const key = req.params.key;
+    const sessionId = "test_" + key;
+    if (sessions.has(sessionId)) {
+        LogManager.error('Test Session already started.', State.ERROR, true);
+        res.status(400).send('Test Session already started.');
+        return;
+    }
+    const session = new Session(sessionId);
+    const agent = new BossAgent({
+        session: session,
+        eventBus: eventBus,
+    });
+    sessions.set(sessionId, agent);
+
+    try {
+        await agent.start(url);
+        res.send(`Test Session started successfully!`);
+    } catch (error) {
+        console.error('Error starting session:', error);
+        res.status(500).send('Failed to start session.');
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });

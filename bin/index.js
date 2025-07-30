@@ -2,6 +2,8 @@
 import minimist from 'minimist';
 import { execSync } from 'child_process';
 import net from 'net';
+import fs from 'fs';
+import path from 'path';
 
 // Function to check if a port is available
 function checkPort(port) {
@@ -32,6 +34,58 @@ async function checkPorts(ports) {
   return results;
 }
 
+// Function to read and parse config file
+function readConfigFile(configPath) {
+  try {
+    if (!fs.existsSync(configPath)) {
+      console.error(`❌ Config file not found: ${configPath}`);
+      process.exit(1);
+    }
+
+    const configContent = fs.readFileSync(configPath, 'utf8');
+    const config = JSON.parse(configContent);
+
+    console.log(`✅ Config loaded from: ${configPath}`);
+    return config;
+  } catch (error) {
+    console.error(`❌ Error reading config file: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+// Function to make HTTP request
+async function makeRequest(url, endpoint) {
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(`${url}${endpoint}`);
+
+    if (response.ok) {
+      console.log(`✅ Successfully called ${endpoint}`);
+      return await response.text();
+    } else {
+      console.error(`❌ Failed to call ${endpoint}: ${response.status} ${response.statusText}`);
+    }
+  } catch (error) {
+    console.error(`❌ Error calling ${endpoint}: ${error.message}`);
+  }
+}
+
+// Function to wait for server to be ready
+async function waitForServer(port, maxAttempts = 30) {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const available = await checkPort(port);
+      if (!available) {
+        return true; // Server is running (port is in use)
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+    } catch (error) {
+      // Continue trying
+    }
+  }
+  return false;
+}
+
 // Check Node.js availability
 try {
   execSync('node -v', { stdio: 'ignore' });
@@ -42,28 +96,55 @@ try {
 
 // Parse arguments
 const args = minimist(process.argv.slice(2));
-const goal = args.goal || '';
-const port = args.port || 3001;
-const key = args.key || '';
-const url = args.url || '';
-const websocket = args.websocket || 3002;
+
+let config = {};
+if (args.config || args.c) {
+  const configPath = args.config || args.c;
+  config = readConfigFile(path.resolve(configPath));
+}
+
+const goal = args.goal || config.goal || '';
+const port = args.port || config.port || 3001;
+const key = args.key || config.key || '';
+const url = args.url || config.url || '';
+const websocket = args.websocket || config.websocket || 3002;
+const testMode = args['test-mode'] || config['test-mode'] || false;
+const autoStart = args['auto-start'] || config['auto-start'] || true;
 
 if (args.help || args.h) {
   console.log(`
-    Usage: agent-run --goal "<goal>" --key "<api-key>" --url "<base-url>" [options]
+    Usage: agent-run [options]
 
     Options:
-      --goal       Goal for the QA agent (required)
-      --key        Google GenAI API key (required)  
-      --url        Base URL (required)
-      --port       Server port (default: 3001)
-      --websocket  WebSocket port (default: 3002)
-      --help, -h   Show this help message
+      --config, -c     Path to JSON config file
+      --goal           Goal for the QA agent (required)
+      --key            Google GenAI API key (required)  
+      --url            Base URL (required)
+      --port           Server port (default: 3001)
+      --websocket      WebSocket port (default: 3002)
+      --test-mode      Enable test mode (default: false)
+      --auto-start     Automatically start the agent (default: false)
+      --help, -h       Show this help message
+
+    Config File Example:
+      {
+        "goal": "Test the login functionality",
+        "key": "your-api-key",
+        "url": "http://localhost:3000",
+        "port": 3001,
+        "websocket": 3002,
+        "test-mode": true,
+        "auto-start": true
+      }
+
+    Examples:
+      agent-run --config ./agent.json
+      agent-run --goal "Test login" --key "api-key" --url "http://localhost:3000"
   `);
   process.exit(0);
 }
 
-if(port === websocket) {
+if (port === websocket) {
   console.error('❌ Port and WebSocket port cannot be the same.');
   process.exit(1);
 }
@@ -118,13 +199,44 @@ process.env.GOOGLE_GENAI_API_KEY = key;
 process.env.USER_GOAL = goal;
 process.env.BASE_URL = url;
 process.env.WEBSOCKET_PORT = String(websocket);
+process.env.TEST_MODE = String(testMode);
 
 console.log('🚀 Starting server...');
 console.log(`✅ Agent server running on http://localhost:${port}`);
-console.log(`✅  WebSocket server running on ws://localhost:${websocket}`);
-console.log(`➡️  Run: curl http://localhost:${port}/start/1 to start the agent.`);
-console.log(`➡️  Run: curl http://localhost:${port}/stop to stop the agent.`);
+console.log(`✅ WebSocket server running on ws://localhost:${websocket}`);
 
+if (testMode) {
+  console.log('🧪 Test mode enabled');
+}
 
-// Import and run the actual server
-import('../dist/lib/server.js');
+if (!autoStart) {
+  console.log(`➡️  Run: curl http://localhost:${port}/start/1 to start the agent.`);
+  console.log(`➡️  Run: curl http://localhost:${port}/stop to stop the agent.`);
+  if (testMode) {
+    console.log(`➡️  Run: curl http://localhost:${port}/test to run in test mode.`);
+  }
+}
+
+await import('../dist/lib/server.js');
+
+// Auto-start functionality
+if (autoStart) {
+  console.log('⏳ Waiting for server to be ready...');
+  
+  const serverReady = await waitForServer(port);
+  
+  if (serverReady) {
+    console.log('🚀 Server is ready, auto-starting agent...');
+    
+    const endpoint = testMode ? `/test/${key}` : '/start/1';
+    const baseUrl = `http://localhost:${port}`;
+    
+    // Wait a bit more to ensure server is fully initialized
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    await makeRequest(baseUrl, endpoint);
+  } else {
+    console.error('❌ Server failed to start within expected time.');
+    process.exit(1);
+  }
+}
