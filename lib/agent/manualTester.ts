@@ -1,4 +1,4 @@
-import Session from "../models/session.js";
+import Session from "../browserAuto/session.js";
 import ActionService from "../services/actions/actionService.js";
 import { EventBus } from "../services/events/event.js";
 import { LinkInfo, NamespacedState, State } from "../types.js";

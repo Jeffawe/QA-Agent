@@ -1,5 +1,5 @@
 import { Agent, Thinker } from "../utility/abstract.js";
-import Session from "../models/session.js";
+import Session from "../browserAuto/session.js";
 import { EventBus } from "../services/events/event.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { Action, ImageData, State } from "../types.js";

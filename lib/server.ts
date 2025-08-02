@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import Session, { runTestSession } from './models/session.js';
+import Session, { runTestSession } from './browserAuto/session.js';
 import dotenv from 'dotenv';
 
 import BossAgent from './agent.js';
@@ -11,6 +11,7 @@ import { LLMUsageValidator } from './services/validators/llmValidator.js';
 import { WebSocketEventBridge } from './services/events/webSockets.js';
 import { LogManager } from './utility/logManager.js';
 import { State } from './types.js';
+import { setAPIKey } from './externalCall.js';
 
 dotenv.config();
 
@@ -57,6 +58,21 @@ app.get('/start/:sessionId', async (req: Request, res: Response) => {
     });
     sessions.set(sessionId, agent);
 
+    if (process.env.API_KEY?.startsWith('TEST')) {
+        const success = setAPIKey(process.env.API_KEY);
+        if (!success) {
+            LogManager.error('Failed to set API key.', State.ERROR, true);
+            res.status(500).send('Failed to set API key.');
+            return;
+        }
+    }
+
+    if(!process.env.API_KEY) {
+        LogManager.error('API key is not set. Please set the API_KEY environment variable.', State.ERROR, true);
+        res.status(500).send('API key is not set. Please set the API_KEY environment variable.');
+        return;
+    }
+
     try {
         await agent.start(url);
         res.send(`Session ${sessionId} started successfully!`);
@@ -66,7 +82,7 @@ app.get('/start/:sessionId', async (req: Request, res: Response) => {
     }
 });
 
-app.get('/test', async (req: Request, res: Response) => {
+app.get('/session-test', async (req: Request, res: Response) => {
     try {
         //await runTestSession(url);
         let session: Session;
@@ -149,6 +165,13 @@ app.get('/test/:key', async (req: Request, res: Response) => {
         eventBus: eventBus,
     });
     sessions.set(sessionId, agent);
+
+    const success = setAPIKey(key);
+    if (!success) {
+        LogManager.error('Failed to set API key.', State.ERROR, true);
+        res.status(500).send('Failed to set a Test API key.');
+        return;
+    }
 
     try {
         await agent.start(url);

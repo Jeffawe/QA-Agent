@@ -1,19 +1,37 @@
 import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genai";
 import dotenv from 'dotenv';
 import { LLM } from "../../utility/abstract.js";
-import { Action, AnalysisResponse } from "../../types.js";
+import { Action, AnalysisResponse, State } from "../../types.js";
 import fs from 'fs';
 import path from 'path';
-import { systemPrompt, systemActionPrompt } from "./prompts.js";
+import { systemPrompt, systemActionPrompt, STOP_LEVEL_ERRORS } from "./prompts.js";
 import { eventBus } from "../../services/events/eventBus.js";
+import { LogManager } from "../../utility/logManager.js";
+import { generateContent } from "../../externalCall.js";
 
 dotenv.config();
 
-const genAi = new GoogleGenAI({ apiKey: process.env.GOOGLE_GENAI_API_KEY });
+let genAi: GoogleGenAI | null = null;
+if (!process.env.API_KEY?.startsWith('TEST')) {
+    try {
+        genAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    } catch (err) {
+        LogManager.error(`Failed to create GoogleGenAI instance: ${err}`, State.ERROR, true);
+
+        // Emit a stop event as the agent cannot function without the LLM
+        eventBus.emit({
+            ts: Date.now(),
+            type: "stop",
+            message: `Failed to generate multimodal action: ${err}`,
+        });
+
+        genAi = null;
+    }
+}
 
 export class GeminiLLm extends LLM {
     async generateTextResponse(prompt: string): Promise<Action> {
-        const response = await genAi.models.generateContent({
+        const response = await genAi?.models.generateContent({
             model: "gemini-2.5-flash",
             contents: [
                 { text: prompt }
@@ -59,7 +77,7 @@ export class GeminiLLm extends LLM {
             { text: prompt },
         ];
 
-        const response = await genAi.models.generateContent({
+        const response = await genAi?.models.generateContent({
             model: "gemini-2.5-flash",
             contents: contents,
         });
@@ -72,58 +90,118 @@ export class GeminiLLm extends LLM {
        * Multimodal helper – embed an image and a textual prompt in a single call.
        * @param prompt  textual instructions
        * @param imagePath path to png/jpg
+       * @param recurrent if true, the page explored has been visited before
+       * @returns AnalysisResponse containing analysis and action
+       * @throws Error if the image is not found or if the LLM response is invalid
        */
     async generateMultimodalAction(prompt: string, imagePath: string, recurrent: boolean = false): Promise<AnalysisResponse> {
-        if (!fs.existsSync(imagePath)) throw new Error(`Image not found at ${imagePath}`);
+        try {
+            if (!fs.existsSync(imagePath)) throw new Error(`Image not found at ${imagePath}`);
 
-        const mimeType = path.extname(imagePath).toLowerCase() === ".png" ? "image/png" : "image/jpeg";
-        const base64 = fs.readFileSync(imagePath).toString("base64");
+            const mimeType = path.extname(imagePath).toLowerCase() === ".png" ? "image/png" : "image/jpeg";
+            const base64 = fs.readFileSync(imagePath).toString("base64");
+            let response = null;
 
-        const image = await genAi.files.upload({
-            file: imagePath,
-        });
-
-        const response = await genAi.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: [
-                createUserContent([
-                    prompt,
-                    createPartFromUri(image.uri || base64, image.mimeType || mimeType),
-                ]),
-            ],
-            config: {
-                systemInstruction: recurrent ? systemActionPrompt : systemPrompt
+            if (!genAi) {
+                throw new Error("Gemini API client cannot be initialized. Please check your API key.");
             }
-        });
 
-        if (!response || !response.candidates || response.candidates.length === 0) {
-            throw new Error("No response from Gemini LLM");
+            try {
+                if (process.env.API_KEY?.startsWith('TEST')) {
+                    try {
+                        response = await generateContent({
+                            prompt,
+                            systemInstruction: recurrent ? systemActionPrompt : systemPrompt,
+                            imagePath
+                        });
+                    } catch (error) {
+                        const err = error as Error;
+                        LogManager.error(`Failed to make test call to server: ${err.message}`, State.ERROR, true);
+                        throw err;
+                    }
+                } else {
+                    const image = await genAi?.files.upload({
+                        file: imagePath,
+                    });
+
+                    if (!image || !image.uri) {
+                        throw new Error("Failed to upload image to Gemini");
+                    }
+
+                    response = await genAi?.models.generateContent({
+                        model: "gemini-2.5-flash",
+                        contents: [
+                            createUserContent([
+                                prompt,
+                                createPartFromUri(image.uri || base64, image.mimeType || mimeType),
+                            ]),
+                        ],
+                        config: {
+                            systemInstruction: recurrent ? systemActionPrompt : systemPrompt
+                        }
+                    });
+                }
+            } catch (error) {
+                const err = error as Error;
+
+                if (err.message.includes('API key not valid')) {
+                    throw new Error('Invalid Gemini API key');
+                } else if (err.message.includes('quota')) {
+                    throw new Error('Gemini API quota exceeded');
+                } else {
+                    throw err;
+                }
+            }
+
+            if (!response || !response.candidates || response.candidates.length === 0) {
+                throw new Error("No response from Gemini LLM");
+            }
+
+            if (response.candidates[0]?.content?.parts?.[0]?.text) {
+                eventBus.emit({
+                    ts: Date.now(),
+                    type: "llm_call",
+                    model_name: "gemini-2.5-flash",
+                    promptTokens: prompt.length, // approximate: 1 token ~ 4 characters
+                    respTokens: response.candidates[0].content.parts[0]?.text?.length ?? 0, // approximate again
+                });
+            } else {
+                eventBus.emit({
+                    ts: Date.now(),
+                    type: "llm_call",
+                    model_name: "gemini-2.5-flash",
+                    promptTokens: prompt.length, // approximate: 1 token ~ 4 characters
+                    respTokens: 0, // approximate again
+                });
+            }
+
+            return recurrent ? this.parseActionFromResponse(response) : this.parseDecisionFromResponse(response);
         }
+        catch (error) {
+            const err = error as Error;
 
-        if (response.candidates[0]?.content?.parts?.[0]?.text) {
-            eventBus.emit({
-                ts: Date.now(),
-                type: "llm_call",
-                model_name: "gemini-2.5-flash",
-                promptTokens: prompt.length, // approximate: 1 token ~ 4 characters
-                respTokens: response.candidates[0].content.parts[0]?.text?.length ?? 0, // approximate again
-            });
-        }else{
-            eventBus.emit({
-                ts: Date.now(),
-                type: "llm_call",
-                model_name: "gemini-2.5-flash",
-                promptTokens: prompt.length, // approximate: 1 token ~ 4 characters
-                respTokens: 0, // approximate again
-            });
+            const isStopLevel = STOP_LEVEL_ERRORS.some(stopError =>
+                err.message.startsWith(stopError) || err.message.includes(stopError)
+            );
+
+            if (isStopLevel) {
+                eventBus.emit({
+                    ts: Date.now(),
+                    type: "stop",
+                    message: `Failed to generate multimodal action: ${err}`,
+                });
+            }
+
+            throw err; // rethrow the error for upstream handling
         }
-
-
-        return recurrent ? this.parseActionFromResponse(response) : this.parseDecisionFromResponse(response);
     }
 
     // ---------------- private helpers ----------------
-
+    /**
+     * Parses the LLM response to extract the decision-making part.
+     * @param raw The raw response from the LLM.
+     * @returns An AnalysisResponse object containing the analysis and action.
+     */
     private parseDecisionFromResponse(raw: any): AnalysisResponse {
         try {
             if (!raw?.candidates?.length) throw new Error("No candidates returned");

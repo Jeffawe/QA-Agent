@@ -1,5 +1,5 @@
 import { Page } from "puppeteer";
-import Session from "../../models/session.js";
+import Session from "../../browserAuto/session.js";
 import { EventBus } from "../events/event.js";
 
 export class NewPageValidator {

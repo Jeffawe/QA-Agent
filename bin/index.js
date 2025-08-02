@@ -193,9 +193,10 @@ if (hasPortIssues) {
 
 console.log(`✅ Ports ${port} and ${websocket} are available.`);
 
+
 // Set environment variables
 process.env.PORT = String(port);
-process.env.GOOGLE_GENAI_API_KEY = key;
+process.env.API_KEY = key;
 process.env.USER_GOAL = goal;
 process.env.BASE_URL = url;
 process.env.WEBSOCKET_PORT = String(websocket);

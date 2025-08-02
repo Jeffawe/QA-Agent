@@ -1,6 +1,6 @@
 import { Agent } from "../utility/abstract.js";
 import { LogManager } from "../utility/logManager.js";
-import Session from "../models/session.js";
+import Session from "../browserAuto/session.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { InteractiveElement, LinkInfo, State } from "../types.js";

@@ -97,3 +97,32 @@ export const systemActionPrompt = String.raw`
             }
             \`\`\`
             `;
+
+export const STOP_LEVEL_ERRORS = [
+    'Invalid Gemini API key',
+    'API key not valid',
+    'Gemini API quota exceeded',
+    'Gemini API client cannot be initialized. Please check your API key',
+    'quota exceeded',
+    'Authentication failed',
+    'Unauthorized access',
+    'Rate limit exceeded',
+    'Service unavailable',
+    'Network timeout',
+    'Connection refused',
+    'DNS resolution failed',
+    'Failed to upload image to Gemini',
+    'SSL handshake failed',
+    'Permission denied',
+    'Access forbidden',
+    'Invalid credentials',
+    'Token expired',
+    'Service temporarily unavailable',
+    'Internal server error',
+    'Database connection lost',
+    'Critical system failure',
+    'Memory allocation failed',
+    'Disk space full',
+    'Configuration error',
+    'Dependency not found'
+];

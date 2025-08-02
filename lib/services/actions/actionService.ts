@@ -1,6 +1,6 @@
 import { setTimeout } from 'node:timers/promises';
 import { Action, ActionResult, ClicKType, InteractiveElement, NamespacedState, Rect, State } from '../../types.js';
-import Session from '../../models/session.js';
+import Session from '../../browserAuto/session.js';
 import { LogManager } from '../../utility/logManager.js';
 
 const defaultOffset: Rect = { x: 0, y: 0, width: 0, height: 0 };

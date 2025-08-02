@@ -1,5 +1,5 @@
 import ActionService from './services/actions/actionService.js';
-import Session from './models/session.js';
+import Session from './browserAuto/session.js';
 import { Thinker } from "./utility/abstract.js";
 import { LogManager } from "./utility/logManager.js";
 import { EventBus } from "./services/events/event.js";
@@ -64,6 +64,11 @@ export default class BossAgent {
 
     const started = await this.session.start(url);
     if (!started) return;
+
+    this.bus.on('stop', async (evt) => {
+      await this.stop();
+      LogManager.log(`Agent stopped because of ${evt.message}`, State.ERROR, true);
+    });
 
     this.crawler.setBaseUrl(url);
     this.actionService.setBaseUrl(url);
