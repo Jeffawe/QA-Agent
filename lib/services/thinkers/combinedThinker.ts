@@ -1,7 +1,7 @@
 import { Thinker } from "../../utility/abstract.js";
 import { LogManager } from "../../utility/logManager.js";
 import { GeminiLLm } from "../../models/generate/gemini.js";
-import { GetNextActionContext, State, ThinkResult, ImageData, AnalysisResponse, NamespacedState } from "../../types.js";
+import { GetNextActionContext, State, ThinkResult, ImageData, AnalysisResponse, NamespacedState, Namespaces } from "../../types.js";
 
 const thinkerState: NamespacedState = "Tester.DECIDE";
 
@@ -11,8 +11,8 @@ export class CombinedThinker extends Thinker {
         this.modelClient = new GeminiLLm();
     }
 
-    async think(nextActionContext: GetNextActionContext, imageData: ImageData, extraInfo: string, recurrent: boolean = false): Promise<ThinkResult> {
-        const analysis = await this.getNextDecision(nextActionContext, imageData, recurrent, extraInfo);
+    async think(nextActionContext: GetNextActionContext, imageData: ImageData, extraInfo: string, agentName: Namespaces, recurrent: boolean = false): Promise<ThinkResult> {
+        const analysis = await this.getNextDecision(nextActionContext, imageData, recurrent, agentName, extraInfo);
         return {
             action: analysis.action || { step: 'no_op', args: [], reason: 'No command returned' },
             pageDetails: analysis.pageDetails || { pageName: "", description: "" },
@@ -26,7 +26,7 @@ export class CombinedThinker extends Thinker {
          * @param imageData - The image data.
          * @returns The next action for the agent.
     */
-    async getNextDecision(context: GetNextActionContext, imageData: ImageData, recurrent: boolean, extraInfo?: string): Promise<AnalysisResponse> {
+    async getNextDecision(context: GetNextActionContext, imageData: ImageData, recurrent: boolean, agentName: Namespaces, extraInfo?: string): Promise<AnalysisResponse> {
         if (!this.modelClient) {
             throw new Error("Model client is not loaded. Please load the model first.");
         }
@@ -49,7 +49,7 @@ export class CombinedThinker extends Thinker {
                 throw new Error("No image data provided.");
             }
 
-            const result = await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath, recurrent);
+            const result = await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath, recurrent, agentName);
             LogManager.log(`LLM response: ${JSON.stringify(result)}`, thinkerState, false);
             return result;
         } catch (error) {

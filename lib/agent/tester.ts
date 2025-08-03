@@ -129,7 +129,7 @@ export default class Tester extends Agent {
 
                     LogManager.addMission(nextActionContext.goal);
 
-                    const command = await this.thinker.think(nextActionContext, imageData, this.response, this.visitedPage);
+                    const command = await this.thinker.think(nextActionContext, imageData, this.name, this.response, this.visitedPage);
                     if (!command?.action) {
                         LogManager.error("Thinker produced no action", this.state, false);
                         this.setState(State.ERROR);

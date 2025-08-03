@@ -102,10 +102,11 @@ export enum State {
     WAIT = "WAIT",
     INFO = "INFO",
     VALIDATE = "VALIDATE",
+    PLAN = "PLAN",
 }
 
 type StateValue = `${State}`;
-export type Namespaces = "Crawler" | "Tester" | "GoalAgent"; // add more if needed
+export type Namespaces = "Crawler" | "Tester" | "GoalAgent" | "Planner"; // add more if needed
 
 export type NamespacedState = `${Namespaces}.${StateValue}`;
 

@@ -8,7 +8,7 @@ export abstract class Thinker {
         this.modelClient = modelClient;
     }
 
-    abstract think(nextActionContext: GetNextActionContext, imageData: ImageData, extraInfo: string, recurrent?: boolean): Promise<ThinkResult>;
+    abstract think(nextActionContext: GetNextActionContext, imageData: ImageData, agentName: Namespaces, extraInfo: string, recurrent?: boolean): Promise<ThinkResult>;
 }
 
 export abstract class LLM {
@@ -16,7 +16,7 @@ export abstract class LLM {
 
     abstract generateTextResponse(prompt: string): Promise<Action>;
 
-    abstract generateMultimodalAction(prompt: string, imagePath: string, recurrent: boolean): Promise<AnalysisResponse>
+    abstract generateMultimodalAction(prompt: string, imagePath: string, recurrent: boolean, agentName: Namespaces): Promise<AnalysisResponse>
 }
 
 export abstract class Agent {

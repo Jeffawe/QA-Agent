@@ -10,18 +10,38 @@ import ActionService from "../services/actions/actionService.js";
 
 export class GoalAgent extends Agent {
     private goal: string;
+    private previousPage: string = "";
+    private currentPage: string = "";
     private previousActions: string[] = [];
     private lastAction: string = "";
+    public hasAchievedGoal: boolean = false;
+    public progressDescription: string = "";
 
     constructor(
         private session: Session,
         private thinker: Thinker,
         private actionService: ActionService,
-        public bus: EventBus,
-        goal: string
+        public bus: EventBus
     ) {
         super("GoalAgent", bus);
+        this.goal = "";
+        this.state = State.WAIT;
+    }
+
+    public run(goal: string, extraWarnings?: string): void {
         this.goal = goal;
+        this.setState(State.START);
+        if (extraWarnings) {
+            this.response = extraWarnings;
+        }
+    }
+
+    public reset(): void {    
+        if (this.currentPage !== this.previousPage) {
+            this.previousPage = this.currentPage;
+            // Have session reset the page state
+            //this.session.resetPageState();
+        }
     }
 
     async tick(): Promise<void> {
@@ -82,7 +102,7 @@ export class GoalAgent extends Agent {
                         imagepath: (this as any).screenshot
                     };
 
-                    const command = await this.thinker.think(context, imageData, this.response);
+                    const command = await this.thinker.think(context, imageData, this.name, this.response);
 
                     if (!command || !command.action) {
                         LogManager.error("Thinker returned no action", this.state);

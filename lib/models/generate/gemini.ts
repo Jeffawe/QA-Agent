@@ -1,10 +1,10 @@
 import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genai";
 import dotenv from 'dotenv';
 import { LLM } from "../../utility/abstract.js";
-import { Action, AnalysisResponse, State } from "../../types.js";
+import { Action, AnalysisResponse, Namespaces, State } from "../../types.js";
 import fs from 'fs';
 import path from 'path';
-import { systemPrompt, systemActionPrompt, STOP_LEVEL_ERRORS } from "./prompts.js";
+import { getSystemPrompt, getActionPrompt, STOP_LEVEL_ERRORS } from "./prompts.js";
 import { eventBus } from "../../services/events/eventBus.js";
 import { LogManager } from "../../utility/logManager.js";
 import { generateContent } from "../../externalCall.js";
@@ -94,7 +94,7 @@ export class GeminiLLm extends LLM {
        * @returns AnalysisResponse containing analysis and action
        * @throws Error if the image is not found or if the LLM response is invalid
        */
-    async generateMultimodalAction(prompt: string, imagePath: string, recurrent: boolean = false): Promise<AnalysisResponse> {
+    async generateMultimodalAction(prompt: string, imagePath: string, recurrent: boolean = false, agentName: Namespaces): Promise<AnalysisResponse> {
         try {
             if (!fs.existsSync(imagePath)) throw new Error(`Image not found at ${imagePath}`);
 
@@ -111,7 +111,7 @@ export class GeminiLLm extends LLM {
                     try {
                         response = await generateContent({
                             prompt,
-                            systemInstruction: recurrent ? systemActionPrompt : systemPrompt,
+                            systemInstruction: recurrent ? getActionPrompt(agentName) : getSystemPrompt(agentName),
                             imagePath
                         });
                     } catch (error) {
@@ -137,7 +137,7 @@ export class GeminiLLm extends LLM {
                             ]),
                         ],
                         config: {
-                            systemInstruction: recurrent ? systemActionPrompt : systemPrompt
+                            systemInstruction: recurrent ? getActionPrompt(agentName) : getSystemPrompt(agentName),
                         }
                     });
                 }

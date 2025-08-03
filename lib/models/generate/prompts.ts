@@ -1,4 +1,6 @@
-export const systemPrompt = String.raw`
+import { Namespaces } from "../../types";
+
+const systemPrompt = String.raw`
             You are a website-auditing autonomous agent.
 
             ▸ MISSION
@@ -59,7 +61,7 @@ export const systemPrompt = String.raw`
             `;
 
 
-export const systemActionPrompt = String.raw`
+const systemActionPrompt = String.raw`
             You are a website-auditing autonomous agent.
 
             ▸ MISSION
@@ -97,6 +99,22 @@ export const systemActionPrompt = String.raw`
             }
             \`\`\`
             `;
+
+export const getSystemPrompt = (agentName: Namespaces): string => {
+    if (agentName === "Tester") {
+        return systemPrompt;
+    } else {
+        return systemPrompt;
+    }
+}
+
+export const getActionPrompt = (agentName: Namespaces): string => {
+    if (agentName === "Tester") {
+        return systemPrompt;
+    } else {
+        return systemActionPrompt;
+    }
+}
 
 export const STOP_LEVEL_ERRORS = [
     'Invalid Gemini API key',

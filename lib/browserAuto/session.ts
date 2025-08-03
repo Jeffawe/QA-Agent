@@ -64,6 +64,41 @@ export default class Session {
     }
   }
 
+  async getCurrentPageInfo() {
+    return {
+      title: await this.page?.title(),
+      url: this.page?.url(),
+      contentSummary: await this.getPageContentSummary()
+    };
+  }
+
+
+  async getPageContentSummary(): Promise<string> {
+    try {
+      // Get visible text content
+      const textContent = await this.page?.evaluate(() => {
+        // Remove script and style elements
+        const scripts = document.querySelectorAll('script, style');
+        scripts.forEach(el => el.remove());
+
+        // Get text content and clean it up
+        const content = document.body.innerText || document.body.textContent || '';
+        return content
+          .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+          .trim();
+      });
+
+      // Truncate to reasonable length (first 500 characters)
+      if (typeof textContent === 'string') {
+        return textContent.substring(0, 500) + (textContent.length > 500 ? '...' : '');
+      } else {
+        return '';
+      }
+    } catch (error) {
+      return "Unable to extract page content";
+    }
+  }
+
   async pressKey(key: string): Promise<void> {
     try {
       if (!this.page) throw new Error('Page not initialized');

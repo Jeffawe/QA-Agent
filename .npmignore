@@ -8,3 +8,4 @@ logs/
 .github/
 .env
 .gitignore
+checkSimilarity.js
