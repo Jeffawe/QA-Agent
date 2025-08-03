@@ -3,7 +3,7 @@ import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
 
-const API_ENDPOINT = 'https://api.example.com';
+const API_ENDPOINT = 'https://qa-node-backend.onrender.com';
 
 export const setAPIKey = (key: string): boolean => {
     if (!key) {
@@ -50,7 +50,7 @@ export const generateContent = async (options: GeminiCallOptions) => {
         }
 
         const response = await axios.post(
-            `${API_ENDPOINT}/user/${process.env.API_KEY}/gemini-call`,
+            `${API_ENDPOINT}/api/user/${process.env.API_KEY}/gemini-call`,
             formData,
             {
                 headers: {
