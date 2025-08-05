@@ -1,36 +1,43 @@
-import { Agent } from "../utility/abstract.js";
+import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { LogManager } from "../utility/logManager.js";
-import Session from "../browserAuto/session.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { InteractiveElement, LinkInfo, State } from "../types.js";
-import { EventBus } from "../services/events/event.js";
 import Tester from "./tester.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
 import ManualTester from "./manualTester.js";
+import PuppeteerSession from "../browserAuto/session.js";
 
 export class Crawler extends Agent {
-    currentUrl: string | null = null;
-    public baseUrl: string | null = null;
-    isCurrentPageVisited = false;
+    private isCurrentPageVisited = false;
+    private tester: Tester;
+    private manualTester: ManualTester;
 
-    constructor(
-        private session: Session,
-        private tester: Tester,
-        private manualTester: ManualTester,
-        eventBus: EventBus
-    ) {
-        super("Crawler", eventBus);
+    private puppeteerSession: PuppeteerSession;
+
+    constructor(dependencies: BaseAgentDependencies){
+        super("crawler", dependencies);
+        this.state = dependencies.dependent ? State.WAIT : State.START;
+
+        this.tester = this.requireAgent<Tester>("tester");
+        this.manualTester = this.requireAgent<ManualTester>("manualtester");
+
+        this.puppeteerSession = this.session as PuppeteerSession;
     }
 
-    setBaseUrl(url: string) {
-        this.baseUrl = url;
-        this.currentUrl = url;
+    protected validateSessionType(): void {
+        if (!(this.session instanceof PuppeteerSession)) {
+            LogManager.error(`Crawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+            this.setState(State.ERROR);
+            throw new Error(`PuppeteerCrawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+        }
+        
+        this.puppeteerSession = this.session as PuppeteerSession;
     }
 
     async tick(): Promise<void> {
-        const page = this.session.page;
+        const page = this.puppeteerSession.page;
         if (!page) {
             LogManager.error("Page not initialized", this.buildState());
             this.setState(State.ERROR);
@@ -56,7 +63,7 @@ export class Crawler extends Agent {
                     (this as any).startTime = performance.now();
                     this.currentUrl = page.url();
                     if (!PageMemory.pageExists(this.currentUrl)) {
-                        const elements = await getInteractiveElements(this.session.page!);
+                        const elements = await getInteractiveElements(this.puppeteerSession.page!);
                         const links = this.convertInteractiveElementsToLinks(elements, this.baseUrl!, this.currentUrl);
                         LogManager.log(`Links detected: ${links.length} are: ${JSON.stringify(links)}`, this.buildState(), false);
                         const pageDetails = {

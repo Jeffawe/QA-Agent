@@ -1,6 +1,5 @@
 import ActionService from './services/actions/actionService.js';
-import Session from './browserAuto/session.js';
-import { Thinker } from "./utility/abstract.js";
+import { AgentRegistry, BaseAgentDependencies, Session, Thinker } from "./utility/abstract.js";
 import { LogManager } from "./utility/logManager.js";
 import { EventBus } from "./services/events/event.js";
 import { State } from "./types.js";
@@ -9,93 +8,197 @@ import { CombinedThinker } from "./services/thinkers/combinedThinker.js";
 import NavigationTree from "./utility/navigationTree.js";
 
 import { Agent } from "./utility/abstract.js";
-import { Crawler } from "./agent/crawler.js";
-import Tester from "./agent/tester.js";
 import { CrawlMap } from './utility/crawlMap.js';
-import ManualTester from './agent/manualTester.js';
+import PuppeteerSession from './browserAuto/session.js';
+import StagehandSession from './browserAuto/stagehandSession.js';
+
+export interface AgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
+  name: string;
+  agentClass: new (dependencies: T) => Agent;
+  sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'custom';
+  dependent?: boolean; // If true, agent won't start until another agent triggers it
+  dependencies?: Partial<T>; // Additional/override dependencies
+  agentDependencies?: string[]; // Names of other agents this agent depends on
+}
 
 export interface AgentDependencies {
-  session: Session;
+  sessionId: string;
   thinker?: Thinker;
   actionService?: ActionService;
   eventBus: EventBus;
   canvasSelector?: string;
+  agentConfigs: Set<AgentConfig>;
+}
+
+// Session factory to create different types of sessions
+class SessionFactory {
+  static createSession(type: string, sessionId: string): Session {
+    switch (type) {
+      case 'puppeteer':
+        return new PuppeteerSession(sessionId);
+      case 'playwright':
+        return new StagehandSession(sessionId);
+      default:
+        throw new Error(`Unknown session type: ${type}`);
+    }
+  }
 }
 
 export default class BossAgent {
   private readonly thinker: Thinker;
-  private readonly actionService: ActionService;
   private readonly bus: EventBus;
+  private readonly agentRegistry: AgentRegistry;
 
-  private readonly crawler: Crawler;
-  private readonly tester: Tester;
-  private readonly manualTester: ManualTester;
-
-  public session: Session;
-  public agents: Agent[] = [];
-
-  // State Data
+  public sessions: Map<string, Session> = new Map();
+  public actionServices: Map<string, ActionService> = new Map();
+  public sessionId: string = "1";
   public state: State = State.START;
 
   constructor({
-    session,
+    sessionId,
     thinker,
-    actionService,
-    eventBus
-  }: AgentDependencies) {
-    this.session = session;
+    eventBus,
+    agentConfigs
+  }: {
+    sessionId: string;
+    thinker?: Thinker;
+    eventBus: EventBus;
+    agentConfigs: Set<AgentConfig>;
+  }) {
+    this.sessionId = sessionId ?? "1";
     this.thinker = thinker ?? new CombinedThinker();
-    this.actionService = actionService ?? new ActionService(this.session);
     this.bus = eventBus;
+    this.agentRegistry = new AgentRegistry();
 
-    // Agents
-    this.tester = new Tester({ session: this.session, thinker: this.thinker, actionService: this.actionService, eventBus: this.bus });
-    this.manualTester = new ManualTester({ session: this.session, actionService: this.actionService, eventBus: this.bus });
-    this.crawler = new Crawler(this.session, this.tester, this.manualTester, this.bus);
-
-    this.agents = [this.crawler, this.tester, this.manualTester];
+    this.initializeAgents(agentConfigs);
   }
 
-  /** Public API */
-  async start(url: string): Promise<void> {
+  private initializeAgents(agentConfigs: Set<AgentConfig>): void {
+    // First pass: Create all agents without dependencies
+    const agentInstances: Array<{ config: AgentConfig; agent: Agent }> = [];
+
+    for (const config of agentConfigs) {
+      try {
+        const session = SessionFactory.createSession(config.sessionType, `${this.sessionId}-${config.name}`);
+        this.sessions.set(config.name, session);
+
+        const actionService = new ActionService(session as PuppeteerSession);
+        this.actionServices.set(config.name, actionService);
+
+        const baseDependencies: BaseAgentDependencies = {
+          session,
+          thinker: this.thinker,
+          actionService,
+          eventBus: this.bus,
+          agentRegistry: this.agentRegistry,
+          dependent: config.dependent ?? false,
+        };
+
+        const agent = new config.agentClass(baseDependencies);
+        agentInstances.push({ config, agent });
+
+        // Register the agent immediately so other agents can reference it
+        this.agentRegistry.register(config.name, agent);
+
+        LogManager.log(`Initialized agent: ${config.name}`, State.INFO);
+      } catch (error) {
+        LogManager.error(`Failed to initialize agent ${config.name}: ${error}`, State.ERROR);
+      }
+    }
+
+    // Second pass: Validate agent dependencies
+    try {
+      this.validateAgentDependencies(agentConfigs);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  private validateAgentDependencies(agentConfigs: Set<AgentConfig>): void {
+    for (const config of agentConfigs) {
+      if (config.agentDependencies) {
+        for (const depName of config.agentDependencies) {
+          if (!this.agentRegistry.hasAgent(depName)) {
+            LogManager.error(`Agent '${config.name}' depends on '${depName}' but it was not found`, State.ERROR);
+            throw new Error(`Agent '${config.name}' depends on '${depName}' but it was not found`);
+          }
+        }
+      }
+    }
+  }
+
+  public async start(url: string): Promise<void> {
     LogManager.initialize();
     NavigationTree.initialize();
     CrawlMap.init("logs/crawl_map.md");
 
-    const started = await this.session.start(url);
-    if (!started) return;
+    // Start all sessions
+    for (const [name, session] of this.sessions.entries()) {
+      const started = await session.start(url);
+      if (!started) {
+        LogManager.error(`Failed to start session for agent: ${name}`, State.ERROR);
+        return;
+      }
+    }
 
     this.bus.on('stop', async (evt) => {
       await this.stop();
       LogManager.log(`Agent stopped because of ${evt.message}`, State.ERROR, true);
     });
 
-    this.crawler.setBaseUrl(url);
-    this.actionService.setBaseUrl(url);
+    // Set base URL for all action services
+    for (const actionService of this.actionServices.values()) {
+      actionService.setBaseUrl(url);
+    }
 
-    while (this.agents.some(a => !a.isDone())) {
-      for (const a of this.agents) {
-        if (!a.isDone()) await a.tick();
+    const agents = this.agentRegistry.getAllAgents();
+
+    if (agents.length === 0) {
+      LogManager.error("No agents registered to run", State.ERROR, true);
+      return;
+    }
+
+    // Set base values for all agents
+    for (const agent of agents) {
+      agent.setBaseValues(url, process.env.USER_GOAL || " ");
+    }
+
+    while (agents.some(a => !a.isDone())) {
+      for (const agent of agents) {
+        if (!agent.isDone()) {
+          await agent.tick();
+        }
       }
     }
 
     LogManager.log("Done", State.DONE, true);
-    this.stop();
+    await this.stop();
   }
 
-  async stop(): Promise<boolean> {
+  public async stop(): Promise<boolean> {
     try {
       this.state = State.DONE;
-      for (const a of this.agents) {
-        await a.cleanup();
-        a.state = State.DONE;
+
+      const agents = this.agentRegistry.getAllAgents();
+      for (const agent of agents) {
+        await agent.cleanup();
+        agent.state = State.DONE;
       }
-      this.session.close();
+
+      for (const session of this.sessions.values()) {
+        await session.close();
+      }
+
       LogManager.log("All Services have been stopped", State.DONE, true);
       return true;
     } catch (err) {
       LogManager.error(`Error stopping agent: ${err}`, State.ERROR, true);
       return false;
     }
+  }
+
+  // Public API to get agents (useful for external orchestration)
+  public getAgent<T extends Agent>(name: string): T | null {
+    return this.agentRegistry.getAgent<T>(name);
   }
 }

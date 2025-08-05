@@ -1,8 +1,7 @@
 import express, { Request, Response } from 'express';
-import Session, { runTestSession } from './browserAuto/session.js';
 import dotenv from 'dotenv';
 
-import BossAgent from './agent.js';
+import BossAgent, { AgentConfig } from './agent.js';
 import { eventBus } from './services/events/eventBus.js';
 
 import { ActionSpamValidator } from './services/validators/actionValidator.js';
@@ -12,6 +11,8 @@ import { WebSocketEventBridge } from './services/events/webSockets.js';
 import { LogManager } from './utility/logManager.js';
 import { State } from './types.js';
 import { setAPIKey } from './externalCall.js';
+import { exampleAgentConfigs } from './agentConfig.js';
+import PuppeteerSession from './browserAuto/session.js';
 
 dotenv.config();
 
@@ -31,7 +32,7 @@ new LLMUsageValidator(eventBus);
 new WebSocketEventBridge(eventBus, WebSocket_PORT);
 
 app.get('/', (req: Request, res: Response) => {
-    res.send('Welcome to QA-Agent! Go to https://qa-agent-react.vercel.app to start testing.');
+    res.send('Welcome to QA-Agent! Go to https://www.qa-agent.site/ for more info.');
 });
 
 app.get('/start', (req: Request, res: Response) => {
@@ -51,10 +52,10 @@ app.get('/start/:sessionId', async (req: Request, res: Response) => {
         res.status(400).send('Session already started.');
         return;
     }
-    const session = new Session(sessionId);
     const agent = new BossAgent({
-        session: session,
+        sessionId: sessionId,
         eventBus: eventBus,
+        agentConfigs: new Set<AgentConfig>(exampleAgentConfigs),
     });
     sessions.set(sessionId, agent);
 
@@ -67,7 +68,7 @@ app.get('/start/:sessionId', async (req: Request, res: Response) => {
         }
     }
 
-    if(!process.env.API_KEY) {
+    if (!process.env.API_KEY) {
         LogManager.error('API key is not set. Please set the API_KEY environment variable.', State.ERROR, true);
         res.status(500).send('API key is not set. Please set the API_KEY environment variable.');
         return;
@@ -85,14 +86,7 @@ app.get('/start/:sessionId', async (req: Request, res: Response) => {
 app.get('/session-test', async (req: Request, res: Response) => {
     try {
         //await runTestSession(url);
-        let session: Session;
-        if (sessions.size > 0) {
-            const firstAgent = sessions.values().next().value;
-            session = firstAgent!.session;
-        } else {
-            session = new Session('1');
-            sessions.set('1', new BossAgent({ session: session, eventBus: eventBus }));
-        }
+        let session = new PuppeteerSession("test_session");
 
         const hasStarted = await session.start(url);
 
@@ -159,10 +153,10 @@ app.get('/test/:key', async (req: Request, res: Response) => {
         res.status(400).send('Test Session already started.');
         return;
     }
-    const session = new Session(sessionId);
     const agent = new BossAgent({
-        session: session,
+        sessionId: sessionId,
         eventBus: eventBus,
+        agentConfigs: new Set<AgentConfig>(exampleAgentConfigs),
     });
     sessions.set(sessionId, agent);
 

@@ -1,12 +1,10 @@
-import { Agent, Thinker } from "../utility/abstract.js";
-import Session from "../browserAuto/session.js";
-import { EventBus } from "../services/events/event.js";
+import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { Action, ImageData, State } from "../types.js";
 import { LogManager } from "../utility/logManager.js";
 import { processScreenshot } from "../services/imageProcessor.js";
 import { setTimeout } from "node:timers/promises";
-import ActionService from "../services/actions/actionService.js";
+import StagehandSession from "../browserAuto/stagehandSession.js";
 
 export class GoalAgent extends Agent {
     private goal: string;
@@ -17,15 +15,30 @@ export class GoalAgent extends Agent {
     public hasAchievedGoal: boolean = false;
     public progressDescription: string = "";
 
-    constructor(
-        private session: Session,
-        private thinker: Thinker,
-        private actionService: ActionService,
-        public bus: EventBus
-    ) {
-        super("GoalAgent", bus);
+    private stageHandSession: StagehandSession;
+
+    constructor(dependencies: BaseAgentDependencies) {
+        super("goalagent", dependencies);
         this.goal = "";
-        this.state = State.WAIT;
+        this.state = dependencies.dependent ? State.WAIT : State.START;
+
+        this.stageHandSession = this.session as StagehandSession;
+    }
+
+    public setBaseValues(url: string, mainGoal?: string): void {
+        this.baseUrl = url;
+        this.currentUrl = url;
+        this.goal = mainGoal || "";
+    }
+
+    protected validateSessionType(): void {
+        if (!(this.session instanceof StagehandSession)) {
+            LogManager.error(`Crawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+            this.setState(State.ERROR);
+            throw new Error(`PuppeteerCrawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+        }
+
+        this.stageHandSession = this.session as StagehandSession;
     }
 
     public run(goal: string, extraWarnings?: string): void {
@@ -36,7 +49,7 @@ export class GoalAgent extends Agent {
         }
     }
 
-    public reset(): void {    
+    public reset(): void {
         if (this.currentPage !== this.previousPage) {
             this.previousPage = this.currentPage;
             // Have session reset the page state
@@ -45,13 +58,18 @@ export class GoalAgent extends Agent {
     }
 
     async tick(): Promise<void> {
-        const page = this.session.page;
+        const page = this.stageHandSession.page;
         if (!page || this.isDone()) return;
 
         try {
             switch (this.state) {
                 case State.START: {
                     (this as any).startTime = performance.now();
+                    if (!this.goal) {
+                        LogManager.error("GoalAgent started without a goal", this.buildState());
+                        this.setState(State.ERROR);
+                        break;
+                    }
 
                     LogManager.log(`GoalAgent started with goal: "${this.goal}"`, this.buildState(), true);
                     this.setState(State.OBSERVE);
@@ -59,19 +77,15 @@ export class GoalAgent extends Agent {
                 }
 
                 case State.OBSERVE: {
-                    await this.session.clearAllClickPoints();
-                    const elements = await getInteractiveElements(page);
                     const filename = `goalagent_${Date.now()}.png`;
                     const finalPath = `images/annotated_${filename}`;
 
-                    const success = await this.session.takeScreenshot("images", filename);
+                    const success = await this.stageHandSession.takeScreenshot("images", filename);
                     if (!success) {
                         LogManager.error("Screenshot failed", this.state);
                         this.setState(State.ERROR);
                         break;
                     }
-
-                    await processScreenshot(`./images/${filename}`, elements);
 
                     this.bus.emit({
                         ts: Date.now(),
@@ -79,9 +93,6 @@ export class GoalAgent extends Agent {
                         filename: finalPath,
                         elapsedMs: 0
                     });
-
-                    (this as any).clickableElements = elements;
-                    (this as any).screenshot = finalPath;
 
                     this.setState(State.DECIDE);
                     break;

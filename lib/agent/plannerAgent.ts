@@ -1,14 +1,9 @@
-import Session from "../browserAuto/session";
-import { EventBus } from "../services/events/event";
 import { State } from "../types";
-import { Agent } from "../utility/abstract";
+import { Agent, BaseAgentDependencies } from "../utility/abstract";
 import { LogManager } from "../utility/logManager";
 import { GoalAgent } from "./goalIntelliAgent";
 import { pipeline } from '@xenova/transformers';
-
-interface ExtractorResult {
-    data: number[];
-}
+import StagehandSession from "../browserAuto/stagehandSession";
 
 interface ExtractorOptions {
     pooling: 'mean' | 'cls' | 'max';
@@ -35,6 +30,9 @@ export default class PlannerAgent extends Agent {
     private lastProgress: number = 0;
     private currentProgress: number = 0;
     private validationHistory: ValidationMetrics[] = [];
+    private goalAgent: GoalAgent;
+
+    private stageHandSession: StagehandSession;
 
     // Thresholds for different validation measures
     private readonly PROGRESS_THRESHOLD = 0.85;
@@ -42,14 +40,26 @@ export default class PlannerAgent extends Agent {
     private readonly INTENT_THRESHOLD = 0.75;
     private readonly OVERALL_THRESHOLD = 0.80;
 
-    constructor(
-        eventBus: EventBus,
-        private session: Session,
-        private goalAgent: GoalAgent,
-        mainGoal: string
-    ) {
-        super("Planner", eventBus);
-        this.mainGoal = mainGoal;
+    constructor(dependencies: BaseAgentDependencies) {
+        super("planneragent", dependencies);
+        this.mainGoal = "";
+        this.state = dependencies.dependent ? State.WAIT : State.START;
+
+        this.goalAgent = this.requireAgent<GoalAgent>("goalagent");
+
+        this.load();
+
+        this.stageHandSession = this.session as StagehandSession;
+    }
+
+    protected validateSessionType(): void {
+        if (!(this.session instanceof StagehandSession)) {
+            LogManager.error(`Crawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+            this.setState(State.ERROR);
+            throw new Error(`PuppeteerCrawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+        }
+
+        this.stageHandSession = this.session as StagehandSession;
     }
 
     async load(): Promise<void> {
@@ -173,6 +183,7 @@ export default class PlannerAgent extends Agent {
             this.extractor(goal, options),
             this.extractor(pageState, options)
         ]);
+
         const semanticSimilarity = this.cosineSimilarity(goalVec2.data, pageStateVec.data);
 
         // 3. Intent Classification - Is the intent of completion achieved?
@@ -218,7 +229,7 @@ export default class PlannerAgent extends Agent {
     private async getCurrentPageState(): Promise<string> {
         try {
             // Get current page information from session
-            const pageInfo = await this.session.getCurrentPageInfo();
+            const pageInfo = await this.stageHandSession.getCurrentPageInfo();
             return `Page title: ${pageInfo.title}. Current URL: ${pageInfo.url}. Page content summary: ${pageInfo.contentSummary}`;
         } catch (error) {
             LogManager.error(`Error getting page state: ${error}`, this.buildState());

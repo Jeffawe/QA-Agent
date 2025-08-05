@@ -3,17 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import { ClicKType, Rect, State } from '../types.js';
 import { LogManager } from '../utility/logManager.js';
+import { Session } from '../utility/abstract.js';
 
-export default class Session {
-  private sessionId: string;
+export default class PuppeteerSession extends Session<Page> {
   private browser: Browser | null = null;
-  public page: Page | null = null;
   public rect: Rect | null = null;
   public frame: Frame | null = null;
-
-  constructor(sessionId: string) {
-    this.sessionId = sessionId;
-  }
 
   async start(url: string): Promise<boolean> {
     try {
@@ -388,7 +383,7 @@ export default class Session {
 }
 
 export async function runTestSession(url: string): Promise<void> {
-  const session = new Session("3");
+  const session = new PuppeteerSession("3");
 
   console.log('Calling session.start...');
   const newSessionStarted = await session.start(url);

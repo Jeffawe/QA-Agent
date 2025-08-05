@@ -1,6 +1,5 @@
 import { setTimeout } from "node:timers/promises";
-import Session from "../browserAuto/session.js";
-import { Agent, Thinker } from "../utility/abstract.js";
+import { Agent, BaseAgentDependencies, Thinker } from "../utility/abstract.js";
 import ActionService from "../services/actions/actionService.js";
 import { EventBus } from "../services/events/event.js";
 import { LinkInfo, NamespacedState, State, ImageData, Action, ActionResult } from "../types.js";
@@ -10,10 +9,11 @@ import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { fileExists } from "../utility/functions.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { CrawlMap } from "../utility/crawlMap.js";
+import PuppeteerSession from "../browserAuto/session.js";
 
 
 export interface TesterDependencies {
-    session: Session;
+    session: PuppeteerSession;
     thinker: Thinker;
     actionService: ActionService;
     eventBus: EventBus;
@@ -22,10 +22,6 @@ export interface TesterDependencies {
 }
 
 export default class Tester extends Agent {
-    private readonly session: Session;
-    private readonly thinker: Thinker;
-    private readonly actionService: ActionService;
-
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
 
     private step = 0;
@@ -33,19 +29,14 @@ export default class Tester extends Agent {
     private goal: string = "";
     private visitedPage: boolean = false;
     private lastAction: string = "";
-    private currentUrl: string = "";
 
-    constructor({
-        session,
-        thinker,
-        actionService,
-        eventBus
-    }: TesterDependencies) {
-        super("Tester", eventBus);
-        this.session = session;
-        this.thinker = thinker
-        this.actionService = actionService
-        this.state = State.WAIT;
+    private puppeteerSession: PuppeteerSession;
+
+    constructor(dependencies: BaseAgentDependencies) {
+        super("tester", dependencies);
+        this.state = dependencies.dependent ? State.WAIT : State.START;
+
+        this.puppeteerSession = this.session as PuppeteerSession;
     }
 
     /* ───────── external API ───────── */
@@ -61,9 +52,19 @@ export default class Tester extends Agent {
         }
     }
 
+    protected validateSessionType(): void {
+        if (!(this.session instanceof PuppeteerSession)) {
+            LogManager.error(`Crawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+            this.setState(State.ERROR);
+            throw new Error(`PuppeteerCrawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+        }
+
+        this.puppeteerSession = this.session as PuppeteerSession;
+    }
+
     /** One FSM transition */
     public async tick(): Promise<void> {
-        if (!this.session.page) return
+        if (!this.puppeteerSession.page) return
         if (!this.bus) return
 
         try {
@@ -85,14 +86,14 @@ export default class Tester extends Agent {
                     break;
 
                 case State.OBSERVE: {
-                    await this.session.clearAllClickPoints();
-                    this.currentUrl = this.session.page.url();
+                    await this.puppeteerSession.clearAllClickPoints();
+                    this.currentUrl = this.puppeteerSession.page?.url();
                     const filename = `screenshot_${this.step}.png`;
                     (this as any).finalFilename = `images/annotated_${filename}`;
 
-                    const elements = await getInteractiveElements(this.session.page!)
+                    const elements = await getInteractiveElements(this.puppeteerSession.page!)
                     if (!this.visitedPage || !(await fileExists((this as any).finalFilename))) {
-                        const success = await this.session.takeScreenshot("images", filename);
+                        const success = await this.puppeteerSession.takeScreenshot("images", filename);
                         if (!success) {
                             LogManager.error("Screenshot failed", this.state);
                             this.setState(State.DONE);
@@ -186,7 +187,7 @@ export default class Tester extends Agent {
                     }
 
                     if (this.currentUrl && result.message == "external") {
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.session.page.url(), page: this.session.page});
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.puppeteerSession.page.url(), page: this.puppeteerSession.page });
                     }
 
                     this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });

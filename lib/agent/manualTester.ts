@@ -1,43 +1,36 @@
-import Session from "../browserAuto/session.js";
-import ActionService from "../services/actions/actionService.js";
-import { EventBus } from "../services/events/event.js";
-import { LinkInfo, NamespacedState, State } from "../types.js";
-import { Agent } from "../utility/abstract.js";
+import PuppeteerSession from "../browserAuto/session.js";
+import { LinkInfo, State } from "../types.js";
+import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { LogManager } from "../utility/logManager.js";
 
-export interface ManualTesterDependencies {
-    session: Session;
-    actionService: ActionService;
-    eventBus: EventBus;
-    canvasSelector?: string;
-    state?: NamespacedState;
-}
-
 export default class ManualTester extends Agent {
-    private readonly session: Session;
-    private readonly actionService: ActionService;
-
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
+    private puppeteerSession: PuppeteerSession;
 
     private queue: LinkInfo[] = [];
     private goal: string = "";
-    private baseUrl: string = "";
-    private currentUrl: string = "";
 
-    constructor({
-        session,
-        actionService,
-        eventBus
-    }: ManualTesterDependencies) {
-        super("Tester", eventBus);
-        this.session = session;
-        this.actionService = actionService
-        this.state = State.WAIT;
+    constructor(dependencies: BaseAgentDependencies) {
+        super("manualtester", dependencies);
+        this.goal = "";
+        this.state = dependencies.dependent ? State.WAIT : State.START;
+
+        this.puppeteerSession = this.session as PuppeteerSession;
     }
 
-    public setBaseUrl(url: string) {
+    public setBaseValues(url: string, mainGoal?: string): void {
         this.baseUrl = url;
         this.actionService.setBaseUrl(url);
+    }
+
+    protected validateSessionType(): void {
+        if (!(this.session instanceof PuppeteerSession)) {
+            LogManager.error(`Crawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+            this.setState(State.ERROR);
+            throw new Error(`PuppeteerCrawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+        }
+
+        this.puppeteerSession = this.session as PuppeteerSession;
     }
 
     /* ───────── external API ───────── */
@@ -56,7 +49,7 @@ export default class ManualTester extends Agent {
 
     /** One FSM transition */
     public async tick(): Promise<void> {
-        if (!this.session.page) return
+        if (!this.puppeteerSession.page) return
         if (!this.bus) return
 
         try {
@@ -64,7 +57,7 @@ export default class ManualTester extends Agent {
                 /*────────── READY → RUN ──────────*/
                 case State.START:
                     (this as any).startTime = performance.now();
-                    this.currentUrl = this.session.page!.url();
+                    this.currentUrl = this.puppeteerSession.page!.url();
                     this.goal = "Find the next best link to click";
                     LogManager.log(`Start testing ${this.queue.length} links`, this.buildState(), true);
                     if (this.queue.length === 0) {
@@ -105,7 +98,7 @@ export default class ManualTester extends Agent {
 
                 case State.VALIDATE: {
                     const oldUrl = new URL(this.currentUrl);
-                    const newUrl = new URL(this.session.page.url());
+                    const newUrl = new URL(this.puppeteerSession.page.url());
 
                     const isSameOrigin =
                         oldUrl.protocol === newUrl.protocol &&
@@ -114,7 +107,7 @@ export default class ManualTester extends Agent {
                     if (!isSameOrigin) {
                         // Optional: ensure page is defined before going back
                         try {
-                            await this.session.page?.goBack({ waitUntil: "networkidle0" });
+                            await this.puppeteerSession.page?.goBack({ waitUntil: "networkidle0" });
                             this.nextLink = null;
                             this.setState(State.START);
                         } catch (err) {
@@ -128,7 +121,7 @@ export default class ManualTester extends Agent {
                         }
                     } else {
                         this.setState(State.DONE);
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.session.page.url(), page: this.session.page });
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.puppeteerSession.page.url(), page: this.puppeteerSession.page });
                     }
                     break;
                 }
