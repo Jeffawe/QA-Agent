@@ -38,6 +38,7 @@ export interface AnalysisResponse {
 
 export interface StagehandResponse {
     action: string;
+    arguments: any[];
     progressDescription: string;
     nextGoal: string;
     hasAchievedGoal: boolean;

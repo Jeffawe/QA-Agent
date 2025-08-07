@@ -26,8 +26,6 @@ export class CrawlMap {
 
   private static initialised = false;
 
-  /* ───── public API ───── */
-
   /** Call once at program start (optional custom path) */
   static init(filePath = "crawl_map.md") {
     const full = isAbsolute(filePath)

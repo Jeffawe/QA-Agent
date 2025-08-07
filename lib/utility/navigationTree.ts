@@ -56,12 +56,18 @@ class NavigationTree {
             fs.mkdirSync(dir, { recursive: true });
         }
 
+        // 🔥 Clear file if it exists
+        if (fs.existsSync(fullPath)) {
+            fs.writeFileSync(fullPath, ""); // Truncate to empty
+        }
+
         this.outputFile = fullPath;
         this.tree = [];
         this.currentPath = [];
         this.pageVisitCounts.clear();
         this.updateMarkdownFile();
     }
+
 
     /**
      * Add a new page to the navigation tree

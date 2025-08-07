@@ -142,7 +142,8 @@ const systemGoalPrompt = String.raw`
         "notes": "This page appears to be a login form using React. No errors in console."
     },
     "nextResponse": {
-        "action": "Click 'Sign in' button", // must match one of the given possibleLabels exactly
+        "action": "Click 'Sign in' button", // must match one of the given possibleLabels exactly (if you wish the system to wait for a period of time. Just put wait here and it'll wait)
+        "arguments": [5000], // args for the action, e.g. time to wait
         "progressDescription": "Filled login form and submitting credentials",
         "nextGoal": "Wait for dashboard to load after login",
         "hasAchievedGoal": false

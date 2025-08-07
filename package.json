@@ -17,11 +17,12 @@
   "keywords": [
     "qa",
     "agent",
+    "automation",
     "llm",
     "ai",
     "testing",
     "automation",
-    "puppeteer",
+    "playwright",
     "web-scraping",
     "google-genai"
   ],
@@ -30,7 +31,7 @@
   "homepage": "https://www.qa-agent.site/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Jeffawe/QA-Agent-React"
+    "url": "git+https://github.com/Jeffawe/QA-Agent"
   },
   "bugs": {
     "url": "https://github.com/Jeffawe/QA-Agent/issues"

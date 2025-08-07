@@ -23,7 +23,7 @@ export class CombinedThinker extends Thinker {
             action: analysis.action || { step: 'no_op', args: [], reason: 'No command returned' },
             pageDetails: analysis.pageDetails || { pageName: "", description: "" },
             analysis: analysis.analysis,
-            nextResponse: analysis.nextResponse || { action: "", progressDescription: "", nextGoal: "", hasAchievedGoal: false }
+            nextResponse: analysis.nextResponse || { action: "", progressDescription: "", arguments: [], nextGoal: "", hasAchievedGoal: false }
         } satisfies ThinkResult;
     }
 

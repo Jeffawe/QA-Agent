@@ -131,6 +131,7 @@ export class GoalAgent extends Agent {
                     }
 
                     (this as any).pendingAction = command.nextResponse.action;
+                    (this as any).pendingArgs = command.nextResponse.arguments || [];
                     this.goal = command.nextResponse.nextGoal ?? this.goal;
                     this.progressDescription = command.nextResponse.progressDescription || "";
 
@@ -147,6 +148,13 @@ export class GoalAgent extends Agent {
                         break;
                     }
 
+                    if (action === "wait") {
+                        LogManager.log("Waiting for a while before next action", this.state);
+                        this.setState(State.WAIT);
+                        await setTimeout((this as any).pendingArgs[0] || 5000);
+                        break;
+                    }
+
                     try {
                         this.stageHandSession.act(action);
                     } catch (err) {
@@ -155,9 +163,13 @@ export class GoalAgent extends Agent {
                         break;
                     }
 
+                    const endTime = performance.now();
+                    this.timeTaken = endTime - (this as any).startTime;
+
                     await setTimeout(1000); // brief delay before re-observing
 
                     this.setState(State.DONE);
+                    LogManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
                     break;
                 }
 

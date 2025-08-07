@@ -97,6 +97,43 @@ try {
 // Parse arguments
 const args = minimist(process.argv.slice(2));
 
+const subcommand = args._[0];
+
+const PROJECT_ROOT = process.cwd();
+const LOG_DIR = path.join(PROJECT_ROOT, 'logs');
+
+const logFiles = {
+  logs: 'agent.log',
+  mission: 'mission_log.md',
+  'crawl-map': 'crawl_map.md',
+  'navigation-tree': 'navigation_tree.md'
+};
+
+if (subcommand && logFiles[subcommand]) {
+  const filePath = path.join(LOG_DIR, logFiles[subcommand]);
+
+  if (!fs.existsSync(filePath)) {
+    console.error(`❌ File not found: ${logFiles[subcommand]}`);
+    process.exit(1);
+  }
+
+  const content = fs.readFileSync(filePath, 'utf8');
+
+  console.log(`📄 ${logFiles[subcommand]}:\n`);
+  if (args.json) {
+    console.log(JSON.stringify({ content }, null, 2));
+  } else {
+    console.log(content);
+  }
+
+  process.exit(0);
+}
+
+if (subcommand && !logFiles[subcommand] && subcommand !== 'run') {
+  console.error(`❌ Unknown subcommand: "${subcommand}"`);
+  process.exit(1);
+}
+
 let config = {};
 if (args.config || args.c) {
   const configPath = args.config || args.c;
@@ -125,6 +162,13 @@ if (args.help || args.h) {
       --test-mode      Enable test mode (default: false)
       --auto-start     Automatically start the agent (default: false)
       --help, -h       Show this help message
+
+    Logs:
+      agent-run logs            Show main agent log
+      agent-run logs --json     Show main agent log in JSON format
+      agent-run mission         Show mission log in markdown
+      agent-run crawl-map       Show crawl map in markdown
+      agent-run navigation-tree  Show navigation tree in markdown
 
     Config File Example:
       {

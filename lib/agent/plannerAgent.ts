@@ -89,6 +89,7 @@ export default class PlannerAgent extends Agent {
 
                 case State.ACT:
                     this.goalAgent.run(this.mainGoal, this.warning);
+                    this.setState(State.WAIT);
                     break;
 
                 case State.WAIT:

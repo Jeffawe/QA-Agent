@@ -1,11 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { NamespacedState, State } from '../types.js';
 import { eventBus } from '../services/events/eventBus.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 type MissionStatus = 'pending' | 'done';
 
