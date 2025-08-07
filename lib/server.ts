@@ -11,8 +11,9 @@ import { WebSocketEventBridge } from './services/events/webSockets.js';
 import { LogManager } from './utility/logManager.js';
 import { State } from './types.js';
 import { setAPIKey } from './externalCall.js';
-import { exampleAgentConfigs, goalConfig } from './agentConfig.js';
+import { getAgents } from './agentConfig.js';
 import StagehandSession from './browserAuto/stagehandSession.js';
+import { get } from 'http';
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ const url = process.env.BASE_URL || 'https://scanmyfood.vercel.app/';
 const app = express();
 const PORT: number = parseInt(process.env.PORT || '3001');
 const WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
+const goal = process.env.USER_GOAL;
 
 let sessions = new Map<string, BossAgent>();
 
@@ -52,10 +54,18 @@ app.get('/start/:sessionId', async (req: Request, res: Response) => {
         res.status(400).send('Session already started.');
         return;
     }
+
+    if (!goal) {
+        LogManager.error('USER_GOAL is not set. Please set the USER_GOAL environment variable.', State.ERROR, true);
+        res.status(500).send('USER_GOAL is not set. Please set the USER_GOAL environment variable.');
+        return;
+    }
+
+    const agents = await getAgents(goal);
     const agent = new BossAgent({
         sessionId: sessionId,
         eventBus: eventBus,
-        agentConfigs: new Set<AgentConfig>(goalConfig),
+        agentConfigs: new Set<AgentConfig>(agents),
     });
     sessions.set(sessionId, agent);
 
@@ -155,10 +165,18 @@ app.get('/test/:key', async (req: Request, res: Response) => {
         res.status(400).send('Test Session already started.');
         return;
     }
+
+    if (!goal) {
+        LogManager.error('USER_GOAL is not set. Please set the USER_GOAL environment variable.', State.ERROR, true);
+        res.status(500).send('USER_GOAL is not set. Please set the USER_GOAL environment variable.');
+        return;
+    }
+
+    const agents = await getAgents(goal);
     const agent = new BossAgent({
         sessionId: sessionId,
         eventBus: eventBus,
-        agentConfigs: new Set<AgentConfig>(exampleAgentConfigs),
+        agentConfigs: new Set<AgentConfig>(agents),
     });
     sessions.set(sessionId, agent);
 

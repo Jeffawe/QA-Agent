@@ -4,11 +4,7 @@ import { LogManager } from "../utility/logManager.js";
 import { GoalAgent } from "./goalIntelliAgent.js";
 import { pipeline } from '@xenova/transformers';
 import StagehandSession from "../browserAuto/stagehandSession.js";
-
-interface ExtractorOptions {
-    pooling: 'mean' | 'cls' | 'max';
-    normalize: boolean;
-}
+import { ExtractorOptions } from "../types.js";
 
 interface ClassificationResult {
     label: string;
@@ -17,7 +13,6 @@ interface ClassificationResult {
 
 interface ValidationMetrics {
     progressSimilarity: number;
-    semanticSimilarity: number;
     intentClassification: number;
     overallScore: number;
 }
@@ -31,14 +26,15 @@ export default class PlannerAgent extends Agent {
     private currentProgress: number = 0;
     private validationHistory: ValidationMetrics[] = [];
     private goalAgent: GoalAgent;
+    private goal: string = "";
 
     private stageHandSession: StagehandSession;
 
     // Thresholds for different validation measures
-    private readonly PROGRESS_THRESHOLD = 0.85;
+    private readonly PROGRESS_THRESHOLD = 0.80;
     private readonly SEMANTIC_THRESHOLD = 0.80;
-    private readonly INTENT_THRESHOLD = 0.75;
-    private readonly OVERALL_THRESHOLD = 0.80;
+    private readonly INTENT_THRESHOLD = 0.70;
+    private readonly OVERALL_THRESHOLD = 0.70;
 
     constructor(dependencies: BaseAgentDependencies) {
         super("planneragent", dependencies);
@@ -81,6 +77,8 @@ export default class PlannerAgent extends Agent {
             switch (this.state) {
                 case State.START:
                     this.setState(State.PLAN);
+                    this.goal = this.mainGoal;
+                    LogManager.addMission(this.mainGoal)
                     break;
 
                 case State.PLAN:
@@ -88,7 +86,7 @@ export default class PlannerAgent extends Agent {
                     break;
 
                 case State.ACT:
-                    this.goalAgent.run(this.mainGoal, this.warning);
+                    this.goalAgent.run(this.goal, this.warning);
                     this.setState(State.WAIT);
                     break;
 
@@ -162,6 +160,9 @@ export default class PlannerAgent extends Agent {
             if (this.isProgressImproving(metrics)) {
                 this.setState(State.DECIDE);
                 this.lastProgress = this.currentProgress;
+                this.warning = "";
+                this.goal = this.goalAgent.goal;
+                LogManager.addSubMission(this.goal);
                 return true;
             } else {
                 this.setState(State.PLAN);
@@ -191,27 +192,17 @@ export default class PlannerAgent extends Agent {
         ]);
         const progressSimilarity = this.cosineSimilarity(goalVec.data, progressVec.data);
 
-        // 2. Semantic Similarity - How similar is the page state to the goal
-        const [goalVec2, pageStateVec] = await Promise.all([
-            this.extractor(goal, options),
-            this.extractor(pageState, options)
-        ]);
-
-        const semanticSimilarity = this.cosineSimilarity(goalVec2.data, pageStateVec.data);
-
-        // 3. Intent Classification - Is the intent of completion achieved?
+        // 2. Intent Classification - Is the intent of completion achieved?
         const intentClassification = await this.classifyGoalIntent(goal, progress, pageState);
 
         // Calculate overall score (weighted average)
         const overallScore = (
             progressSimilarity * 0.4 +
-            semanticSimilarity * 0.4 +
             intentClassification * 0.2
         );
 
         return {
             progressSimilarity,
-            semanticSimilarity,
             intentClassification,
             overallScore
         };
@@ -254,7 +245,6 @@ export default class PlannerAgent extends Agent {
         return (
             this.goalAgent.hasAchievedGoal &&
             metrics.progressSimilarity >= this.PROGRESS_THRESHOLD &&
-            metrics.semanticSimilarity >= this.SEMANTIC_THRESHOLD &&
             metrics.intentClassification >= this.INTENT_THRESHOLD &&
             metrics.overallScore >= this.OVERALL_THRESHOLD
         );
@@ -270,7 +260,6 @@ export default class PlannerAgent extends Agent {
         // Check if any metric has improved significantly
         return (
             metrics.progressSimilarity > previousMetrics.progressSimilarity + 0.05 ||
-            metrics.semanticSimilarity > previousMetrics.semanticSimilarity + 0.05 ||
             metrics.intentClassification > previousMetrics.intentClassification + 0.05
         );
     }
@@ -281,11 +270,7 @@ export default class PlannerAgent extends Agent {
         if (metrics.progressSimilarity < this.PROGRESS_THRESHOLD) {
             issues.push("progress towards goal is insufficient");
         }
-
-        if (metrics.semanticSimilarity < this.SEMANTIC_THRESHOLD) {
-            issues.push("current page state doesn't match expected goal state");
-        }
-
+        
         if (metrics.intentClassification < this.INTENT_THRESHOLD) {
             issues.push("goal completion intent is not clearly achieved");
         }

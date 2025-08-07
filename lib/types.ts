@@ -63,6 +63,11 @@ interface LLMPageResult {
     description?: string;
 }
 
+export interface ExtractorOptions {
+    pooling: "mean" | "cls" | "none";
+    normalize: boolean;
+}
+
 export interface ThinkResult {
     action: Action;
     nextResponse?: StagehandResponse; // This is for stagehand sessions

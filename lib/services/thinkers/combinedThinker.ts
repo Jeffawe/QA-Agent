@@ -108,6 +108,7 @@ export class CombinedThinker extends Thinker {
             }
 
             const result = await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath, recurrent, agentName);
+            
             LogManager.log(`LLM response: ${JSON.stringify(result)}`, thinkerState, false);
             return result;
         } catch (error) {
