@@ -2,7 +2,6 @@ import { GetNextActionContext, ThinkResult, ImageData, Action, AnalysisResponse,
 import { EventBus } from "../services/events/event.js";
 import ActionService from "../services/actions/actionService.js";
 import { LogManager } from "./logManager.js";
-import { AgentConfig } from "../agent.js";
 
 export abstract class Thinker {
     protected modelClient: LLM | null = null;
@@ -147,40 +146,5 @@ export abstract class Session<TPage = any> {
 
     public getSessionId(): string {
         return this.sessionId;
-    }
-}
-
-export class AgentConfigSet extends Set<AgentConfig> {
-    private nameMap = new Map<string, AgentConfig>();
-
-    add(config: AgentConfig): this {
-        if (this.nameMap.has(config.name)) {
-            throw new Error(`Agent config with name '${config.name}' already exists`);
-        }
-
-        this.nameMap.set(config.name, config);
-        return super.add(config);
-    }
-
-    delete(config: AgentConfig): boolean {
-        this.nameMap.delete(config.name);
-        return super.delete(config);
-    }
-
-    has(config: AgentConfig): boolean {
-        return this.nameMap.has(config.name);
-    }
-
-    hasByName(name: string): boolean {
-        return this.nameMap.has(name);
-    }
-
-    getByName(name: string): AgentConfig | undefined {
-        return this.nameMap.get(name);
-    }
-
-    clear(): void {
-        this.nameMap.clear();
-        super.clear();
     }
 }

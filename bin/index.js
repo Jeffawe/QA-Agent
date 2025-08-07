@@ -165,6 +165,11 @@ if (!url) {
   process.exit(1);
 }
 
+if (!/^(https?:\/\/)/.test(url)) {
+  console.error('❌ Invalid URL format. Please include http:// or https://');
+  process.exit(1);
+}
+
 // Check if ports are available
 console.log('🔍 Checking port availability...');
 
@@ -207,6 +212,11 @@ console.log(`✅ Agent server running on http://localhost:${port}`);
 console.log(`✅ WebSocket server running on ws://localhost:${websocket}`);
 
 if (testMode) {
+  if (!key.startsWith('TEST')) {
+    console.log('❌ Invalid Test Key inputted.');
+    process.exit(1);
+  }
+
   console.log('🧪 Test mode enabled');
 }
 
@@ -223,18 +233,18 @@ await import('../dist/lib/server.js');
 // Auto-start functionality
 if (autoStart) {
   console.log('⏳ Waiting for server to be ready...');
-  
+
   const serverReady = await waitForServer(port);
-  
+
   if (serverReady) {
     console.log('🚀 Server is ready, auto-starting agent...');
-    
+
     const endpoint = testMode ? `/test/${key}` : '/start/1';
     const baseUrl = `http://localhost:${port}`;
-    
+
     // Wait a bit more to ensure server is fully initialized
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
+
     await makeRequest(baseUrl, endpoint);
   } else {
     console.error('❌ Server failed to start within expected time.');

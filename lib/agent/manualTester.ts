@@ -1,11 +1,11 @@
-import PuppeteerSession from "../browserAuto/session.js";
+import playwrightSession from "../browserAuto/playWrightSession.js";
 import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { LogManager } from "../utility/logManager.js";
 
 export default class ManualTester extends Agent {
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
-    private puppeteerSession: PuppeteerSession;
+    private playwrightSession: playwrightSession;
 
     private queue: LinkInfo[] = [];
     private goal: string = "";
@@ -15,7 +15,7 @@ export default class ManualTester extends Agent {
         this.goal = "";
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
-        this.puppeteerSession = this.session as PuppeteerSession;
+        this.playwrightSession = this.session as playwrightSession;
     }
 
     public setBaseValues(url: string, mainGoal?: string): void {
@@ -24,13 +24,13 @@ export default class ManualTester extends Agent {
     }
 
     protected validateSessionType(): void {
-        if (!(this.session instanceof PuppeteerSession)) {
-            LogManager.error(`Crawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+        if (!(this.session instanceof playwrightSession)) {
+            LogManager.error(`ManualTester requires playwrightSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
-            throw new Error(`PuppeteerCrawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+            throw new Error(`ManualTester requires playwrightSession, got ${this.session.constructor.name}`);
         }
 
-        this.puppeteerSession = this.session as PuppeteerSession;
+        this.playwrightSession = this.session as playwrightSession;
     }
 
     /* ───────── external API ───────── */
@@ -49,7 +49,7 @@ export default class ManualTester extends Agent {
 
     /** One FSM transition */
     public async tick(): Promise<void> {
-        if (!this.puppeteerSession.page) return
+        if (!this.playwrightSession.page) return
         if (!this.bus) return
 
         try {
@@ -57,7 +57,7 @@ export default class ManualTester extends Agent {
                 /*────────── READY → RUN ──────────*/
                 case State.START:
                     (this as any).startTime = performance.now();
-                    this.currentUrl = this.puppeteerSession.page!.url();
+                    this.currentUrl = this.playwrightSession.page!.url();
                     this.goal = "Find the next best link to click";
                     LogManager.log(`Start testing ${this.queue.length} links`, this.buildState(), true);
                     if (this.queue.length === 0) {
@@ -98,7 +98,7 @@ export default class ManualTester extends Agent {
 
                 case State.VALIDATE: {
                     const oldUrl = new URL(this.currentUrl);
-                    const newUrl = new URL(this.puppeteerSession.page.url());
+                    const newUrl = new URL(this.playwrightSession.page.url());
 
                     const isSameOrigin =
                         oldUrl.protocol === newUrl.protocol &&
@@ -107,7 +107,7 @@ export default class ManualTester extends Agent {
                     if (!isSameOrigin) {
                         // Optional: ensure page is defined before going back
                         try {
-                            await this.puppeteerSession.page?.goBack({ waitUntil: "networkidle0" });
+                            await this.playwrightSession.page?.goBack({ waitUntil: "networkidle" });
                             this.nextLink = null;
                             this.setState(State.START);
                         } catch (err) {
@@ -121,7 +121,7 @@ export default class ManualTester extends Agent {
                         }
                     } else {
                         this.setState(State.DONE);
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.puppeteerSession.page.url(), page: this.puppeteerSession.page });
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.playwrightSession.page.url(), page: this.playwrightSession.page });
                     }
                     break;
                 }
@@ -143,7 +143,7 @@ export default class ManualTester extends Agent {
         this.nextLink = null;
         this.queue = [];
         this.goal = "Crawl the given page";
-        this.state = State.START;
+        this.state = State.WAIT;
         this.response = "";
     }
 

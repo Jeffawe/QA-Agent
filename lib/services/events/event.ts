@@ -1,8 +1,7 @@
-import { Page } from "puppeteer";
 import { Action, PageDetails, State } from "../../types.js";
 import { EventEmitter } from 'events';
+import { Page } from "playwright";
 
-// events.ts
 export type Event =
     | { ts: number; type: 'state_transition'; from: State; to: State }
     | { ts: number; type: 'action_started'; action: Action }

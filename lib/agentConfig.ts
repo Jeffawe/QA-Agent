@@ -1,9 +1,9 @@
-import { AgentConfig } from "./agent";
-import { Crawler } from "./agent/crawler";
-import { GoalAgent } from "./agent/goalIntelliAgent";
-import ManualTester from "./agent/manualTester";
-import PlannerAgent from "./agent/plannerAgent";
-import Tester from "./agent/tester";
+import { AgentConfig } from "./agent.js";
+import { Crawler } from "./agent/crawler.js";
+import { GoalAgent } from "./agent/goalIntelliAgent.js";
+import ManualTester from "./agent/manualTester.js";
+import PlannerAgent from "./agent/plannerAgent.js";
+import Tester from "./agent/tester.js";
 
 export const exampleAgentConfigs: AgentConfig[] = [
     {
@@ -36,6 +36,22 @@ export const exampleAgentConfigs: AgentConfig[] = [
         name: "planner",
         agentClass: PlannerAgent,
         sessionType: "playwright",
+        dependent: false,
+        agentDependencies: ["goalagent"]
+    }
+];
+
+export const goalConfig: AgentConfig[] = [
+    {
+        name: "goalagent",
+        agentClass: GoalAgent,
+        sessionType: "stagehand",
+        dependent: true,
+    },
+    {
+        name: "planner",
+        agentClass: PlannerAgent,
+        sessionType: "stagehand",
         dependent: false,
         agentDependencies: ["goalagent"]
     }

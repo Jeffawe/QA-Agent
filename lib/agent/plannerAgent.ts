@@ -1,9 +1,9 @@
-import { State } from "../types";
-import { Agent, BaseAgentDependencies } from "../utility/abstract";
-import { LogManager } from "../utility/logManager";
-import { GoalAgent } from "./goalIntelliAgent";
+import { State } from "../types.js";
+import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
+import { LogManager } from "../utility/logManager.js";
+import { GoalAgent } from "./goalIntelliAgent.js";
 import { pipeline } from '@xenova/transformers';
-import StagehandSession from "../browserAuto/stagehandSession";
+import StagehandSession from "../browserAuto/stagehandSession.js";
 
 interface ExtractorOptions {
     pooling: 'mean' | 'cls' | 'max';
@@ -54,9 +54,9 @@ export default class PlannerAgent extends Agent {
 
     protected validateSessionType(): void {
         if (!(this.session instanceof StagehandSession)) {
-            LogManager.error(`Crawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+            LogManager.error(`PlannerAgent requires PuppeteerSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
-            throw new Error(`PuppeteerCrawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+            throw new Error(`PlannerAgent requires PuppeteerSession, got ${this.session.constructor.name}`);
         }
 
         this.stageHandSession = this.session as StagehandSession;
@@ -68,6 +68,12 @@ export default class PlannerAgent extends Agent {
 
         // Initialize text classification for intent recognition
         this.classifier = await pipeline('text-classification', 'Xenova/distilbert-base-uncased-finetuned-sst-2-english');
+    }
+
+    public setBaseValues(url: string, mainGoal?: string): void {
+        this.baseUrl = url;
+        this.currentUrl = url;
+        this.mainGoal = mainGoal || "";
     }
 
     async tick(): Promise<void> {
@@ -113,7 +119,13 @@ export default class PlannerAgent extends Agent {
     }
 
     async cleanup(): Promise<void> {
-        throw new Error("Method not implemented.");
+        this.extractor = null;
+        this.classifier = null;
+        this.validationHistory = [];
+        this.mainGoal = "";
+        this.warning = "";
+        this.lastProgress = 0;
+        this.currentProgress = 0;
     }
 
     private async validateGoal(): Promise<boolean> {

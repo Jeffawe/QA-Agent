@@ -9,13 +9,13 @@ import NavigationTree from "./utility/navigationTree.js";
 
 import { Agent } from "./utility/abstract.js";
 import { CrawlMap } from './utility/crawlMap.js';
-import PuppeteerSession from './browserAuto/session.js';
 import StagehandSession from './browserAuto/stagehandSession.js';
+import PlaywrightSession from './browserAuto/playWrightSession.js';
 
 export interface AgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
   name: string;
   agentClass: new (dependencies: T) => Agent;
-  sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'custom';
+  sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
   dependent?: boolean; // If true, agent won't start until another agent triggers it
   dependencies?: Partial<T>; // Additional/override dependencies
   agentDependencies?: string[]; // Names of other agents this agent depends on
@@ -34,9 +34,9 @@ export interface AgentDependencies {
 class SessionFactory {
   static createSession(type: string, sessionId: string): Session {
     switch (type) {
-      case 'puppeteer':
-        return new PuppeteerSession(sessionId);
       case 'playwright':
+        return new PlaywrightSession(sessionId);
+      case 'stagehand':
         return new StagehandSession(sessionId);
       default:
         throw new Error(`Unknown session type: ${type}`);
@@ -70,19 +70,24 @@ export default class BossAgent {
     this.bus = eventBus;
     this.agentRegistry = new AgentRegistry();
 
-    this.initializeAgents(agentConfigs);
+    this.initializeAgents(sessionId, agentConfigs);
   }
 
-  private initializeAgents(agentConfigs: Set<AgentConfig>): void {
+  private initializeAgents(sessionId: string, agentConfigs: Set<AgentConfig>): void {
     // First pass: Create all agents without dependencies
     const agentInstances: Array<{ config: AgentConfig; agent: Agent }> = [];
 
     for (const config of agentConfigs) {
       try {
-        const session = SessionFactory.createSession(config.sessionType, `${this.sessionId}-${config.name}`);
-        this.sessions.set(config.name, session);
+        if (!this.sessions.has(sessionId)) {
+          const session = SessionFactory.createSession(config.sessionType, sessionId);
+          this.sessions.set(sessionId, session);
+        }
 
-        const actionService = new ActionService(session as PuppeteerSession);
+        // Retrieve existing or newly created session
+        const session = this.sessions.get(sessionId)!;
+
+        const actionService = new ActionService(session as PlaywrightSession);
         this.actionServices.set(config.name, actionService);
 
         const baseDependencies: BaseAgentDependencies = {
@@ -158,9 +163,14 @@ export default class BossAgent {
       return;
     }
 
+    if (!process.env.USER_GOAL) {
+      LogManager.error("USER_GOAL environment variable is not set", State.ERROR, true);
+      return;
+    }
+
     // Set base values for all agents
     for (const agent of agents) {
-      agent.setBaseValues(url, process.env.USER_GOAL || " ");
+      agent.setBaseValues(url, process.env.USER_GOAL);
     }
 
     while (agents.some(a => !a.isDone())) {

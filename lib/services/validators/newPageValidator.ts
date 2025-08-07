@@ -1,5 +1,5 @@
-import { Page } from "puppeteer";
-import Session from "../../browserAuto/session.js";
+import { Page } from "playwright";
+import Session from "../../browserAuto/playWrightSession.js";
 import { EventBus } from "../events/event.js";
 
 export class NewPageValidator {
@@ -26,7 +26,7 @@ export class NewPageValidator {
 
             // Optional: ensure page is defined before going back
             try {
-                await page?.goBack({ waitUntil: "networkidle0" });
+                await page?.goBack({ waitUntil: "networkidle" });
             } catch (err) {
                 this.bus.emit({
                     ts: Date.now(),

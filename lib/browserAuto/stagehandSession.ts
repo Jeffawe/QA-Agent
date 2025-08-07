@@ -1,16 +1,83 @@
-import { Page } from "@browserbasehq/stagehand";
-import { Session } from "../utility/abstract";
+import { ObserveResult, Page, Stagehand } from "@browserbasehq/stagehand";
+import { Session } from "../utility/abstract.js";
 import fs from 'fs';
 import path from 'path';
-import { ClicKType, Rect, State } from '../types.js';
 import { LogManager } from '../utility/logManager.js';
+import { State } from "../types.js";
+import { eventBus } from "../services/events/eventBus.js";
 
 export default class StagehandSession extends Session<Page> {
-    public start(url: string): Promise<boolean> {
-        throw new Error("Method not implemented.");
+    public stagehand: Stagehand | null;
+
+    constructor(sessionId: string) {
+        super(sessionId);
+
+        try {
+            if (!process.env.API_KEY || process.env.API_KEY.startsWith('TEST')) {
+                const errorMessage = "API_KEY environment variable is not set or is a test key. Please set a valid API key.";
+                LogManager.error(errorMessage, State.ERROR, true)
+                eventBus.emit({
+                    ts: Date.now(),
+                    type: "stop",
+                    message: errorMessage
+                });
+                throw new Error(errorMessage);
+            }
+
+            this.stagehand = new Stagehand({
+                env: "LOCAL",
+                modelName: "google/gemini-2.5-flash",
+                modelClientOptions: {
+                    apiKey: process.env.API_KEY,
+                },
+            });
+        } catch (error) {
+            LogManager.error(`Failed to initialize Stagehand: ${(error as Error).message}`, State.ERROR, true);
+            this.stagehand = null;
+            throw new Error(`Failed to initialize Stagehand: ${(error as Error).message}`);
+        }
     }
-    public close(): Promise<void> {
-        throw new Error("Method not implemented.");
+
+    async start(url: string): Promise<boolean> {
+        try {
+            if (!url) {
+                throw new Error("URL must be provided to start Stagehand session");
+            }
+
+            if (!this.stagehand) {
+                throw new Error("Stagehand instance is not initialized");
+            }
+
+            await this.stagehand?.init();
+
+            this.page = this.stagehand?.page ?? null;
+
+            if (!this.page) {
+                throw new Error("Failed to initialize Stagehand page");
+            }
+
+            await this.page.goto(url);
+
+            return true;
+        } catch (error) {
+            const err = error as Error;
+            LogManager.error(`Failed to start Stagehand session: ${err.message}`);
+            return false
+        }
+    }
+
+    async close(): Promise<void> {
+        await this.stagehand?.close();
+        await new Promise((r) => setTimeout(r, 500));
+    }
+
+    public async observe(): Promise<ObserveResult[]> {
+        if (!this.page) {
+            throw new Error("Page not initialized");
+        }
+
+        const observations = await this.page.observe();
+        return observations;
     }
 
     async getCurrentPageInfo() {
@@ -84,4 +151,55 @@ export default class StagehandSession extends Session<Page> {
         }
     }
 
+    public async runTestScript(): Promise<void> {
+        try {
+            if (!this.page) throw new Error('Page not initialized');
+
+            this.takeScreenshot('./images', 'screenshot_0.png');
+
+            const observations = await this.observe();
+            console.log('Observations:', observations);
+
+            const summary = await this.getPageContentSummary();
+            console.log('Page Content Summary:', summary);
+        } catch (error) {
+            console.error('Error running test script:', error);
+            throw error;
+        }
+    }
+
+    public async testAgent(url: string): Promise<void> {
+        if (!this.page) {
+            throw new Error("Page not initialized");
+        }
+
+        const hasStarted = await this.start(url);
+        if (!hasStarted) {
+            throw new Error("Failed to start Stagehand session");
+        }
+
+        const agent = this.stagehand?.agent({
+            provider: "openai",
+            model: "computer-use-preview-2025-03-11",
+            instructions: "You are a helpful assistant that can use a web browser.",
+            options: {
+                apiKey: process.env.OPENAI_API_KEY,
+            },
+        });
+
+        await agent?.execute({
+            instruction: "Find the nutritional value of a tomato.",
+            maxSteps: 10,
+            autoScreenshot: true,
+        })
+    }
+
+    public async act(action: string): Promise<void> {
+        if (!this.page) {
+            throw new Error("Page not initialized");
+        }
+
+        // Example action: Click at a specific position
+        await this.page.act(action);
+    }
 }

@@ -31,8 +31,16 @@ export interface Analysis {
 
 export interface AnalysisResponse {
     analysis: Analysis;
-    action: Action;
+    action: Action; // This action is for puppeteer sessions
     pageDetails?: LLMPageResult;
+    nextResponse?: StagehandResponse; // This is for stagehand sessions
+}
+
+export interface StagehandResponse {
+    action: string;
+    progressDescription: string;
+    nextGoal: string;
+    hasAchievedGoal: boolean;
 }
 
 export interface GetNextActionContext {
@@ -40,7 +48,8 @@ export interface GetNextActionContext {
     vision: string;
     lastAction: string | null;
     memory: string[];
-    possibleLabels: string[];
+    possibleLabels: any[];
+    mainGoal?: string; // Optional main goal for the agent
 }
 
 export interface ImageData {
@@ -55,8 +64,8 @@ interface LLMPageResult {
 
 export interface ThinkResult {
     action: Action;
-    confidence?: number;
-    memoryPatch?: string;
+    nextResponse?: StagehandResponse; // This is for stagehand sessions
+    confidence?: number; // Confidence level of the action
     analysis?: Analysis;
     pageDetails?: LLMPageResult;
 }

@@ -11,12 +11,12 @@ import { WebSocketEventBridge } from './services/events/webSockets.js';
 import { LogManager } from './utility/logManager.js';
 import { State } from './types.js';
 import { setAPIKey } from './externalCall.js';
-import { exampleAgentConfigs } from './agentConfig.js';
-import PuppeteerSession from './browserAuto/session.js';
+import { exampleAgentConfigs, goalConfig } from './agentConfig.js';
+import StagehandSession from './browserAuto/stagehandSession.js';
 
 dotenv.config();
 
-const url = process.env.BASE_URL || 'https://www.jeffawe.com';
+const url = process.env.BASE_URL || 'https://scanmyfood.vercel.app/';
 const app = express();
 const PORT: number = parseInt(process.env.PORT || '3001');
 const WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
@@ -55,7 +55,7 @@ app.get('/start/:sessionId', async (req: Request, res: Response) => {
     const agent = new BossAgent({
         sessionId: sessionId,
         eventBus: eventBus,
-        agentConfigs: new Set<AgentConfig>(exampleAgentConfigs),
+        agentConfigs: new Set<AgentConfig>(goalConfig),
     });
     sessions.set(sessionId, agent);
 
@@ -86,7 +86,7 @@ app.get('/start/:sessionId', async (req: Request, res: Response) => {
 app.get('/session-test', async (req: Request, res: Response) => {
     try {
         //await runTestSession(url);
-        let session = new PuppeteerSession("test_session");
+        let session = new StagehandSession("test_session");
 
         const hasStarted = await session.start(url);
 
@@ -94,6 +94,8 @@ app.get('/session-test', async (req: Request, res: Response) => {
 
         if (!session.page) throw new Error('Page not initialized');
         // const elements = await getInteractiveElements(session.page);
+
+        session.testAgent(url);
 
         // await processScreenshot('./images/screenshot_0.png', elements);
         res.send('Test session started successfully!');

@@ -77,8 +77,14 @@ export class WebSocketEventBridge {
     setupEventListeners() {
         // Listen for logs
         this.eventBus.on('new_log', (evt) => {
-            console.log('📝 Log event received:', evt.message);
             this.broadcastToAll('LOG', {
+                message: evt.message,
+                timestamp: evt.ts
+            });
+        });
+
+        this.eventBus.on('stop', async (evt) => {
+            this.broadcastToAll('STOP_WARNING', {
                 message: evt.message,
                 timestamp: evt.ts
             });
@@ -126,10 +132,6 @@ export class WebSocketEventBridge {
                 this.clients.delete(client);
             }
         });
-
-        if (sentCount > 0) {
-            console.log(`📤 Broadcasted ${type} to ${sentCount} client(s)`);
-        }
     }
 
     // Method to get connected client count

@@ -3,7 +3,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { Box, InteractiveElement, State } from '../types.js';
 import { LogManager } from '../utility/logManager.js';
-import { Page } from 'puppeteer';
+import { Page } from 'playwright';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

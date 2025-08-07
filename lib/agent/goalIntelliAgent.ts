@@ -1,10 +1,9 @@
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { getInteractiveElements } from "../services/UIElementDetector.js";
-import { Action, ImageData, State } from "../types.js";
+import { ImageData, State } from "../types.js";
 import { LogManager } from "../utility/logManager.js";
-import { processScreenshot } from "../services/imageProcessor.js";
 import { setTimeout } from "node:timers/promises";
 import StagehandSession from "../browserAuto/stagehandSession.js";
+import { PageMemory } from "../services/memory/pageMemory.js";
 
 export class GoalAgent extends Agent {
     private goal: string;
@@ -33,9 +32,9 @@ export class GoalAgent extends Agent {
 
     protected validateSessionType(): void {
         if (!(this.session instanceof StagehandSession)) {
-            LogManager.error(`Crawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+            LogManager.error(`GoalAgent requires StagehandSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
-            throw new Error(`PuppeteerCrawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+            throw new Error(`GoalAgent requires StagehandSession, got ${this.session.constructor.name}`);
         }
 
         this.stageHandSession = this.session as StagehandSession;
@@ -51,9 +50,8 @@ export class GoalAgent extends Agent {
 
     public reset(): void {
         if (this.currentPage !== this.previousPage) {
-            this.previousPage = this.currentPage;
-            // Have session reset the page state
-            //this.session.resetPageState();
+            this.currentPage = this.previousPage;
+            this.stageHandSession.page?.goBack({ waitUntil: "networkidle" });
         }
     }
 
@@ -65,9 +63,16 @@ export class GoalAgent extends Agent {
             switch (this.state) {
                 case State.START: {
                     (this as any).startTime = performance.now();
+                    this.previousPage = this.currentPage;
+                    this.currentPage = page.url();
                     if (!this.goal) {
                         LogManager.error("GoalAgent started without a goal", this.buildState());
                         this.setState(State.ERROR);
+                        this.bus.emit({
+                            ts: Date.now(),
+                            type: "stop",
+                            message: "GoalAgent started without a goal"
+                        });
                         break;
                     }
 
@@ -78,7 +83,8 @@ export class GoalAgent extends Agent {
 
                 case State.OBSERVE: {
                     const filename = `goalagent_${Date.now()}.png`;
-                    const finalPath = `images/annotated_${filename}`;
+                    const finalPath = `images/${filename}`;
+                    (this as any).screenshot = finalPath;
 
                     const success = await this.stageHandSession.takeScreenshot("images", filename);
                     if (!success) {
@@ -94,19 +100,18 @@ export class GoalAgent extends Agent {
                         elapsedMs: 0
                     });
 
+                    (this as any).elements = await this.stageHandSession.observe();
                     this.setState(State.DECIDE);
                     break;
                 }
 
                 case State.DECIDE: {
-                    const labels = (this as any).clickableElements.map((el: any) => el.label || "");
-
                     const context = {
                         goal: this.goal,
                         vision: "",
                         lastAction: this.lastAction || null,
                         memory: [...this.previousActions],
-                        possibleLabels: labels
+                        possibleLabels: (this as any).elements || [],
                     };
 
                     const imageData: ImageData = {
@@ -115,54 +120,49 @@ export class GoalAgent extends Agent {
 
                     const command = await this.thinker.think(context, imageData, this.name, this.response);
 
-                    if (!command || !command.action) {
+                    if (!command || !command.nextResponse) {
                         LogManager.error("Thinker returned no action", this.state);
                         this.setState(State.ERROR);
                         break;
                     }
 
                     if (command.analysis) {
-                        // Optional: page memory analysis for QA logging
+                        PageMemory.addAnalysis(this.currentUrl, command.analysis);
                     }
 
-                    (this as any).pendingAction = command.action;
-                    this.goal = command.action.newGoal ?? this.goal;
+                    (this as any).pendingAction = command.nextResponse.action;
+                    this.goal = command.nextResponse.nextGoal ?? this.goal;
+                    this.progressDescription = command.nextResponse.progressDescription || "";
 
                     this.setState(State.ACT);
                     break;
                 }
 
                 case State.ACT: {
-                    const action: Action = (this as any).pendingAction;
-                    this.lastAction = `Action ${action.step}(${action.args.join(",")}) - Reason: ${action.reason}`;
-                    this.previousActions.push(this.lastAction);
+                    const action: string = (this as any).pendingAction;
 
-                    if (action.step === "done") {
-                        LogManager.log("GoalAgent completed task", this.buildState(), true);
+                    if (!action || action === "no_op") {
+                        LogManager.log("No action to perform, skipping", this.state);
                         this.setState(State.DONE);
                         break;
                     }
 
-                    const t0 = Date.now();
-                    this.bus.emit({ ts: t0, type: "action_started", action });
-
-                    let result;
                     try {
-                        result = await this.actionService.executeAction(action, (this as any).clickableElements, this.buildState());
+                        this.stageHandSession.act(action);
                     } catch (err) {
                         LogManager.error(`Action failed: ${String(err)}`, this.buildState());
                         this.setState(State.ERROR);
                         break;
                     }
 
-                    this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });
-
                     await setTimeout(1000); // brief delay before re-observing
 
-                    this.setState(State.OBSERVE);
+                    this.setState(State.DONE);
                     break;
                 }
 
+                case State.WAIT:
+                case State.VALIDATE:
                 case State.ERROR:
                 case State.DONE:
                 default:
@@ -175,7 +175,9 @@ export class GoalAgent extends Agent {
     }
 
     async cleanup(): Promise<void> {
-        this.state = State.START;
         this.previousActions = [];
+        this.progressDescription = "";
+        this.goal = "";
+        this.state = State.WAIT;
     }
 }

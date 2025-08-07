@@ -9,11 +9,11 @@ import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { fileExists } from "../utility/functions.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { CrawlMap } from "../utility/crawlMap.js";
-import PuppeteerSession from "../browserAuto/session.js";
+import playwrightSession from "../browserAuto/playWrightSession.js";
 
 
 export interface TesterDependencies {
-    session: PuppeteerSession;
+    session: playwrightSession;
     thinker: Thinker;
     actionService: ActionService;
     eventBus: EventBus;
@@ -30,13 +30,13 @@ export default class Tester extends Agent {
     private visitedPage: boolean = false;
     private lastAction: string = "";
 
-    private puppeteerSession: PuppeteerSession;
+    private playwrightSession: playwrightSession;
 
     constructor(dependencies: BaseAgentDependencies) {
         super("tester", dependencies);
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
-        this.puppeteerSession = this.session as PuppeteerSession;
+        this.playwrightSession = this.session as playwrightSession;
     }
 
     /* ───────── external API ───────── */
@@ -53,18 +53,18 @@ export default class Tester extends Agent {
     }
 
     protected validateSessionType(): void {
-        if (!(this.session instanceof PuppeteerSession)) {
-            LogManager.error(`Crawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+        if (!(this.session instanceof playwrightSession)) {
+            LogManager.error(`Tester requires playwrightSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
-            throw new Error(`PuppeteerCrawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+            throw new Error(`Tester requires playwrightSession, got ${this.session.constructor.name}`);
         }
 
-        this.puppeteerSession = this.session as PuppeteerSession;
+        this.playwrightSession = this.session as playwrightSession;
     }
 
     /** One FSM transition */
     public async tick(): Promise<void> {
-        if (!this.puppeteerSession.page) return
+        if (!this.playwrightSession.page) return
         if (!this.bus) return
 
         try {
@@ -86,14 +86,14 @@ export default class Tester extends Agent {
                     break;
 
                 case State.OBSERVE: {
-                    await this.puppeteerSession.clearAllClickPoints();
-                    this.currentUrl = this.puppeteerSession.page?.url();
+                    await this.playwrightSession.clearAllClickPoints();
+                    this.currentUrl = this.playwrightSession.page?.url();
                     const filename = `screenshot_${this.step}.png`;
                     (this as any).finalFilename = `images/annotated_${filename}`;
 
-                    const elements = await getInteractiveElements(this.puppeteerSession.page!)
+                    const elements = await getInteractiveElements(this.playwrightSession.page!)
                     if (!this.visitedPage || !(await fileExists((this as any).finalFilename))) {
-                        const success = await this.puppeteerSession.takeScreenshot("images", filename);
+                        const success = await this.playwrightSession.takeScreenshot("images", filename);
                         if (!success) {
                             LogManager.error("Screenshot failed", this.state);
                             this.setState(State.DONE);
@@ -187,7 +187,7 @@ export default class Tester extends Agent {
                     }
 
                     if (this.currentUrl && result.message == "external") {
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.puppeteerSession.page.url(), page: this.puppeteerSession.page });
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.playwrightSession.page.url(), page: this.playwrightSession.page });
                     }
 
                     this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });
@@ -244,7 +244,7 @@ export default class Tester extends Agent {
         this.queue = [];
         this.step = 0;
         this.goal = "Crawl the given page";
-        this.state = State.START;
+        this.state = State.WAIT;
         this.lastAction = "";
         this.visitedPage = false;
         this.response = "";

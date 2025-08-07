@@ -7,37 +7,37 @@ import Tester from "./tester.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
 import ManualTester from "./manualTester.js";
-import PuppeteerSession from "../browserAuto/session.js";
+import playwrightSession from "../browserAuto/playWrightSession.js";
 
 export class Crawler extends Agent {
     private isCurrentPageVisited = false;
     private tester: Tester;
     private manualTester: ManualTester;
 
-    private puppeteerSession: PuppeteerSession;
+    private playwrightSession: playwrightSession;
 
-    constructor(dependencies: BaseAgentDependencies){
+    constructor(dependencies: BaseAgentDependencies) {
         super("crawler", dependencies);
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
         this.tester = this.requireAgent<Tester>("tester");
         this.manualTester = this.requireAgent<ManualTester>("manualtester");
 
-        this.puppeteerSession = this.session as PuppeteerSession;
+        this.playwrightSession = this.session as playwrightSession;
     }
 
     protected validateSessionType(): void {
-        if (!(this.session instanceof PuppeteerSession)) {
-            LogManager.error(`Crawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+        if (!(this.session instanceof playwrightSession)) {
+            LogManager.error(`Crawler requires playwrightSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
-            throw new Error(`PuppeteerCrawler requires PuppeteerSession, got ${this.session.constructor.name}`);
+            throw new Error(`PuppeteerCrawler requires playwrightSession, got ${this.session.constructor.name}`);
         }
-        
-        this.puppeteerSession = this.session as PuppeteerSession;
+
+        this.playwrightSession = this.session as playwrightSession;
     }
 
     async tick(): Promise<void> {
-        const page = this.puppeteerSession.page;
+        const page = this.playwrightSession.page;
         if (!page) {
             LogManager.error("Page not initialized", this.buildState());
             this.setState(State.ERROR);
@@ -63,7 +63,7 @@ export class Crawler extends Agent {
                     (this as any).startTime = performance.now();
                     this.currentUrl = page.url();
                     if (!PageMemory.pageExists(this.currentUrl)) {
-                        const elements = await getInteractiveElements(this.puppeteerSession.page!);
+                        const elements = await getInteractiveElements(this.playwrightSession.page!);
                         const links = this.convertInteractiveElementsToLinks(elements, this.baseUrl!, this.currentUrl);
                         LogManager.log(`Links detected: ${links.length} are: ${JSON.stringify(links)}`, this.buildState(), false);
                         const pageDetails = {
@@ -85,7 +85,7 @@ export class Crawler extends Agent {
                 case State.EVALUATE: {
                     if (PageMemory.isFullyExplored(this.currentUrl)) {
                         const back = PageMemory.popFromStack();
-                        if (back) await page.goto(back, { waitUntil: "networkidle0" });
+                        if (back) await page.goto(back, { waitUntil: "networkidle" });
                         else this.setState(State.DONE);
                     } else {
                         this.setState(State.VISIT);
@@ -152,7 +152,7 @@ export class Crawler extends Agent {
                         const back = PageMemory.popFromStack();
                         if (back) {
                             LogManager.log(`Backtracking to ${back}`, this.buildState(), false);
-                            await page.goto(back, { waitUntil: "networkidle0" });
+                            await page.goto(back, { waitUntil: "networkidle" });
                             this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: back, page: page });
                             this.setState(State.START);
                         } else {

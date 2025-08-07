@@ -72,7 +72,7 @@ export class PageMemory {
       l => l.text === identifier || l.href === identifier
     );
     if (link){
-      LogManager.log(`Marking link ${link.href} for page ${url} as visited`, 'Crawler.ACT', false);
+      LogManager.log(`Marking link ${link.href} for page ${url} as visited`, 'crawler.ACT', false);
       link.visited = true;
     }
   }

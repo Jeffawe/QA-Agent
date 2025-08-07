@@ -1,8 +1,7 @@
-import { createCanvas, loadImage, CanvasRenderingContext2D } from 'canvas';
+import { createCanvas, loadImage, CanvasRenderingContext2D, Canvas } from '@napi-rs/canvas'
 import fs from 'fs';
 import path from 'path';
 import { InteractiveElement, State } from '../types.js';
-import { LogManager } from '../utility/logManager.js';
 import crypto from 'crypto';
 
 type HashAlgorithm = 'md5' | 'sha1' | 'sha256';
@@ -64,7 +63,7 @@ export async function annotateImage(
 
     // Draw annotations for each element
     elements.forEach((element, index) => {
-        drawElementAnnotation(ctx, element, index, opts);
+        drawElementAnnotation(ctx, canvas, element, index, opts);
     });
 
     // Save the annotated image
@@ -74,6 +73,7 @@ export async function annotateImage(
 
 function drawElementAnnotation(
     ctx: CanvasRenderingContext2D,
+    canvas: Canvas,
     element: InteractiveElement,
     index: number,
     opts: AnnotationOptions
@@ -96,7 +96,7 @@ function drawElementAnnotation(
     }
 
     if (labelText) {
-        drawLabel(ctx, labelText, rect, opts);
+        drawLabel(ctx, canvas, labelText, rect, opts);
     }
 
     // Draw a small colored dot to indicate element type
@@ -105,6 +105,7 @@ function drawElementAnnotation(
 
 function drawLabel(
     ctx: CanvasRenderingContext2D,
+    canvas: Canvas,
     text: string,
     rect: { x: number; y: number; width: number; height: number },
     opts: AnnotationOptions
@@ -131,8 +132,8 @@ function drawLabel(
     }
 
     // Ensure label doesn't go off screen
-    labelX = Math.max(0, Math.min(labelX, ctx.canvas.width - textWidth));
-    labelY = Math.max(textHeight, Math.min(labelY, ctx.canvas.height));
+    labelX = Math.max(0, Math.min(labelX, canvas.width - textWidth));
+    labelY = Math.max(textHeight, Math.min(labelY, canvas.height));
 
     // Draw background rectangle for text
     const padding = 4;
