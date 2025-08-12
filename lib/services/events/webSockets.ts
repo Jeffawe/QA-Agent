@@ -98,6 +98,13 @@ export class WebSocketEventBridge {
                 timestamp: evt.ts
             });
         });
+
+        this.eventBus.on('done', (evt) => {
+            this.broadcastToAll('DONE', {
+                message: evt.message,
+                timestamp: evt.ts
+            });
+        });
     }
 
     // Send message to specific client - now properly typed

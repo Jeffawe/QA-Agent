@@ -1,5 +1,7 @@
 import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
+import bodyParser from 'body-parser';
+import { v4 as uuidv4 } from 'uuid';
 
 import BossAgent, { AgentConfig } from './agent.js';
 import { eventBus } from './services/events/eventBus.js';
@@ -13,14 +15,16 @@ import { State } from './types.js';
 import { setAPIKey } from './externalCall.js';
 import { getAgents } from './agentConfig.js';
 import StagehandSession from './browserAuto/stagehandSession.js';
-import { get } from 'http';
+import { encrypt } from './enctyption.js';
+import { storeSessionApiKey } from './apiMemory.js';
 
 dotenv.config();
 
-const url = process.env.BASE_URL || 'https://scanmyfood.vercel.app/';
 const app = express();
 const PORT: number = parseInt(process.env.PORT || '3001');
 const WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
+
+const baseUrl = process.env.BASE_URL || 'https://scanmyfood.vercel.app/';
 const goal = process.env.USER_GOAL;
 
 let sessions = new Map<string, BossAgent>();
@@ -30,6 +34,9 @@ new ActionSpamValidator(eventBus);
 new ErrorValidator(eventBus);
 new LLMUsageValidator(eventBus);
 
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+
 // Setup WebSockets
 new WebSocketEventBridge(eventBus, WebSocket_PORT);
 
@@ -38,16 +45,22 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 app.get('/start', (req: Request, res: Response) => {
-    res.send('To start a session, use /start/:sessionId endpoint, where sessionId is a unique identifier for the session.');
+    try {
+        if (sessions.size >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
+            res.status(429).send('We have reached the maximum number of sessions. Try again another time');
+        }
+
+        const sessionId = uuidv4();
+        res.json({ sessionId });
+
+    } catch (error) {
+        console.error('Error starting session:', error);
+        res.status(500).send('Failed to start session.');
+    }
 });
 
-app.get('/status', (req: Request, res: Response) => {
-    res.json({
-        sessions: Array.from(sessions.keys()),
-    });
-});
-
-app.get('/start/:sessionId', async (req: Request, res: Response) => {
+app.post('/start/:sessionId', async (req: Request, res: Response) => {
+    const { goal, url } = req.body;
     const sessionId = req.params.sessionId;
     if (sessions.has(sessionId)) {
         LogManager.error('Session already started.', State.ERROR, true);
@@ -65,6 +78,7 @@ app.get('/start/:sessionId', async (req: Request, res: Response) => {
     const agent = new BossAgent({
         sessionId: sessionId,
         eventBus: eventBus,
+        goalValue: goal,
         agentConfigs: new Set<AgentConfig>(agents),
     });
     sessions.set(sessionId, agent);
@@ -98,14 +112,14 @@ app.get('/session-test', async (req: Request, res: Response) => {
         //await runTestSession(url);
         let session = new StagehandSession("test_session");
 
-        const hasStarted = await session.start(url);
+        const hasStarted = await session.start(baseUrl);
 
         if (!hasStarted) throw new Error('Failed to start test session');
 
         if (!session.page) throw new Error('Page not initialized');
         // const elements = await getInteractiveElements(session.page);
 
-        session.testAgent(url);
+        session.testAgent(baseUrl);
 
         // await processScreenshot('./images/screenshot_0.png', elements);
         res.send('Test session started successfully!');
@@ -151,13 +165,16 @@ app.get('/stop', async (req: Request, res: Response) => {
         sessions.clear();
         console.log('All sessions stopped successfully.');
         res.send('All sessions stopped successfully!');
+        process.exit(0);
     } catch (error) {
         LogManager.error('Error stopping sessions: error', State.ERROR, true);
         res.status(500).send('Failed to stop sessions.');
+        process.exit(1);
     }
 })
 
-app.get('/test/:key', async (req: Request, res: Response) => {
+app.post('/test/:key', async (req: Request, res: Response) => {
+    const { goal, url } = req.body;
     const key = req.params.key;
     const sessionId = "test_" + key;
     if (sessions.has(sessionId)) {
@@ -176,6 +193,7 @@ app.get('/test/:key', async (req: Request, res: Response) => {
     const agent = new BossAgent({
         sessionId: sessionId,
         eventBus: eventBus,
+        goalValue: goal,
         agentConfigs: new Set<AgentConfig>(agents),
     });
     sessions.set(sessionId, agent);
@@ -195,6 +213,41 @@ app.get('/test/:key', async (req: Request, res: Response) => {
         res.status(500).send('Failed to start session.');
     }
 });
+
+// Endpoint to receive and encrypt API key
+app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
+    try {
+        const { apiKey } = req.body;
+        const { sessionId } = req.params;
+
+        if (!apiKey) {
+            res.status(400).json({ error: 'API key is required' });
+            return;
+        }
+
+        if (!sessionId) {
+            res.status(400).json({ error: 'Session ID is required' });
+            return;
+        }
+
+        const encryptedData = encrypt(apiKey);
+
+        // Store encrypted key mapped to sessionId
+        storeSessionApiKey(sessionId, encryptedData);
+
+        res.json({
+            success: true,
+            message: 'API key stored securely',
+            sessionId
+        });
+
+    } catch (error) {
+        console.error('❌ Error storing API key:', error);
+        res.status(500).json({ error: 'Failed to store API key' });
+    }
+});
+
+
 
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);

@@ -9,9 +9,9 @@ import { performance } from 'perf_hooks';
 const thinkerState = State.DECIDE
 
 export class DefaultThinker extends Thinker {
-    constructor(private vision: VisionModel, private llm: LLMCommander) {
+    constructor(private vision: VisionModel, private llm: LLMCommander, private sessionId: string) {
         super();
-        this.modelClient = new GeminiLLm();
+        this.modelClient = new GeminiLLm(sessionId);
         this.vision.loadModel(this.modelClient);
         this.llm.loadModel(this.modelClient);
     }

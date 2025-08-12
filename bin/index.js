@@ -54,19 +54,32 @@ function readConfigFile(configPath) {
 }
 
 // Function to make HTTP request
-async function makeRequest(url, endpoint) {
+async function makeRequest(url, endpoint, options = {}) {
   try {
     const fetch = (await import('node-fetch')).default;
-    const response = await fetch(`${url}${endpoint}`);
+    
+    // Default options for POST requests
+    const defaultOptions = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+      },
+      ...options
+    };
+    
+    const response = await fetch(`${url}${endpoint}`, defaultOptions);
 
     if (response.ok) {
       console.log(`✅ Successfully called ${endpoint}`);
       return await response.text();
     } else {
       console.error(`❌ Failed to call ${endpoint}: ${response.status} ${response.statusText}`);
+      return null; // or throw an error
     }
   } catch (error) {
     console.error(`❌ Error calling ${endpoint}: ${error.message}`);
+    return null; // or throw an error
   }
 }
 
@@ -101,6 +114,7 @@ const subcommand = args._[0];
 
 const PROJECT_ROOT = process.cwd();
 const LOG_DIR = path.join(PROJECT_ROOT, 'logs');
+const pidFile = path.join(LOG_DIR, 'daemon.pid');
 
 const logFiles = {
   logs: 'agent.log',
@@ -108,6 +122,11 @@ const logFiles = {
   'crawl-map': 'crawl_map.md',
   'navigation-tree': 'navigation_tree.md'
 };
+
+if (subcommand === 'logs-dir') {
+  console.log(`📂 Logs directory: ${LOG_DIR}`);
+  process.exit(0);
+}
 
 if (subcommand && logFiles[subcommand]) {
   const filePath = path.join(LOG_DIR, logFiles[subcommand]);
@@ -129,7 +148,7 @@ if (subcommand && logFiles[subcommand]) {
   process.exit(0);
 }
 
-if (subcommand && !logFiles[subcommand] && subcommand !== 'run') {
+if (subcommand && !logFiles[subcommand] && subcommand !== 'run' && subcommand !== 'stop') {
   console.error(`❌ Unknown subcommand: "${subcommand}"`);
   process.exit(1);
 }
@@ -147,6 +166,7 @@ const url = args.url || config.url || '';
 const websocket = args.websocket || config.websocket || 3002;
 const testMode = args['test-mode'] || config['test-mode'] || false;
 const autoStart = args['auto-start'] || config['auto-start'] || true;
+const daemonMode = args.daemon || args.d || false;
 
 if (args.help || args.h) {
   console.log(`
@@ -160,8 +180,9 @@ if (args.help || args.h) {
       --port           Server port (default: 3001)
       --websocket      WebSocket port (default: 3002)
       --test-mode      Enable test mode (default: false)
-      --auto-start     Automatically start the agent (default: false)
+      --auto-start     Automatically start the agent (default: true)
       --help, -h       Show this help message
+      --daemon, -d     Run in daemon mode
 
     Logs:
       agent-run logs            Show main agent log
@@ -169,6 +190,8 @@ if (args.help || args.h) {
       agent-run mission         Show mission log in markdown
       agent-run crawl-map       Show crawl map in markdown
       agent-run navigation-tree  Show navigation tree in markdown
+      agent-run logs-dir         Show logs directory
+      agent-run stop            Stop all agents
 
     Config File Example:
       {
@@ -192,6 +215,30 @@ if (port === websocket) {
   console.error('❌ Port and WebSocket port cannot be the same.');
   process.exit(1);
 }
+
+if (subcommand === 'stop') {
+  console.log('⏳ Stopping agent...');
+  const isReady = await waitForServer(port);
+  if (!isReady) {
+    console.error('❌ Agent is not running.');
+    process.exit(1);
+  }
+  await fetch(`http://localhost:${port}/stop`).catch(() => { });
+  if (fs.existsSync(pidFile)) {
+    const pid = fs.readFileSync(pidFile, 'utf8').trim();
+    try {
+      process.kill(pid);
+      console.log(`✅ Killed daemon process (PID: ${pid})`);
+      fs.unlinkSync(pidFile);
+    } catch {
+      console.error(`❌ Failed to kill PID ${pid} (may not exist)`);
+    }
+  } else {
+    console.log('ℹ️ No daemon PID file found.');
+  }
+  process.exit(0);
+}
+
 
 // Validate required arguments
 if (!goal) {
@@ -246,10 +293,7 @@ console.log(`✅ Ports ${port} and ${websocket} are available.`);
 // Set environment variables
 process.env.PORT = String(port);
 process.env.API_KEY = key;
-process.env.USER_GOAL = goal;
-process.env.BASE_URL = url;
 process.env.WEBSOCKET_PORT = String(websocket);
-process.env.TEST_MODE = String(testMode);
 
 console.log('🚀 Starting server...');
 console.log(`✅ Agent server running on http://localhost:${port}`);
@@ -272,7 +316,21 @@ if (!autoStart) {
   }
 }
 
-await import('../dist/lib/server.js');
+if (daemonMode) {
+  console.log('🛠 Starting in daemon mode...');
+
+  const logDir = path.join(PROJECT_ROOT, 'logs');
+  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir);
+
+  const pidFile = path.join(logDir, 'daemon.pid');
+  execSync(
+    `node ${path.join(PROJECT_ROOT, 'dist', 'lib', 'server.js')} > ${path.join(LOG_DIR, 'daemon.log')} 2>&1 & echo $! > ${pidFile}`
+  );
+  console.log(`✅ Daemon started (PID saved to ${pidFile})`);
+  process.exit(0);
+} else {
+  await import('../dist/lib/server.js');
+}
 
 // Auto-start functionality
 if (autoStart) {
@@ -289,7 +347,10 @@ if (autoStart) {
     // Wait a bit more to ensure server is fully initialized
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    await makeRequest(baseUrl, endpoint);
+    const body = JSON.stringify({ goal: goal, url: url });
+    const headers = { 'Content-Type': 'application/json' };
+
+    await makeRequest(baseUrl, endpoint, { body, headers });
   } else {
     console.error('❌ Server failed to start within expected time.');
     process.exit(1);

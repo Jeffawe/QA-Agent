@@ -30,6 +30,9 @@ export default class StagehandSession extends Session<Page> {
                 modelClientOptions: {
                     apiKey: process.env.API_KEY,
                 },
+                localBrowserLaunchOptions: {
+                    headless: false
+                }
             });
         } catch (error) {
             LogManager.error(`Failed to initialize Stagehand: ${(error as Error).message}`, State.ERROR, true);

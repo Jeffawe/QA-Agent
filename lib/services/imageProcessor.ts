@@ -1,10 +1,11 @@
 import { createCanvas, loadImage, CanvasRenderingContext2D, Canvas } from '@napi-rs/canvas'
 import fs from 'fs';
 import path from 'path';
-import { InteractiveElement, State } from '../types.js';
+import { InteractiveElement } from '../types.js';
 import crypto from 'crypto';
 
 type HashAlgorithm = 'md5' | 'sha1' | 'sha256';
+const imageDir = 'images';
 
 interface ComparisonResult {
     similar: boolean;
@@ -36,6 +37,20 @@ const DEFAULT_OPTIONS: AnnotationOptions = {
     labelPosition: 'top',
     maxLabelLength: 20
 };
+
+export function storeImage(imagePath: string, outputDir: string = imageDir): string {
+    const fileName = path.basename(imagePath);
+    const outputPath = path.join(outputDir, fileName);
+    fs.copyFileSync(imagePath, outputPath);
+    return outputPath;
+}
+
+export function clearAllImages(outputDir: string = imageDir): void {
+    fs.readdirSync(outputDir).forEach(file => {
+        const filePath = path.join(outputDir, file);
+        fs.unlinkSync(filePath);
+    });
+}
 
 export async function annotateImage(
     imagePath: string,

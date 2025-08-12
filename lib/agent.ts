@@ -11,6 +11,7 @@ import { Agent } from "./utility/abstract.js";
 import { CrawlMap } from './utility/crawlMap.js';
 import StagehandSession from './browserAuto/stagehandSession.js';
 import PlaywrightSession from './browserAuto/playWrightSession.js';
+import { clearAllImages } from './services/imageProcessor.js';
 
 export interface AgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
   name: string;
@@ -26,6 +27,7 @@ export interface AgentDependencies {
   thinker?: Thinker;
   actionService?: ActionService;
   eventBus: EventBus;
+  goalValue: string;
   canvasSelector?: string;
   agentConfigs: Set<AgentConfig>;
 }
@@ -53,21 +55,30 @@ export default class BossAgent {
   public actionServices: Map<string, ActionService> = new Map();
   public sessionId: string = "1";
   public state: State = State.START;
+  public goal: string = "";
 
   constructor({
     sessionId,
     thinker,
     eventBus,
+    goalValue,
     agentConfigs
   }: {
     sessionId: string;
     thinker?: Thinker;
     eventBus: EventBus;
+    goalValue: string;
     agentConfigs: Set<AgentConfig>;
   }) {
     this.sessionId = sessionId ?? "1";
-    this.thinker = thinker ?? new CombinedThinker();
+    try {
+      this.thinker = thinker ?? new CombinedThinker(sessionId);
+    } catch (error) {
+      LogManager.error(`Failed to create thinker: ${(error as Error).message}`, State.ERROR, true);
+      throw error;
+    }
     this.bus = eventBus;
+    this.goal = goalValue;
     this.agentRegistry = new AgentRegistry();
 
     this.initializeAgents(sessionId, agentConfigs);
@@ -163,14 +174,14 @@ export default class BossAgent {
       return;
     }
 
-    if (!process.env.USER_GOAL) {
-      LogManager.error("USER_GOAL environment variable is not set", State.ERROR, true);
+    if (!this.goal) {
+      LogManager.error("Goal is not set", State.ERROR, true);
       return;
     }
 
     // Set base values for all agents
     for (const agent of agents) {
-      agent.setBaseValues(url, process.env.USER_GOAL);
+      agent.setBaseValues(url, this.goal);
     }
 
     while (agents.some(a => !a.isDone())) {
@@ -183,6 +194,7 @@ export default class BossAgent {
 
     LogManager.log("Done", State.DONE, true);
     await this.stop();
+    this.bus.emit({ ts: Date.now(), type: "done", message: "Done" });
   }
 
   public async stop(): Promise<boolean> {
@@ -199,6 +211,7 @@ export default class BossAgent {
         await session.close();
       }
 
+      clearAllImages();
       LogManager.log("All Services have been stopped", State.DONE, true);
       return true;
     } catch (err) {

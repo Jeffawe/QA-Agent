@@ -13,7 +13,8 @@ export type Event =
     | { ts:number; type:'crawl_map_updated'; page: PageDetails }
     | { ts:number; type:'new_log'; message: string; }
     | { ts:number; type:'new_page_visited'; oldPage: string; newPage: string; page: Page }
-    | { ts:number; type:'stop'; message: string; };
+    | { ts:number; type:'stop'; message: string; }
+    | { ts:number; type:'done'; message: string; };
 
 /** Interface the Agent depends on */
 export interface EventBus {

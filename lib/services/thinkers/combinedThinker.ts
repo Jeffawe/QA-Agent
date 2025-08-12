@@ -3,12 +3,12 @@ import { LogManager } from "../../utility/logManager.js";
 import { GeminiLLm } from "../../models/generate/gemini.js";
 import { GetNextActionContext, State, ThinkResult, ImageData, AnalysisResponse, NamespacedState, Namespaces } from "../../types.js";
 
-const thinkerState: NamespacedState = "tester.DECIDE";
+const thinkerState = State.DECIDE
 
 export class CombinedThinker extends Thinker {
-    constructor() {
+    constructor(private sessionId: string) {
         super();
-        this.modelClient = new GeminiLLm();
+        this.modelClient = new GeminiLLm(sessionId);
     }
 
     async think(nextActionContext: GetNextActionContext, imageData: ImageData, extraInfo: string, agentName: Namespaces, recurrent: boolean = false): Promise<ThinkResult> {

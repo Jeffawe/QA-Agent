@@ -3,15 +3,15 @@ import { LogManager } from "../utility/logManager.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { InteractiveElement, LinkInfo, State } from "../types.js";
-import Tester from "./tester.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
 import ManualTester from "./manualTester.js";
 import playwrightSession from "../browserAuto/playWrightSession.js";
+import Analyzer from "./analyzer.js";
 
 export class Crawler extends Agent {
     private isCurrentPageVisited = false;
-    private tester: Tester;
+    private tester: Analyzer;
     private manualTester: ManualTester;
 
     private playwrightSession: playwrightSession;
@@ -20,7 +20,7 @@ export class Crawler extends Agent {
         super("crawler", dependencies);
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
-        this.tester = this.requireAgent<Tester>("tester");
+        this.tester = this.requireAgent<Analyzer>("analyzer");
         this.manualTester = this.requireAgent<ManualTester>("manualtester");
 
         this.playwrightSession = this.session as playwrightSession;

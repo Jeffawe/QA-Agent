@@ -3,9 +3,10 @@ import { Crawler } from "./agent/crawler.js";
 import { GoalAgent } from "./agent/goalIntelliAgent.js";
 import ManualTester from "./agent/manualTester.js";
 import PlannerAgent from "./agent/plannerAgent.js";
-import Tester from "./agent/tester.js";
+import Tester from "./agent/analyzer.js";
 import { pipeline } from '@xenova/transformers';
 import { ExtractorOptions } from "./types.js";
+import Analyzer from "./agent/analyzer.js";
 // Ensure ExtractorOptions uses: pooling: "mean" | "cls" | "none"
 
 export const allAgents: AgentConfig[] = [
@@ -18,7 +19,7 @@ export const allAgents: AgentConfig[] = [
     },
     {
         name: "tester",
-        agentClass: Tester,
+        agentClass: Analyzer,
         sessionType: "playwright",
         dependent: true, // Waits to be triggered by another agent
     },

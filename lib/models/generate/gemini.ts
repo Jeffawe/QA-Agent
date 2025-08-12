@@ -1,4 +1,4 @@
-import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genai";
+import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genAI";
 import dotenv from 'dotenv';
 import { LLM } from "../../utility/abstract.js";
 import { Action, AnalysisResponse, Namespaces, State } from "../../types.js";
@@ -8,30 +8,44 @@ import { getSystemPrompt, getActionPrompt, STOP_LEVEL_ERRORS } from "./prompts.j
 import { eventBus } from "../../services/events/eventBus.js";
 import { LogManager } from "../../utility/logManager.js";
 import { generateContent } from "../../externalCall.js";
+import { getApiKeyForAgent } from "../../apiMemory.js";
 
 dotenv.config();
 
-let genAi: GoogleGenAI | null = null;
-if (!process.env.API_KEY?.startsWith('TEST')) {
-    try {
-        genAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    } catch (err) {
-        LogManager.error(`Failed to create GoogleGenAI instance: ${err}`, State.ERROR, true);
-
-        // Emit a stop event as the agent cannot function without the LLM
-        eventBus.emit({
-            ts: Date.now(),
-            type: "stop",
-            message: `Failed to generate multimodal action: ${err}`,
-        });
-
-        genAi = null;
-    }
-}
-
 export class GeminiLLm extends LLM {
+    private genAI: GoogleGenAI | null = null;
+    private sessionId: string;
+    private apiKey: string | null = null;
+
+    constructor(sessionId: string) {
+        super();
+        this.sessionId = sessionId;
+        this.apiKey = getApiKeyForAgent(sessionId) ?? process.env.API_KEY;
+        if (!this.apiKey) {
+            LogManager.error('API_KEY is not set. Please set the API_KEY', State.ERROR, true);
+            throw new Error('API_KEY is not set. Please set the API_KEY');
+        }
+
+        if (!this.apiKey?.startsWith('TEST')) {
+            try {
+                this.genAI = new GoogleGenAI({ apiKey: this.apiKey });
+            } catch (err) {
+                LogManager.error(`Failed to create Googlethis.genAI instance: ${err}`, State.ERROR, true);
+
+                // Emit a stop event as the agent cannot function without the LLM
+                eventBus.emit({
+                    ts: Date.now(),
+                    type: "stop",
+                    message: `Failed to generate multimodal action: ${err}`,
+                });
+
+                this.genAI = null;
+            }
+        }
+    }
+
     async generateTextResponse(prompt: string): Promise<Action> {
-        const response = await genAi?.models.generateContent({
+        const response = await this.genAI?.models.generateContent({
             model: "gemini-2.5-flash",
             contents: [
                 { text: prompt }
@@ -77,7 +91,7 @@ export class GeminiLLm extends LLM {
             { text: prompt },
         ];
 
-        const response = await genAi?.models.generateContent({
+        const response = await this.genAI?.models.generateContent({
             model: "gemini-2.5-flash",
             contents: contents,
         });
@@ -102,12 +116,12 @@ export class GeminiLLm extends LLM {
             const base64 = fs.readFileSync(imagePath).toString("base64");
             let response = null;
 
-            if (!genAi) {
+            if (!this.genAI) {
                 throw new Error("Gemini API client cannot be initialized. Please check your API key.");
             }
 
             try {
-                if (process.env.API_KEY?.startsWith('TEST')) {
+                if (this.apiKey?.startsWith('TEST')) {
                     try {
                         response = await generateContent({
                             prompt,
@@ -120,7 +134,7 @@ export class GeminiLLm extends LLM {
                         throw err;
                     }
                 } else {
-                    const image = await genAi?.files.upload({
+                    const image = await this.genAI?.files.upload({
                         file: imagePath,
                     });
 
@@ -128,7 +142,7 @@ export class GeminiLLm extends LLM {
                         throw new Error("Failed to upload image to Gemini");
                     }
 
-                    response = await genAi?.models.generateContent({
+                    response = await this.genAI?.models.generateContent({
                         model: "gemini-2.5-flash",
                         contents: [
                             createUserContent([

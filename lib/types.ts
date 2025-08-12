@@ -4,6 +4,7 @@ export interface Action {
     reason: string;
     newGoal?: string;
     nextLink?: string;
+    confidence?: number; // Confidence level of the action
 }
 
 export interface ActionResult {
@@ -29,11 +30,25 @@ export interface Analysis {
     notes: string;
 }
 
+export interface TestResult {
+    success: boolean;
+    message: string;
+}
+
 export interface AnalysisResponse {
     analysis: Analysis;
-    action: Action; // This action is for puppeteer sessions
+    action: Action; // This action is for playwright sessions
     pageDetails?: LLMPageResult;
     nextResponse?: StagehandResponse; // This is for stagehand sessions
+    testResult?: TestResult
+}
+
+export interface ThinkResult {
+    action: Action;
+    nextResponse?: StagehandResponse; // This is for stagehand sessions
+    analysis?: Analysis;
+    pageDetails?: LLMPageResult;
+    testResult?: TestResult
 }
 
 export interface StagehandResponse {
@@ -66,14 +81,6 @@ interface LLMPageResult {
 export interface ExtractorOptions {
     pooling: "mean" | "cls" | "none";
     normalize: boolean;
-}
-
-export interface ThinkResult {
-    action: Action;
-    nextResponse?: StagehandResponse; // This is for stagehand sessions
-    confidence?: number; // Confidence level of the action
-    analysis?: Analysis;
-    pageDetails?: LLMPageResult;
 }
 
 export interface Box {
@@ -121,7 +128,7 @@ export enum State {
 }
 
 type StateValue = `${State}`;
-export type Namespaces = "crawler" | "tester" | "goalagent" | "planneragent" | "manualtester"; // add more if needed
+export type Namespaces = "crawler" | "tester" | "analyzer" | "goalagent" | "planneragent" | "manualtester"; // add more if needed
 
 export type NamespacedState = `${Namespaces}.${StateValue}`;
 
@@ -155,8 +162,8 @@ export interface PageDetails {
 }
 
 export interface LinkInfo {
-  text: string;
-  selector: string;
-  href: string;
-  visited: boolean;
+    text: string;
+    selector: string;
+    href: string;
+    visited: boolean;
 }

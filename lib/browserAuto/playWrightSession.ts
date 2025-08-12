@@ -1,20 +1,23 @@
-import { chromium, Browser, Page, Frame } from 'playwright';
+import { Browser, Page, Frame, BrowserContext } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import { ClicKType, Rect, State } from '../types.js';
 import { LogManager } from '../utility/logManager.js';
 import { Session } from '../utility/abstract.js';
+import { getBrowser } from '../browserManager.js';
+import { storeImage } from '../services/imageProcessor.js';
 
 export default class PlaywrightSession extends Session<Page> {
   private browser: Browser | null = null;
   public rect: Rect | null = null;
   public frame: Frame | null = null;
+  private context: BrowserContext | null = null;
 
   async start(url: string): Promise<boolean> {
     try {
-      this.browser = await chromium.launch({ headless: false });
-      const context = await this.browser.newContext();
-      this.page = await context.newPage();
+      const browser = await getBrowser();
+      this.context = await browser.newContext();
+      this.page = await this.context.newPage();
       await this.page.goto(url, { waitUntil: 'networkidle' });
 
       console.log('Game should be running now!');
@@ -32,6 +35,7 @@ export default class PlaywrightSession extends Session<Page> {
       }
 
       const filename = path.join(folderName, basicFilename);
+
       if (!this.page) throw new Error("Page not initialized");
 
       await this.page.screenshot({ path: filename, fullPage: true });
@@ -188,9 +192,9 @@ export default class PlaywrightSession extends Session<Page> {
     } catch (e) { errors.push(e as Error); this.page = null; }
 
     try {
-      if (this.browser) {
-        await this.browser.close();
-        this.browser = null;
+      if (this.context) {
+        await this.context.close(); // closes only this session’s context
+        this.context = null;
       }
     } catch (e) { errors.push(e as Error); this.browser = null; }
 
