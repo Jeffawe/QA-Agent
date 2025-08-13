@@ -47,6 +47,10 @@ app.get('/', (req: Request, res: Response) => {
     res.send('Welcome to QA-Agent! Go to https://www.qa-agent.site/ for more info.');
 });
 
+app.get('/health', (req: Request, res: Response) => {
+    res.send('OK');
+});
+
 app.get('/start', (req: Request, res: Response) => {
     try {
         if (sessions.size >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
