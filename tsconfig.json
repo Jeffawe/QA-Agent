@@ -7,7 +7,7 @@
 
     /* Modules */
     "module": "es2020",                               
-    "rootDir": "./",                                 
+    "rootDir": "./lib",                                 
     "moduleResolution": "node10",                    
     "esModuleInterop": true,                           
     "forceConsistentCasingInFileNames": true, 
