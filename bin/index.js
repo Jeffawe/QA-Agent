@@ -325,12 +325,12 @@ if (daemonMode) {
 
   const pidFile = path.join(logDir, 'daemon.pid');
   execSync(
-    `node ${path.join(PROJECT_ROOT, 'dist', 'lib', 'server.js')} > ${path.join(LOG_DIR, 'daemon.log')} 2>&1 & echo $! > ${pidFile}`
+    `node ${path.join(PROJECT_ROOT, 'dist', 'server.js')} > ${path.join(LOG_DIR, 'daemon.log')} 2>&1 & echo $! > ${pidFile}`
   );
   console.log(`✅ Daemon started (PID saved to ${pidFile})`);
   process.exit(0);
 } else {
-  await import('../dist/lib/server.js');
+  await import('../dist/server.js');
 }
 
 // Auto-start functionality
