@@ -45,7 +45,7 @@ export class WebSocketEventBridge {
         console.log(`🚀 WebSocket server started on port ${port}`);
 
         // Handle new client connections
-        this.wss.on('connection', (ws) => {
+        this.wss.on('connection', (ws: WebSocket) => {
             console.log('📞 New frontend client connected');
             this.clients.add(ws);
 
@@ -67,7 +67,7 @@ export class WebSocketEventBridge {
                 this.clients.delete(ws);
             });
 
-            ws.on('error', (error) => {
+            ws.on('error', (error: Error) => {
                 console.error('❌ WebSocket error:', error);
                 this.clients.delete(ws);
             });
