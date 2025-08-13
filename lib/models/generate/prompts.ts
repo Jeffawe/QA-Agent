@@ -1,4 +1,79 @@
 import { Namespaces } from "../../types";
+import { z } from "zod";
+
+export const systemPromptSchema = z.object({
+    analysis: z.object({
+        bugs: z.array(
+            z.object({
+                description: z.string().describe("Description of the bug found"),
+                selector: z.string().describe("CSS selector identifying the problematic element"),
+                severity: z.enum(["low", "medium", "high"]).describe("Severity level of the bug")
+            })
+        ).describe("Array of bugs found on the page"),
+
+        ui_issues: z.array(
+            z.object({
+                description: z.string().describe("Description of the UI issue"),
+                selector: z.string().describe("CSS selector identifying the UI element with issues"),
+                severity: z.enum(["low", "medium", "high"]).describe("Severity level of the UI issue")
+            })
+        ).describe("Array of UI issues found on the page"),
+
+        notes: z.string().describe("Any extra observations about this page")
+    }).describe("Analysis of the current page"),
+
+    action: z.object({
+        step: z.string().describe("The command name to execute"),
+        args: z.array(z.any()).describe("Arguments for the command"),
+        reason: z.string().describe("Why this command keeps the crawl progressing (Make it short)"),
+        newGoal: z.string().describe("New mission goal for the next step"),
+        nextLink: z.string().optional().describe("The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)")
+    }).describe("Action to take next"),
+
+    pageDetails: z.object({
+        pageName: z.string().describe("Name of the page you are currently on"),
+        description: z.string().describe("Short description of the page you are currently on")
+    }).describe("Details about the current page")
+});
+
+export const actionSchema = z.object({
+    step: z.string().describe("The command name to execute"),
+    args: z.array(z.any()).describe("Arguments for the command"),
+    reason: z.string().describe("Why this command keeps the crawl progressing (Make it short)"),
+    newGoal: z.string().describe("New mission goal for the next step"),
+    nextLink: z.string().optional().describe("The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)")
+});
+
+const goalSchema = z.object({
+    analysis: z.object({
+        bugs: z.array(
+            z.object({
+                description: z.string().describe("Description of the bug found (e.g. 'Login button unresponsive')"),
+                selector: z.string().describe("CSS selector identifying the problematic element (e.g. '#btn-login')"),
+                severity: z.enum(["low", "medium", "high"]).describe("Severity level of the bug")
+            })
+        ).describe("Array of bugs found on the page"),
+
+        ui_issues: z.array(
+            z.object({
+                description: z.string().describe("Description of the UI issue (e.g. 'Text too small on mobile')"),
+                selector: z.string().describe("CSS selector identifying the UI element with issues (e.g. '.footer-note')"),
+                severity: z.enum(["low", "medium", "high"]).describe("Severity level of the UI issue")
+            })
+        ).describe("Array of UI issues found on the page"),
+
+        notes: z.string().describe("Any extra observations about this page (e.g. 'This page appears to be a login form using React. No errors in console.')")
+    }).describe("Analysis of the current page"),
+
+    action: z.object({
+        step: z.string().describe("Action to perform - must match one of the given possibleLabels exactly (if you wish the system to wait for a period of time, just put 'wait' here)"),
+        args: z.array(z.any()).describe("Arguments for the action, e.g. time to wait in milliseconds [5000]"),
+        reason: z.string().describe("The reason for this action"),
+        progressDescription: z.string().describe("Description of current progress (e.g. 'Filled login form and submitting credentials')"),
+        newGoal: z.string().describe("New mission goal for the next step (e.g. 'Wait for dashboard to load after login')"),
+        hasAchievedGoal: z.boolean().describe("Whether the current goal has been achieved")
+    }).describe("Action to take next")
+});
 
 const systemPrompt = String.raw`
             You are a website-auditing autonomous agent.
@@ -33,32 +108,7 @@ const systemPrompt = String.raw`
 
             ▸ RESPONSE FORMAT  
             Return **exactly one** JSON object, no commentary, in this schema:
-
-            \`\`\`json
-            {
-                "analysis": {
-                    "bugs": [
-                        { "description": "...", "selector": "#btn-signup", "severity": "high" }
-                    ],
-                    "ui_issues": [
-                        { "description": "...", "selector": ".nav", "severity": "medium" }
-                    ],
-                    "notes": "Any extra observations about this page"
-                },
-                "action": {
-                    "step": "command_name",
-                    "args": [/* arguments */],
-                    "reason": "Why this command keeps the crawl progressing (Make it short)",
-                    "newGoal": "New mission goal for the next step",
-                    "nextLink": "The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)"
-                },
-                "pageDetails": {
-                    pageName: "Name of the page you are currently on",
-                    description: "Short description of the page you are currently on"
-                }
-            }
-            \`\`\`
-            `;
+        `;
 
 
 const systemActionPrompt = String.raw`
@@ -88,17 +138,7 @@ const systemActionPrompt = String.raw`
 
             ▸ RESPONSE FORMAT  
             Return **exactly one** JSON object, no commentary, in this schema:
-
-            \`\`\`json
-            {
-                "step": "command_name",
-                "args": [/* arguments */],
-                "reason": "Why this command keeps the crawl progressing (Make it short)",
-                "newGoal": "New mission goal for the next step",
-                "nextLink": "The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)"
-            }
-            \`\`\`
-            `;
+        `;
 
 
 const systemGoalPrompt = String.raw`
@@ -130,41 +170,21 @@ const systemGoalPrompt = String.raw`
     • Optional validator warnings from the last run (to help you fix mistakes)
 
     ▸ FORMAT (return exactly one JSON object, no commentary)
-    \`\`\`json
-    {
-    "analysis": {
-        "bugs": [
-        { "description": "e.g. Login button unresponsive", "selector": "#btn-login", "severity": "high" }
-        ],
-        "ui_issues": [
-        { "description": "e.g. Text too small on mobile", "selector": ".footer-note", "severity": "medium" }
-        ],
-        "notes": "This page appears to be a login form using React. No errors in console."
-    },
-    "nextResponse": {
-        "action": "Click 'Sign in' button", // must match one of the given possibleLabels exactly (if you wish the system to wait for a period of time. Just put wait here and it'll wait)
-        "arguments": [5000], // args for the action, e.g. time to wait
-        "progressDescription": "Filled login form and submitting credentials",
-        "nextGoal": "Wait for dashboard to load after login",
-        "hasAchievedGoal": false
-    }
-    }
-    \`\`\`
     `;
 
-export const getSystemPrompt = (agentName: Namespaces): string => {
-    if (agentName === "tester") {
-        return systemPrompt;
+export const getSystemPrompt = (agentName: Namespaces, recurrent: boolean): string => {
+    if (agentName === "analyzer") {
+        return recurrent ? systemActionPrompt : systemPrompt;
     } else {
         return systemGoalPrompt;
     }
 }
 
-export const getActionPrompt = (agentName: Namespaces): string => {
-    if (agentName === "tester") {
-        return systemActionPrompt;
+export const getSystemSchema = (agentName: Namespaces, recurrent: boolean) => {
+    if (agentName === "analyzer") {
+        return recurrent ? actionSchema : systemPromptSchema;
     } else {
-        return systemGoalPrompt;
+        return goalSchema;
     }
 }
 

@@ -20,15 +20,39 @@ export default class Tester extends Agent {
         this.playwrightSession = this.session as playwrightSession;
     }
 
+    public enqueue(links: LinkInfo[], visitedPage: boolean = false) {
+        this.step = 0;
+        this.queue = links;
+        this.visitedPage = visitedPage;
+        if (this.state === State.DONE || this.state === State.WAIT) {
+            this.setState(State.START);
+        } else {
+            this.logManager.log("Tester is already running or cannot start up", this.buildState(), true);
+        }
+    }
+
     protected validateSessionType(): void {
-        throw new Error("Method not implemented.");
+        if (!(this.session instanceof playwrightSession)) {
+            this.logManager.error(`Tester requires playwrightSession, got ${this.session.constructor.name}`);
+            this.setState(State.ERROR);
+            throw new Error(`Tester requires playwrightSession, got ${this.session.constructor.name}`);
+        }
+
+        this.playwrightSession = this.session as playwrightSession;
     }
 
     public tick(): Promise<void> {
         throw new Error("Method not implemented.");
     }
 
-    public cleanup(): Promise<void> {
-        throw new Error("Method not implemented.");
+    async cleanup(): Promise<void> {
+        this.nextLink = null;
+        this.queue = [];
+        this.step = 0;
+        this.goal = "Crawl the given page";
+        this.state = State.WAIT;
+        this.lastAction = "";
+        this.visitedPage = false;
+        this.response = "";
     }
 }

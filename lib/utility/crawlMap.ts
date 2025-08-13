@@ -4,9 +4,9 @@
 import { writeFileSync, existsSync } from "node:fs";
 import { join, dirname, isAbsolute } from "node:path";
 import { mkdirSync } from "node:fs";
-import type { PageDetails, LinkInfo } from "../types.js";
+import type { PageDetails } from "../types.js";
 import { LogManager } from "./logManager.js";
-import { eventBus } from "../services/events/eventBus.js";
+import { eventBusManager } from "../services/events/eventBus.js";
 
 export interface Edge { from: string; to: string }
 
@@ -43,8 +43,9 @@ export class CrawlMap {
   static getPages() : PageDetails[] { return Array.from(this.pages.values()); }
 
   /** Register page details (call as soon as PageDetails is ready) */
-  static recordPage(page: PageDetails) {
+  static recordPage(page: PageDetails, sessionId: string) {
     if (!this.initialised) this.init();
+    const eventBus = eventBusManager.getOrCreateBus(sessionId);
     eventBus.emit({ ts: Date.now(), type: "crawl_map_updated", page });
     if (!this.pages.has(page.url ?? page.uniqueID)) {
       this.navOrder.push(page.url ?? page.uniqueID);

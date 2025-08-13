@@ -1,5 +1,4 @@
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { LogManager } from "../utility/logManager.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { InteractiveElement, LinkInfo, State } from "../types.js";
@@ -28,7 +27,7 @@ export class Crawler extends Agent {
 
     protected validateSessionType(): void {
         if (!(this.session instanceof playwrightSession)) {
-            LogManager.error(`Crawler requires playwrightSession, got ${this.session.constructor.name}`);
+            this.logManager.error(`Crawler requires playwrightSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
             throw new Error(`PuppeteerCrawler requires playwrightSession, got ${this.session.constructor.name}`);
         }
@@ -39,12 +38,12 @@ export class Crawler extends Agent {
     async tick(): Promise<void> {
         const page = this.playwrightSession.page;
         if (!page) {
-            LogManager.error("Page not initialized", this.buildState());
+            this.logManager.error("Page not initialized", this.buildState());
             this.setState(State.ERROR);
             return;
         }
         if (!this.baseUrl) {
-            LogManager.error("BaseURL not found", this.buildState());
+            this.logManager.error("BaseURL not found", this.buildState());
             this.setState(State.ERROR);
             return;
         }
@@ -65,7 +64,7 @@ export class Crawler extends Agent {
                     if (!PageMemory.pageExists(this.currentUrl)) {
                         const elements = await getInteractiveElements(this.playwrightSession.page!);
                         const links = this.convertInteractiveElementsToLinks(elements, this.baseUrl!, this.currentUrl);
-                        LogManager.log(`Links detected: ${links.length} are: ${JSON.stringify(links)}`, this.buildState(), false);
+                        this.logManager.log(`Links detected: ${links.length} are: ${JSON.stringify(links)}`, this.buildState(), false);
                         const pageDetails = {
                             title: this.currentUrl,
                             url: this.currentUrl,
@@ -75,7 +74,7 @@ export class Crawler extends Agent {
                             screenshot: '',
                         };
                         PageMemory.addPage2(pageDetails, links);
-                        CrawlMap.recordPage({ ...pageDetails, links });
+                        CrawlMap.recordPage({ ...pageDetails, links }, this.sessionId);
                     }
                     this.setState(State.EVALUATE);
                     break;
@@ -97,12 +96,12 @@ export class Crawler extends Agent {
                 case State.VISIT: {
                     let isVisited = true;
                     const unvisited = PageMemory.getAllUnvisitedLinks(this.currentUrl);
-                    LogManager.log(`Visiting ${unvisited.length} unvisited linkson page ${this.currentUrl}: ${JSON.stringify(unvisited)}`, this.buildState(), false);
+                    this.logManager.log(`Visiting ${unvisited.length} unvisited linkson page ${this.currentUrl}: ${JSON.stringify(unvisited)}`, this.buildState(), false);
                     if (!PageMemory.isPageVisited(this.currentUrl)) {
                         for (const l of unvisited) CrawlMap.addEdge(this.currentUrl!, l.href);
                         PageMemory.markPageVisited(this.currentUrl);
                         isVisited = false;
-                        CrawlMap.recordPage(PageMemory.pages[this.currentUrl]);
+                        CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
                     }
 
                     if (isVisited) {
@@ -117,16 +116,16 @@ export class Crawler extends Agent {
                 }
 
                 case State.WAIT: {
-                    LogManager.log("Waiting for tester to finish", this.buildState(), false);
+                    this.logManager.log("Waiting for tester to finish", this.buildState(), false);
 
                     if (this.isCurrentPageVisited) {
                         if (this.manualTester.isDone()) {
-                            LogManager.log("Manual tester finished", this.buildState(), false);
+                            this.logManager.log("Manual tester finished", this.buildState(), false);
                             this.setState(State.ACT);
                         }
                     } else {
                         if (this.tester.isDone()) {
-                            LogManager.log("Tester finished", this.buildState(), false);
+                            this.logManager.log("Tester finished", this.buildState(), false);
                             this.setState(State.ACT);
                         }
                     }
@@ -140,7 +139,7 @@ export class Crawler extends Agent {
                     if (next) {
                         PageMemory.markLinkVisited(this.currentUrl, next.text || next.href);
                         const finalUrl = page.url();
-                        CrawlMap.recordPage(PageMemory.pages[this.currentUrl]);
+                        CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
                         PageMemory.pushToStack(this.currentUrl);
                         CrawlMap.addEdge(this.currentUrl!, next.href);
 
@@ -148,10 +147,10 @@ export class Crawler extends Agent {
                         this.setState(State.START);
                     } else {
                         // dead-end → backtrack
-                        LogManager.log("Backtracking. No more links", this.buildState(), false);
+                        this.logManager.log("Backtracking. No more links", this.buildState(), false);
                         const back = PageMemory.popFromStack();
                         if (back) {
-                            LogManager.log(`Backtracking to ${back}`, this.buildState(), false);
+                            this.logManager.log(`Backtracking to ${back}`, this.buildState(), false);
                             await page.goto(back, { waitUntil: "networkidle" });
                             this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: back, page: page });
                             this.setState(State.START);
@@ -162,7 +161,7 @@ export class Crawler extends Agent {
 
                     const endTime = performance.now();
                     this.timeTaken = endTime - (this as any).startTime;
-                    LogManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
+                    this.logManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
                     await setTimeout(500);
                     break;
                 }
@@ -173,7 +172,7 @@ export class Crawler extends Agent {
                     break;
             }
         } catch (err) {
-            LogManager.error(`Crawler error on ${this.currentUrl}: ${err}`, this.buildState());
+            this.logManager.error(`Crawler error on ${this.currentUrl}: ${err}`, this.buildState());
             this.setState(State.ERROR);
         }
     }

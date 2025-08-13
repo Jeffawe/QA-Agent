@@ -1,6 +1,5 @@
 import { State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { LogManager } from "../utility/logManager.js";
 import { GoalAgent } from "./goalIntelliAgent.js";
 import { pipeline } from '@xenova/transformers';
 import StagehandSession from "../browserAuto/stagehandSession.js";
@@ -50,7 +49,7 @@ export default class PlannerAgent extends Agent {
 
     protected validateSessionType(): void {
         if (!(this.session instanceof StagehandSession)) {
-            LogManager.error(`PlannerAgent requires PuppeteerSession, got ${this.session.constructor.name}`);
+            this.logManager.error(`PlannerAgent requires PuppeteerSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
             throw new Error(`PlannerAgent requires PuppeteerSession, got ${this.session.constructor.name}`);
         }
@@ -78,7 +77,7 @@ export default class PlannerAgent extends Agent {
                 case State.START:
                     this.setState(State.PLAN);
                     this.goal = this.mainGoal;
-                    LogManager.addMission(this.mainGoal)
+                    this.logManager.addMission(this.mainGoal)
                     break;
 
                 case State.PLAN:
@@ -91,7 +90,7 @@ export default class PlannerAgent extends Agent {
                     break;
 
                 case State.WAIT:
-                    LogManager.log(`PlannerAgent waiting for Goal Agent`, this.buildState(), true);
+                    this.logManager.log(`PlannerAgent waiting for Goal Agent`, this.buildState(), true);
                     if (this.goalAgent.isDone()) {
                         this.setState(State.VALIDATE);
                     }
@@ -112,7 +111,7 @@ export default class PlannerAgent extends Agent {
             }
         }
         catch (e) {
-            LogManager.error(String(e), this.buildState());
+            this.logManager.error(String(e), this.buildState());
             this.setState(State.ERROR);
         }
     }
@@ -134,7 +133,7 @@ export default class PlannerAgent extends Agent {
             const goalProgress = this.goalAgent.progressDescription;
 
             if (!goalProgress) {
-                LogManager.error("Goal progress description is empty.", this.buildState(), true);
+                this.logManager.error("Goal progress description is empty.", this.buildState(), true);
                 this.setState(State.ERROR);
                 return false;
             }
@@ -148,7 +147,7 @@ export default class PlannerAgent extends Agent {
             this.validationHistory.push(metrics);
             this.currentProgress = metrics.overallScore;
 
-            LogManager.log(`Validation Metrics: ${JSON.stringify(metrics)}`, this.buildState(), true);
+            this.logManager.log(`Validation Metrics: ${JSON.stringify(metrics)}`, this.buildState(), true);
 
             // Check if goal is fully achieved
             if (this.isGoalFullyAchieved(metrics)) {
@@ -162,7 +161,7 @@ export default class PlannerAgent extends Agent {
                 this.lastProgress = this.currentProgress;
                 this.warning = "";
                 this.goal = this.goalAgent.goal;
-                LogManager.addSubMission(this.goal);
+                this.logManager.addSubMission(this.goal);
                 return true;
             } else {
                 this.setState(State.PLAN);
@@ -172,7 +171,7 @@ export default class PlannerAgent extends Agent {
                 return false;
             }
         } catch (error) {
-            LogManager.error(`Error validating goal: ${error}`, this.buildState(), true);
+            this.logManager.error(`Error validating goal: ${error}`, this.buildState(), true);
             this.setState(State.ERROR);
             return false;
         }
@@ -225,7 +224,7 @@ export default class PlannerAgent extends Agent {
 
             return positiveScore;
         } catch (error) {
-            LogManager.error(`Intent classification error: ${error}`, this.buildState());
+            this.logManager.error(`Intent classification error: ${error}`, this.buildState());
             return 0.5;
         }
     }
@@ -236,7 +235,7 @@ export default class PlannerAgent extends Agent {
             const pageInfo = await this.stageHandSession.getCurrentPageInfo();
             return `Page title: ${pageInfo.title}. Current URL: ${pageInfo.url}. Page content summary: ${pageInfo.contentSummary}`;
         } catch (error) {
-            LogManager.error(`Error getting page state: ${error}`, this.buildState());
+            this.logManager.error(`Error getting page state: ${error}`, this.buildState());
             return "Unable to determine current page state";
         }
     }

@@ -50,13 +50,13 @@ export class PageMemory {
     }
   }
 
-  static addAnalysis(url: string, analysis: any) {
+  static addAnalysis(url: string, analysis: any, sessionId: string) {
     if (this.pages[url]) {
       this.pages[url].analysis = {
         ...this.pages[url].analysis,
         ...analysis
       };
-      CrawlMap.recordPage(this.pages[url]);
+      CrawlMap.recordPage(this.pages[url], sessionId);
     }
   }
 
@@ -71,8 +71,7 @@ export class PageMemory {
     const link = page.links.find(
       l => l.text === identifier || l.href === identifier
     );
-    if (link){
-      LogManager.log(`Marking link ${link.href} for page ${url} as visited`, 'crawler.ACT', false);
+    if (link) {
       link.visited = true;
     }
   }

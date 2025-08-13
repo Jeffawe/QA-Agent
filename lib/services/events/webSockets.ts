@@ -3,6 +3,7 @@ import { EventBus } from './event.js';
 import { PageDetails } from '../../types.js';
 import { LogManager } from '../../utility/logManager.js';
 import { CrawlMap } from '../../utility/crawlMap.js';
+import { logManagers } from '../memory/logMemory.js';
 
 interface WebSocketData {
     message?: string;
@@ -32,10 +33,12 @@ interface WebSocketMessage {
 export class WebSocketEventBridge {
     private clients: Set<WebSocket>;
     private wss: WebSocketServer;
+    private logManager: LogManager
 
-    constructor(private eventBus: EventBus, port = 3000) {
+    constructor(private eventBus: EventBus, private sessionId: string, port = 3000) {
         this.eventBus = eventBus;
         this.clients = new Set();
+        this.logManager = logManagers.getOrCreateManager(sessionId);
 
         // Create WebSocket server
         this.wss = new WebSocketServer({ port });
@@ -53,7 +56,7 @@ export class WebSocketEventBridge {
             });
 
             this.sendToClient(ws, 'INITIAL_DATA', {
-                messages: LogManager.getLogs(),
+                messages: this.logManager.getLogs(),
                 pages: CrawlMap.getPages(),
                 timestamp: Date.now()
             });

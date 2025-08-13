@@ -1,12 +1,13 @@
 import { State } from "../../types.js";
 import { LogManager } from "../../utility/logManager.js";
 import { EventBus } from "../events/event.js";
+import { logManagers } from "../memory/logMemory.js";
 
 export class LLMUsageValidator {
     private totalPromptTokens = 0;
     private totalRespTokens = 0;
 
-    constructor(private bus: EventBus) {
+    constructor(private bus: EventBus, private sessionId: string) {
         bus.on("llm_call", evt => this.onLLMCall(evt.model_name, evt.promptTokens, evt.respTokens));
     }
 
@@ -17,8 +18,11 @@ export class LLMUsageValidator {
         const totalTokens = promptTokens + respTokens;
         const totalCost = this.estimateCost(promptTokens, respTokens);
 
-        LogManager.log(`[LLMUsage] Prompt: ${promptTokens}, Response: ${respTokens}, Total: ${totalTokens}, Est. Cost: $${totalCost.toFixed(6)}`, State.INFO, false);
-        LogManager.log(`[LLMUsage] Cumulative - Prompt: ${this.totalPromptTokens}, Response: ${this.totalRespTokens}, Total: ${this.totalPromptTokens + this.totalRespTokens}, Est. Cost: $${this.estimateCost(this.totalPromptTokens, this.totalRespTokens).toFixed(6)}`, State.INFO, false);
+        const logManager = logManagers.getOrCreateManager(this.sessionId);
+
+        logManager.updateTokens(totalTokens);
+        logManager.log(`[LLMUsage] Prompt: ${promptTokens}, Response: ${respTokens}, Total: ${totalTokens}, Est. Cost: $${totalCost.toFixed(6)}`, State.INFO, false);
+        logManager.log(`[LLMUsage] Cumulative - Prompt: ${this.totalPromptTokens}, Response: ${this.totalRespTokens}, Total: ${this.totalPromptTokens + this.totalRespTokens}, Est. Cost: $${this.estimateCost(this.totalPromptTokens, this.totalRespTokens).toFixed(6)}`, State.INFO, false);
     }
 
     private estimateCost(promptTokens: number, respTokens: number): number {

@@ -2,9 +2,8 @@ import { ObserveResult, Page, Stagehand } from "@browserbasehq/stagehand";
 import { Session } from "../utility/abstract.js";
 import fs from 'fs';
 import path from 'path';
-import { LogManager } from '../utility/logManager.js';
 import { State } from "../types.js";
-import { eventBus } from "../services/events/eventBus.js";
+import { eventBusManager } from "../services/events/eventBus.js";
 
 export default class StagehandSession extends Session<Page> {
     public stagehand: Stagehand | null;
@@ -15,8 +14,9 @@ export default class StagehandSession extends Session<Page> {
         try {
             if (!process.env.API_KEY || process.env.API_KEY.startsWith('TEST')) {
                 const errorMessage = "API_KEY environment variable is not set or is a test key. Please set a valid API key.";
-                LogManager.error(errorMessage, State.ERROR, true)
-                eventBus.emit({
+                this.logManager.error(errorMessage, State.ERROR, true)
+                const eventBus = eventBusManager.getBusIfExists(sessionId);
+                eventBus?.emit({
                     ts: Date.now(),
                     type: "stop",
                     message: errorMessage
@@ -35,7 +35,7 @@ export default class StagehandSession extends Session<Page> {
                 }
             });
         } catch (error) {
-            LogManager.error(`Failed to initialize Stagehand: ${(error as Error).message}`, State.ERROR, true);
+            this.logManager.error(`Failed to initialize Stagehand: ${(error as Error).message}`, State.ERROR, true);
             this.stagehand = null;
             throw new Error(`Failed to initialize Stagehand: ${(error as Error).message}`);
         }
@@ -64,7 +64,7 @@ export default class StagehandSession extends Session<Page> {
             return true;
         } catch (error) {
             const err = error as Error;
-            LogManager.error(`Failed to start Stagehand session: ${err.message}`);
+            this.logManager.error(`Failed to start Stagehand session: ${err.message}`);
             return false
         }
     }

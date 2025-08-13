@@ -4,7 +4,7 @@ import bodyParser from 'body-parser';
 import { v4 as uuidv4 } from 'uuid';
 
 import BossAgent, { AgentConfig } from './agent.js';
-import { eventBus } from './services/events/eventBus.js';
+import { eventBusManager } from './services/events/eventBus.js';
 
 import { ActionSpamValidator } from './services/validators/actionValidator.js';
 import { ErrorValidator } from './services/validators/errorValidator.js';
@@ -17,6 +17,7 @@ import { getAgents } from './agentConfig.js';
 import StagehandSession from './browserAuto/stagehandSession.js';
 import { encrypt } from './enctyption.js';
 import { storeSessionApiKey } from './apiMemory.js';
+import { logManagers } from './services/memory/logMemory.js';
 
 dotenv.config();
 
@@ -29,16 +30,18 @@ const goal = process.env.USER_GOAL;
 
 let sessions = new Map<string, BossAgent>();
 
-// Validators
-new ActionSpamValidator(eventBus);
-new ErrorValidator(eventBus);
-new LLMUsageValidator(eventBus);
-
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-// Setup WebSockets
-new WebSocketEventBridge(eventBus, WebSocket_PORT);
+const createValidators = (sessionId: string) => {
+    const eventBus = eventBusManager.getOrCreateBus(sessionId);
+
+    new ActionSpamValidator(eventBus);
+    new ErrorValidator(eventBus, sessionId);
+    new LLMUsageValidator(eventBus, sessionId);
+
+    new WebSocketEventBridge(eventBus, sessionId, WebSocket_PORT);
+}
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Welcome to QA-Agent! Go to https://www.qa-agent.site/ for more info.');
@@ -63,21 +66,37 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
     const { goal, url } = req.body;
     const sessionId = req.params.sessionId;
     if (sessions.has(sessionId)) {
-        LogManager.error('Session already started.', State.ERROR, true);
+        console.log('Session already started.');
         res.status(400).send('Session already started.');
         return;
     }
 
     if (!goal) {
-        LogManager.error('USER_GOAL is not set. Please set the USER_GOAL environment variable.', State.ERROR, true);
+        console.log('USER_GOAL is not set. Please set the USER_GOAL environment variable.');
         res.status(500).send('USER_GOAL is not set. Please set the USER_GOAL environment variable.');
         return;
     }
 
+    const sessionEventBus = eventBusManager.getOrCreateBus(sessionId);
+    const logManager = logManagers.getOrCreateManager(sessionId);
+
+    const stopHandler = async (evt: any) => {
+        if (evt.sessionId === sessionId) {
+            sessions.delete(sessionId);
+            logManager.log(`Session ${sessionId} stopped because of ${evt.message}`, State.INFO, true);
+            // Remove this specific listener
+            sessionEventBus.off('stop', stopHandler);
+        }
+    };
+
+    sessionEventBus.on('stop', stopHandler);
+
+    createValidators(sessionId);
+
     const agents = await getAgents(goal);
     const agent = new BossAgent({
         sessionId: sessionId,
-        eventBus: eventBus,
+        eventBus: sessionEventBus,
         goalValue: goal,
         agentConfigs: new Set<AgentConfig>(agents),
     });
@@ -86,14 +105,14 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
     if (process.env.API_KEY?.startsWith('TEST')) {
         const success = setAPIKey(process.env.API_KEY);
         if (!success) {
-            LogManager.error('Failed to set API key.', State.ERROR, true);
+            logManager.error('Failed to set API key.', State.ERROR, true);
             res.status(500).send('Failed to set API key.');
             return;
         }
     }
 
     if (!process.env.API_KEY) {
-        LogManager.error('API key is not set. Please set the API_KEY environment variable.', State.ERROR, true);
+        logManager.error('API key is not set. Please set the API_KEY environment variable.', State.ERROR, true);
         res.status(500).send('API key is not set. Please set the API_KEY environment variable.');
         return;
     }
@@ -133,7 +152,7 @@ app.get('/session-test', async (req: Request, res: Response) => {
 app.get('/stop/:sessionId', async (req: Request, res: Response) => {
     try {
         if (!sessions.has(req.params.sessionId)) {
-            LogManager.error('Session not found.', State.ERROR, true);
+            console.log('Session not found.');
             res.status(404).send('Session not found.');
             return;
         }
@@ -147,7 +166,7 @@ app.get('/stop/:sessionId', async (req: Request, res: Response) => {
         console.log(`Session ${req.params.sessionId} stopped successfully.`);
         res.send('Session stopped successfully!');
     } catch (error) {
-        LogManager.error('Error stopping session: error', State.ERROR, true);
+        console.error('Error stopping session:', error);
         res.status(500).send('Failed to stop session.');
     }
 });
@@ -155,7 +174,7 @@ app.get('/stop/:sessionId', async (req: Request, res: Response) => {
 app.get('/stop', async (req: Request, res: Response) => {
     try {
         if (sessions.size === 0) {
-            LogManager.error('No active sessions to stop.', State.ERROR, true);
+            console.log('No active sessions to stop.');
             res.status(404).send('No active sessions to stop.');
             return;
         }
@@ -163,11 +182,13 @@ app.get('/stop', async (req: Request, res: Response) => {
             await agent.stop();
         }
         sessions.clear();
+        eventBusManager.clear();
+
         console.log('All sessions stopped successfully.');
         res.send('All sessions stopped successfully!');
         process.exit(0);
     } catch (error) {
-        LogManager.error('Error stopping sessions: error', State.ERROR, true);
+        console.error('Error stopping sessions:', error);
         res.status(500).send('Failed to stop sessions.');
         process.exit(1);
     }
@@ -178,13 +199,29 @@ app.post('/test/:key', async (req: Request, res: Response) => {
     const key = req.params.key;
     const sessionId = "test_" + key;
     if (sessions.has(sessionId)) {
-        LogManager.error('Test Session already started.', State.ERROR, true);
+        console.log('Test Session already started.');
         res.status(400).send('Test Session already started.');
         return;
     }
 
+    const sessionEventBus = eventBusManager.getOrCreateBus(sessionId);
+    const logManager = logManagers.getOrCreateManager(sessionId);
+
+    const stopHandler = async (evt: any) => {
+        if (evt.sessionId === sessionId) {
+            sessions.delete(sessionId);
+            logManager.log(`Session ${sessionId} stopped because of ${evt.message}`, State.INFO, true);
+            // Remove this specific listener
+            sessionEventBus.off('stop', stopHandler);
+        }
+    };
+
+    sessionEventBus.on('stop', stopHandler);
+
+    createValidators(sessionId);
+
     if (!goal) {
-        LogManager.error('USER_GOAL is not set. Please set the USER_GOAL environment variable.', State.ERROR, true);
+        logManager.error('USER_GOAL is not set. Please set the USER_GOAL environment variable.', State.ERROR, true);
         res.status(500).send('USER_GOAL is not set. Please set the USER_GOAL environment variable.');
         return;
     }
@@ -192,18 +229,11 @@ app.post('/test/:key', async (req: Request, res: Response) => {
     const agents = await getAgents(goal);
     const agent = new BossAgent({
         sessionId: sessionId,
-        eventBus: eventBus,
+        eventBus: sessionEventBus,
         goalValue: goal,
         agentConfigs: new Set<AgentConfig>(agents),
     });
     sessions.set(sessionId, agent);
-
-    const success = setAPIKey(key);
-    if (!success) {
-        LogManager.error('Failed to set API key.', State.ERROR, true);
-        res.status(500).send('Failed to set a Test API key.');
-        return;
-    }
 
     try {
         await agent.start(url);
@@ -252,3 +282,9 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
+
+
+
+// Classify (fails?) → LLM Classify → Generate Test Data → Test Them
+//      ↓
+// Generate Test Data (fails?) → LLM Generate Test Data → Test Them

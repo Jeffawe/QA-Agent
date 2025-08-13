@@ -10,11 +10,13 @@
     "rootDir": "./",                                 
     "moduleResolution": "node10",                    
     "esModuleInterop": true,                           
-    "forceConsistentCasingInFileNames": true,          
+    "forceConsistentCasingInFileNames": true, 
+             
 
     /* Type Checking */
     "strict": true,                                     
-    "skipLibCheck": true                                 
+    "skipLibCheck": true,    
+    "incremental": true                             
   },
   "include": ["lib/**/*"]
 }

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { NamespacedState, State } from '../types.js';
-import { eventBus } from '../services/events/eventBus.js';
+import { eventBusManager } from '../services/events/eventBus.js';
 
 type MissionStatus = 'pending' | 'done';
 
@@ -11,12 +11,20 @@ interface Entry {
 }
 
 export class LogManager {
-  private static logs: string[] = [];
-  public static PROJECT_ROOT = process.cwd()
-  private static logFilePath = path.join(LogManager.PROJECT_ROOT, "logs", "agent.log");
-  private static filePath = path.join(LogManager.PROJECT_ROOT, "logs", "mission_log.md");
+  static PROJECT_ROOT = process.cwd()
 
-  private static resolveState(
+  private logs: string[] = [];
+  private numberOfTokens: number = 0;
+  private logFilePath = path.join(LogManager.PROJECT_ROOT, "logs", "agent.log");
+  private filePath = path.join(LogManager.PROJECT_ROOT, "logs", "mission_log.md");
+  private sessionId: string = "";
+
+  constructor(sessionId: string) {
+    this.log("🛠 LogManager initialized");
+    this.sessionId = sessionId;
+  }
+
+  private resolveState(
     state?: NamespacedState | State,
     fallback: State = State.ERROR
   ): string {
@@ -33,21 +41,22 @@ export class LogManager {
    * @param state - The current state of the agent (default is ERROR).
    * @param logToConsole - Whether to print to console (default: true).
    */
-  static log(
+  log(
     message: string,
     state?: NamespacedState | State,
     logToConsole: boolean = true
   ): void {
-    const resolvedState = LogManager.resolveState(state, State.ERROR);
+    const resolvedState = this.resolveState(state, State.ERROR);
     const timestamped = `[${new Date().toISOString()}] [state: ${resolvedState}] ${message}`;
-    LogManager.logs.push(timestamped);
+    this.logs.push(timestamped);
 
     if (logToConsole) console.log(timestamped);
-    eventBus.emit({ ts: Date.now(), type: "new_log", message: String(message) });
+    const eventBus = eventBusManager.getBusIfExists(this.sessionId);
+    eventBus?.emit({ ts: Date.now(), type: "new_log", message: String(message) });
 
     try {
-      fs.mkdirSync(path.dirname(LogManager.logFilePath), { recursive: true });
-      fs.appendFileSync(LogManager.logFilePath, timestamped + "\n");
+      fs.mkdirSync(path.dirname(this.logFilePath), { recursive: true });
+      fs.appendFileSync(this.logFilePath, timestamped + "\n");
     } catch (err) {
       console.error("Error writing to log file:", err);
     }
@@ -60,41 +69,49 @@ export class LogManager {
    * @param state - The state where the error occurred (default is ERROR).
    * @param logToConsole - Whether to print to console (default: true).
   */
-  static error(
+  error(
     message: string,
     state?: NamespacedState | State,
     logToConsole: boolean = true
   ): void {
-    const resolvedState = LogManager.resolveState(state, State.ERROR);
+    const resolvedState = this.resolveState(state, State.ERROR);
     const errorMessage = `[ERROR] ${message} at [state: ${resolvedState}]`;
-    LogManager.logs.push(errorMessage);
-    eventBus.emit({ ts: Date.now(), type: "new_log", message: String(message) });
-    //eventBus.emit({ ts: Date.now(), type: "error", message: String(message), stack: new Error().stack });
+    this.logs.push(errorMessage);
+    const eventBus = eventBusManager.getBusIfExists(this.sessionId);
+    eventBus?.emit({ ts: Date.now(), type: "error", message: String(message) });
 
     if (logToConsole) {
       console.error(errorMessage);
     }
   }
 
+  updateTokens(tokens: number): void {
+    this.numberOfTokens = tokens;
+  }
+
+  getTokens(): number {
+    return this.numberOfTokens;
+  }
+
   /**
    * Returns all logs currently stored in memory.
    * @returns An array of log strings.
   */
-  static getLogs(): string[] {
-    return LogManager.logs;
+  getLogs(): string[] {
+    return this.logs;
   }
 
-  static clearLogs(): void {
-    LogManager.logs = [];
+  clearLogs(): void {
+    this.logs = [];
 
     try {
-      fs.writeFileSync(LogManager.logFilePath, '');
+      fs.writeFileSync(this.logFilePath, '');
     } catch (err) {
       console.error('Error clearing log file:', err);
     }
   }
 
-  private static sections = {
+  private sections = {
     mission: '## Mission',
     subMissions: '## SubMissions',
     navigationTree: '## Navigation Tree',
@@ -102,7 +119,7 @@ export class LogManager {
   };
 
   // Initialize the markdown file with empty sections
-  static initialize() {
+  initialize() {
     const content = `${this.sections.mission}\n\n${this.sections.subMissions}\n\n${this.sections.extraInfo}\n`;
 
     // Create directory if it doesn't exist
@@ -122,7 +139,7 @@ export class LogManager {
    * @param text - The mission description.
    * @param status - The mission status ('pending' or 'done').
   */
-  static addMission(text: string, status: MissionStatus = 'pending') {
+  addMission(text: string, status: MissionStatus = 'pending') {
     const data = fs.readFileSync(this.filePath, 'utf-8');
     const section = this.sections.mission;
     const newEntry = `- [${status === 'done' ? 'x' : ' '}] ${text}`;
@@ -135,7 +152,7 @@ export class LogManager {
     fs.writeFileSync(this.filePath, updated.trimEnd() + '\n', 'utf-8');
   }
 
-  static addSubMission(text: string, status: MissionStatus = 'pending') {
+  addSubMission(text: string, status: MissionStatus = 'pending') {
     const data = fs.readFileSync(this.filePath, 'utf-8');
     const section = this.sections.subMissions;
     const newEntry = `- [${status === 'done' ? 'x' : ' '}] ${text}`;
@@ -152,7 +169,7 @@ export class LogManager {
    * Appends a bullet point entry under the Extra Info section in markdown.
    * @param info - The additional information to include.
   */
-  static addExtraInfo(info: string) {
+  addExtraInfo(info: string) {
     const data = fs.readFileSync(this.filePath, 'utf-8');
     const updated = data.replace(
       new RegExp(`${this.sections.extraInfo}[\\s\\S]*$`),
@@ -164,7 +181,7 @@ export class LogManager {
   /**
  * Clears all content under the SubMissions section while keeping the section header.
  */
-  static clearSubMissions() {
+  clearSubMissions() {
     const data = fs.readFileSync(this.filePath, 'utf-8');
     const updated = data.replace(
       new RegExp(`${this.sections.subMissions}[\\s\\S]*?(##|$)`),
@@ -178,7 +195,7 @@ export class LogManager {
  * @param text - The mission entry text to update.
  * @param newStatus - The new status ('pending' or 'done').
  */
-  static updateMissionStatus(text: string, newStatus: MissionStatus) {
+  updateMissionStatus(text: string, newStatus: MissionStatus) {
     this.updateEntryStatus('mission', text, newStatus);
   }
 
@@ -187,7 +204,7 @@ export class LogManager {
  * @param text - The sub-mission entry text to update.
  * @param newStatus - The new status ('pending' or 'done').
  */
-  static updateSubMissionStatus(text: string, newStatus: MissionStatus) {
+  updateSubMissionStatus(text: string, newStatus: MissionStatus) {
     this.updateEntryStatus('subMissions', text, newStatus);
   }
 
@@ -196,8 +213,8 @@ export class LogManager {
  * @param sectionKey - Section name key ('mission', 'subMissions', or 'extraInfo').
  * @param entries - An array of entries to append.
  */
-  private static appendToSection(
-    sectionKey: keyof typeof LogManager.sections,
+  private appendToSection(
+    sectionKey: keyof typeof this.sections,
     entries: Entry[]
   ) {
     const data = fs.readFileSync(this.filePath, 'utf-8');
@@ -218,8 +235,8 @@ export class LogManager {
  * @param entryText - The exact entry text to update.
  * @param newStatus - The new status to set ('pending' or 'done').
  */
-  private static updateEntryStatus(
-    sectionKey: keyof typeof LogManager.sections,
+  private updateEntryStatus(
+    sectionKey: keyof typeof this.sections,
     entryText: string,
     newStatus: MissionStatus
   ) {
@@ -240,7 +257,7 @@ export class LogManager {
  * @param text - The string to escape.
  * @returns A safely escaped string usable in RegExp.
  */
-  private static escapeRegExp(text: string) {
+  private escapeRegExp(text: string) {
     return text.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
   }
 }

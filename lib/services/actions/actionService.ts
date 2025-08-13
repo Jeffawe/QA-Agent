@@ -2,11 +2,13 @@ import { setTimeout } from 'node:timers/promises';
 import { Action, ActionResult, ClicKType, InteractiveElement, NamespacedState, Rect, State } from '../../types.js';
 import Session from '../../browserAuto/playWrightSession.js';
 import { LogManager } from '../../utility/logManager.js';
+import { logManagers } from '../memory/logMemory.js';
 
 const defaultOffset: Rect = { x: 0, y: 0, width: 0, height: 0 };
 
 export default class ActionService {
   private session: Session;
+  private logManager: LogManager;
 
   //If the new page that will be clicked is an internal page or external page
   private intOrext: string = '';
@@ -14,6 +16,7 @@ export default class ActionService {
 
   constructor(session: Session) {
     this.session = session;
+    this.logManager = logManagers.getOrCreateManager(session.getSessionId());
   }
 
   public setBaseUrl(url: string) {
@@ -82,8 +85,8 @@ export default class ActionService {
           break;
       }
 
-      LogManager.log(`Executed action: ${action.step} with args: ${JSON.stringify(action.args)}`, state, true);
-      LogManager.log(`Reason: ${action.reason}`, state, true);
+      this.logManager.log(`Executed action: ${action.step} with args: ${JSON.stringify(action.args)}`, state, true);
+      this.logManager.log(`Reason: ${action.reason}`, state, true);
 
       return { success: true, message: this.intOrext };
     } catch (error) {

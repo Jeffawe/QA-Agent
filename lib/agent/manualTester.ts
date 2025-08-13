@@ -1,7 +1,6 @@
 import playwrightSession from "../browserAuto/playWrightSession.js";
 import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { LogManager } from "../utility/logManager.js";
 
 export default class ManualTester extends Agent {
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
@@ -25,7 +24,7 @@ export default class ManualTester extends Agent {
 
     protected validateSessionType(): void {
         if (!(this.session instanceof playwrightSession)) {
-            LogManager.error(`ManualTester requires playwrightSession, got ${this.session.constructor.name}`);
+            this.logManager.error(`ManualTester requires playwrightSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
             throw new Error(`ManualTester requires playwrightSession, got ${this.session.constructor.name}`);
         }
@@ -43,7 +42,7 @@ export default class ManualTester extends Agent {
         if (this.state === State.DONE || this.state === State.WAIT) {
             this.setState(State.START);
         } else {
-            LogManager.log("Tester is already running or cannot start up", this.buildState(), true);
+            this.logManager.log("Tester is already running or cannot start up", this.buildState(), true);
         }
     }
 
@@ -59,7 +58,7 @@ export default class ManualTester extends Agent {
                     (this as any).startTime = performance.now();
                     this.currentUrl = this.playwrightSession.page!.url();
                     this.goal = "Find the next best link to click";
-                    LogManager.log(`Start testing ${this.queue.length} links`, this.buildState(), true);
+                    this.logManager.log(`Start testing ${this.queue.length} links`, this.buildState(), true);
                     if (this.queue.length === 0) {
                         this.setState(State.DONE);
                     } else {
@@ -86,7 +85,7 @@ export default class ManualTester extends Agent {
                         }
                         await this.actionService.clickSelector(this.nextLink.selector);
                     } catch (error) {
-                        LogManager.error(String(error), this.state, false);
+                        this.logManager.error(String(error), this.state, false);
                         this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
                         this.setState(State.ERROR);
                         break;
@@ -134,7 +133,7 @@ export default class ManualTester extends Agent {
                     break;
             }
         } catch (error) {
-            LogManager.error(String(error), this.buildState(), false);
+            this.logManager.error(String(error), this.buildState(), false);
             this.setState(State.ERROR);
         }
     }

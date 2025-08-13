@@ -1,7 +1,8 @@
-import { GetNextActionContext, ThinkResult, ImageData, Action, AnalysisResponse, NamespacedState, State, Namespaces } from "../types.js";
+import { GetNextActionContext, ThinkResult, ImageData, Action, NamespacedState, State, Namespaces } from "../types.js";
 import { EventBus } from "../services/events/event.js";
 import ActionService from "../services/actions/actionService.js";
 import { LogManager } from "./logManager.js";
+import { logManagers } from "../services/memory/logMemory.js";
 
 export abstract class Thinker {
     protected modelClient: LLM | null = null;
@@ -18,7 +19,7 @@ export abstract class LLM {
 
     abstract generateTextResponse(prompt: string): Promise<Action>;
 
-    abstract generateMultimodalAction(prompt: string, imagePath: string, recurrent: boolean, agentName: Namespaces): Promise<AnalysisResponse>
+    abstract generateMultimodalAction(prompt: string, imagePath: string, recurrent: boolean, agentName: Namespaces): Promise<ThinkResult>
 }
 
 export interface BaseAgentDependencies {
@@ -26,6 +27,7 @@ export interface BaseAgentDependencies {
     thinker: Thinker;
     actionService: ActionService;
     eventBus: EventBus;
+    sessionId: string;
     dependent: boolean; // If true, agent won't start until another agent triggers it
     agentRegistry?: AgentRegistry; // Reference to other agents
 }
@@ -36,6 +38,7 @@ export abstract class Agent {
     public baseUrl: string | null = null;
 
     protected currentUrl: string = "";
+    protected sessionId: string = "";
     protected timeTaken = 0;
     protected bus: EventBus;
     protected session: Session;
@@ -44,6 +47,7 @@ export abstract class Agent {
     protected agentRegistry?: AgentRegistry;
     protected response: string = "";
     protected validatorWarningState: State = State.START;
+    protected logManager: LogManager;
 
     protected constructor(name: Namespaces, dependencies: BaseAgentDependencies) {
         this.name = name;
@@ -52,10 +56,13 @@ export abstract class Agent {
         this.thinker = dependencies.thinker;
         this.actionService = dependencies.actionService;
         this.agentRegistry = dependencies.agentRegistry;
+        this.sessionId = dependencies.sessionId;
 
         if (dependencies.dependent) {
             this.state = State.WAIT;
         }
+
+        this.logManager = logManagers.getOrCreateManager(this.sessionId);
 
         this.bus.on("validator_warning", (evt) => {
             this.response = evt.message;
@@ -64,10 +71,11 @@ export abstract class Agent {
 
         this.bus.on('stop', async (evt) => {
             this.setState(State.ERROR);
-            LogManager.log(`${this.name} Agent stopped because of ${evt.message}`, State.ERROR, true);
+            this.logManager.log(`${this.name} Agent stopped because of ${evt.message}`, State.ERROR, true);
         });
 
         this.validateSessionType();
+
     }
 
     public setBaseValues(url: string, mainGoal?: string): void {
@@ -86,11 +94,15 @@ export abstract class Agent {
     protected requireAgent<T extends Agent>(name: Namespaces): T {
         const agent = this.getAgent<T>(name);
         if (!agent) {
-            LogManager.error(`Required agent '${name}' not found`, this.buildState());
+            this.logManager.error(`Required agent '${name}' not found`, this.buildState());
             this.setState(State.ERROR);
             throw new Error(`Required agent '${name}' not found`);
         }
         return agent;
+    }
+
+    protected log(message: string): void {
+        this.logManager.log(message, this.buildState());
     }
 
     public abstract tick(): Promise<void>;
@@ -137,9 +149,11 @@ export class AgentRegistry {
 export abstract class Session<TPage = any> {
     protected sessionId: string;
     public page: TPage | null = null;
+    protected logManager: LogManager
 
     public constructor(sessionId: string) {
         this.sessionId = sessionId;
+        this.logManager = logManagers.getOrCreateManager(sessionId);
     }
     public abstract start(url: string): Promise<boolean>;
     public abstract close(): Promise<void>;

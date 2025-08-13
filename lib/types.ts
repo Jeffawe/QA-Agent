@@ -2,14 +2,11 @@ export interface Action {
     step: 'move_mouse_to' | 'click' | 'press_key' | 'wait' | 'no_op' | 'done' | string;
     args: any[];
     reason: string;
+    progressDescription?: string;
     newGoal?: string;
     nextLink?: string;
+    hasAchievedGoal?: boolean;
     confidence?: number; // Confidence level of the action
-}
-
-export interface ActionResult {
-    success: boolean;
-    message: string;
 }
 
 export interface Bug {
@@ -18,50 +15,31 @@ export interface Bug {
     severity: 'high' | 'medium' | 'low';
 }
 
-export interface UIIssue {
-    description: string;
-    selector: string;
-    severity: 'high' | 'medium' | 'low';
-}
-
 export interface Analysis {
     bugs: Bug[];
-    ui_issues: UIIssue[];
+    ui_issues: Bug[];
     notes: string;
 }
 
 export interface TestResult {
     success: boolean;
-    message: string;
+    issues: string[];
 }
 
-export interface AnalysisResponse {
-    analysis: Analysis;
-    action: Action; // This action is for playwright sessions
-    pageDetails?: LLMPageResult;
-    nextResponse?: StagehandResponse; // This is for stagehand sessions
-    testResult?: TestResult
+export interface ActionResult {
+    success: boolean;
+    message: string;
 }
 
 export interface ThinkResult {
     action: Action;
-    nextResponse?: StagehandResponse; // This is for stagehand sessions
     analysis?: Analysis;
     pageDetails?: LLMPageResult;
     testResult?: TestResult
 }
 
-export interface StagehandResponse {
-    action: string;
-    arguments: any[];
-    progressDescription: string;
-    nextGoal: string;
-    hasAchievedGoal: boolean;
-}
-
 export interface GetNextActionContext {
     goal: string;
-    vision: string;
     lastAction: string | null;
     memory: string[];
     possibleLabels: any[];

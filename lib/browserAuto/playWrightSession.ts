@@ -5,7 +5,7 @@ import { ClicKType, Rect, State } from '../types.js';
 import { LogManager } from '../utility/logManager.js';
 import { Session } from '../utility/abstract.js';
 import { getBrowser } from '../browserManager.js';
-import { storeImage } from '../services/imageProcessor.js';
+import { logManagers } from '../services/memory/logMemory.js';
 
 export default class PlaywrightSession extends Session<Page> {
   private browser: Browser | null = null;
@@ -107,7 +107,7 @@ export default class PlaywrightSession extends Session<Page> {
 
       await this.page.click(selector);
     } catch (error) {
-      LogManager.error(`Error pressing selector "${selector}": ${error}`, State.ACT);
+      this.logManager.error(`Error pressing selector "${selector}": ${error}`, State.ACT);
       throw error;
     }
   }
@@ -178,7 +178,7 @@ export default class PlaywrightSession extends Session<Page> {
   }
 
   async close(): Promise<void> {
-    LogManager.log(`Closing session ${this.sessionId}...`);
+    this.logManager.log(`Closing session ${this.sessionId}...`);
     const errors: Error[] = [];
 
     try { await this.clearAllClickPoints(); } catch (e) { errors.push(e as Error); }
@@ -199,7 +199,7 @@ export default class PlaywrightSession extends Session<Page> {
     } catch (e) { errors.push(e as Error); this.browser = null; }
 
     this.rect = null;
-    LogManager.log(`Session ${this.sessionId} cleanup completed`);
+    this.logManager.log(`Session ${this.sessionId} cleanup completed`);
 
     if (errors.length > 0) {
       console.warn(`Session ${this.sessionId} cleanup completed with ${errors.length} warnings:`, errors);

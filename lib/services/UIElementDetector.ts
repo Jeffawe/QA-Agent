@@ -23,7 +23,6 @@ export function detectUIWithPython(imagePath: string): Box[] {
     }
 
     try {
-        LogManager.log(`Python output: ${result.stdout.trim()}`, State.DECIDE, false);
         return JSON.parse(result.stdout.trim());
     } catch (e) {
         console.error('Failed to parse Python output:', result.stdout);

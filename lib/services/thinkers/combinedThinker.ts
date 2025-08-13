@@ -1,14 +1,17 @@
 import { Thinker } from "../../utility/abstract.js";
 import { LogManager } from "../../utility/logManager.js";
 import { GeminiLLm } from "../../models/generate/gemini.js";
-import { GetNextActionContext, State, ThinkResult, ImageData, AnalysisResponse, NamespacedState, Namespaces } from "../../types.js";
+import { GetNextActionContext, State, ThinkResult, ImageData, Namespaces } from "../../types.js";
+import { logManagers } from "../memory/logMemory.js";
 
 const thinkerState = State.DECIDE
 
 export class CombinedThinker extends Thinker {
+    private logManager: LogManager;
     constructor(private sessionId: string) {
         super();
         this.modelClient = new GeminiLLm(sessionId);
+        this.logManager = logManagers.getOrCreateManager(sessionId);
     }
 
     async think(nextActionContext: GetNextActionContext, imageData: ImageData, extraInfo: string, agentName: Namespaces, recurrent: boolean = false): Promise<ThinkResult> {
@@ -20,10 +23,9 @@ export class CombinedThinker extends Thinker {
         }
 
         return {
-            action: analysis.action || { step: 'no_op', args: [], reason: 'No command returned' },
+            action: analysis.action || { step: 'no_op', args: [], reason: 'No command returned', hasAchievedGoal: false },
             pageDetails: analysis.pageDetails || { pageName: "", description: "" },
             analysis: analysis.analysis,
-            nextResponse: analysis.nextResponse || { action: "", progressDescription: "", arguments: [], nextGoal: "", hasAchievedGoal: false }
         } satisfies ThinkResult;
     }
 
@@ -34,7 +36,7 @@ export class CombinedThinker extends Thinker {
          * @returns The next action for the agent.
     */
     async getNextDecision(context: GetNextActionContext, imageData: ImageData, recurrent: boolean,
-        agentName: Namespaces, extraInfo?: string): Promise<AnalysisResponse> {
+        agentName: Namespaces, extraInfo?: string): Promise<ThinkResult> {
         if (!this.modelClient) {
             throw new Error("Model client is not loaded. Please load the model first.");
         }
@@ -58,10 +60,10 @@ export class CombinedThinker extends Thinker {
             }
 
             const result = await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath, recurrent, agentName);
-            LogManager.log(`LLM response: ${JSON.stringify(result)}`, thinkerState, false);
+            this.logManager.log(`LLM response: ${JSON.stringify(result)}`, thinkerState, false);
             return result;
         } catch (error) {
-            LogManager.error(`Error generating next action: ${error}`, State.DECIDE, false);
+            this.logManager.error(`Error generating next action: ${error}`, State.DECIDE, false);
             return {
                 analysis: {
                     bugs: [],
@@ -73,7 +75,7 @@ export class CombinedThinker extends Thinker {
                     reason: "LLM produced invalid JSON",
                     args: [],
                 }
-            } satisfies AnalysisResponse;
+            } satisfies ThinkResult;
         }
     }
 
@@ -83,7 +85,7 @@ export class CombinedThinker extends Thinker {
             * @param imageData - The image data.
             * @returns The next action for the agent.
        */
-    async getNextDecisionGoal(context: GetNextActionContext, imageData: ImageData, recurrent: boolean, agentName: Namespaces, extraInfo?: string): Promise<AnalysisResponse> {
+    async getNextDecisionGoal(context: GetNextActionContext, imageData: ImageData, recurrent: boolean, agentName: Namespaces, extraInfo?: string): Promise<ThinkResult> {
         if (!this.modelClient) {
             throw new Error("Model client is not loaded. Please load the model first.");
         }
@@ -109,10 +111,10 @@ export class CombinedThinker extends Thinker {
 
             const result = await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath, recurrent, agentName);
             
-            LogManager.log(`LLM response: ${JSON.stringify(result)}`, thinkerState, false);
+            this.logManager.log(`LLM response: ${JSON.stringify(result)}`, thinkerState, false);
             return result;
         } catch (error) {
-            LogManager.error(`Error generating next action: ${error}`, State.DECIDE, false);
+            this.logManager.error(`Error generating next action: ${error}`, State.DECIDE, false);
             return {
                 analysis: {
                     bugs: [],
@@ -124,7 +126,7 @@ export class CombinedThinker extends Thinker {
                     reason: "LLM produced invalid JSON",
                     args: [],
                 }
-            } satisfies AnalysisResponse;
+            } satisfies ThinkResult;
         }
     }
 }
