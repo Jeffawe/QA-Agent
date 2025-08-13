@@ -7,7 +7,7 @@ import { getSystemPrompt, getSystemSchema, STOP_LEVEL_ERRORS } from "./prompts.j
 import { generateContent } from "../../externalCall.js";
 import { getApiKeyForAgent } from "../../apiMemory.js";
 
-import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genAi";
+import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genai";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { EventBus } from "../../services/events/event.js";
