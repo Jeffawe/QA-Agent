@@ -1,4 +1,3 @@
-import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genAI";
 import dotenv from 'dotenv';
 import { LLM } from "../../utility/abstract.js";
 import { Action, ThinkResult, Namespaces, State } from "../../types.js";
@@ -8,6 +7,7 @@ import { getSystemPrompt, getSystemSchema, STOP_LEVEL_ERRORS } from "./prompts.j
 import { generateContent } from "../../externalCall.js";
 import { getApiKeyForAgent } from "../../apiMemory.js";
 
+import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genAI";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { EventBus } from "../../services/events/event.js";
