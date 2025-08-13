@@ -15,7 +15,7 @@ import { State } from './types.js';
 import { setAPIKey } from './externalCall.js';
 import { getAgents } from './agentConfig.js';
 import StagehandSession from './browserAuto/stagehandSession.js';
-import { encrypt } from './enctyption.js';
+import { encrypt } from './encryption.js';
 import { storeSessionApiKey } from './apiMemory.js';
 import { logManagers } from './services/memory/logMemory.js';
 

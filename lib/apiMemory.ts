@@ -1,6 +1,6 @@
 // Due for change to Redis
 
-import { decrypt, EncryptedData } from "./enctyption";
+import { decrypt, EncryptedData } from "./encryption.js";
 
 const sessionApiKeys = new Map();
 
