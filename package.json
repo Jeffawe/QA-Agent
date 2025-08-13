@@ -2,14 +2,14 @@
   "name": "qa-agent",
   "version": "1.2.0-beta.0",
   "description": "AI-powered QA agent using LLM models for automated testing and web interaction",
-  "main": "dist/lib/server.js",
+  "main": "dist/server.js",
   "type": "module",
   "bin": {
     "agent-run": "./bin/index.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node dist/lib/server.js",
+    "start": "node dist/server.js",
     "dev": "nodemon",
     "build": "tsc && npx playwright install chromium",
     "prepublishOnly": "npm run build"
