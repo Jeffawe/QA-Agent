@@ -294,6 +294,7 @@ console.log(`✅ Ports ${port} and ${websocket} are available.`);
 process.env.PORT = String(port);
 process.env.API_KEY = key;
 process.env.WEBSOCKET_PORT = String(websocket);
+process.env.NODE_ENV = 'development';
 
 console.log('🚀 Starting server...');
 console.log(`✅ Agent server running on http://localhost:${port}`);

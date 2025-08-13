@@ -10,7 +10,6 @@ import { ActionSpamValidator } from './services/validators/actionValidator.js';
 import { ErrorValidator } from './services/validators/errorValidator.js';
 import { LLMUsageValidator } from './services/validators/llmValidator.js';
 import { WebSocketEventBridge } from './services/events/webSockets.js';
-import { LogManager } from './utility/logManager.js';
 import { State } from './types.js';
 import { setAPIKey } from './externalCall.js';
 import { getAgents } from './agentConfig.js';
@@ -18,15 +17,97 @@ import StagehandSession from './browserAuto/stagehandSession.js';
 import { encrypt } from './encryption.js';
 import { storeSessionApiKey } from './apiMemory.js';
 import { logManagers } from './services/memory/logMemory.js';
+import rateLimit from 'express-rate-limit';
+import slowDown from 'express-slow-down';
+import compression from 'compression';
+import helmet from 'helmet';
+import cors from 'cors';
 
 dotenv.config();
 
 const app = express();
+const base_url = process.env.BASE_URL || '*';
+
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'"],
+            imgSrc: ["'self'", "data:", "https:"],
+        },
+    },
+    hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true
+    }
+}));
+
+// CORS configuration
+app.use(cors({
+    origin: process.env.NODE_ENV === 'production'
+        ? [base_url]
+        : ['*'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Compression middleware
+app.use(compression());
+
+// Body parsing with limits
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// General rate limiting
+const generalLimiter = rateLimit({
+    windowMs: 30 * 60 * 1000, // 15 minutes
+    max: 10, // limit each IP to 10 requests per windowMs
+    message: {
+        error: 'Too many requests from this IP, please try again later.',
+        retryAfter: '15 minutes'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    // Skip successful requests for static files
+    skip: (req) => req.url.startsWith('/static') || req.url.startsWith('/public')
+});
+
+// API rate limiting
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 1000, // Higher limit for API endpoints
+    message: {
+        error: 'API rate limit exceeded, please try again later.',
+        retryAfter: '15 minutes'
+    }
+});
+
+// Slow down repeated requests (progressive delay)
+const speedLimiter = slowDown({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    delayAfter: 50, // allow 50 requests per 15 minutes at full speed
+    delayMs: 500, // slow down subsequent requests by 500ms per request
+    maxDelayMs: 20000 // maximum delay of 20 seconds
+});
+
+// Apply rate limiting
+app.use(generalLimiter);
+app.use(speedLimiter);
+
+// Apply API rate limiting to API routes
+app.use(apiLimiter);
+
+// Trust proxy (important for Render/Heroku/etc)
+app.set('trust proxy', 1);
+
+
 const PORT: number = parseInt(process.env.PORT || '3001');
 const WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
 
 const baseUrl = process.env.BASE_URL || 'https://scanmyfood.vercel.app/';
-const goal = process.env.USER_GOAL;
 
 let sessions = new Map<string, BossAgent>();
 
@@ -48,7 +129,9 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 app.get('/health', (req: Request, res: Response) => {
-    res.send('OK');
+    const message = 'Server is running fine!';
+    const data = `Running ${sessions.size} sessions`;
+    res.send({ message, data });
 });
 
 app.get('/start', (req: Request, res: Response) => {
@@ -130,29 +213,6 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
     }
 });
 
-app.get('/session-test', async (req: Request, res: Response) => {
-    try {
-        //await runTestSession(url);
-        let session = new StagehandSession("test_session");
-
-        const hasStarted = await session.start(baseUrl);
-
-        if (!hasStarted) throw new Error('Failed to start test session');
-
-        if (!session.page) throw new Error('Page not initialized');
-        // const elements = await getInteractiveElements(session.page);
-
-        session.testAgent(baseUrl);
-
-        // await processScreenshot('./images/screenshot_0.png', elements);
-        res.send('Test session started successfully!');
-    }
-    catch (error) {
-        console.error('Error in test session:', error);
-        res.status(500).send('Failed to start test session.');
-    }
-});
-
 app.get('/stop/:sessionId', async (req: Request, res: Response) => {
     try {
         if (!sessions.has(req.params.sessionId)) {
@@ -190,11 +250,11 @@ app.get('/stop', async (req: Request, res: Response) => {
 
         console.log('All sessions stopped successfully.');
         res.send('All sessions stopped successfully!');
-        process.exit(0);
+        setTimeout(() => process.exit(0), 100);
     } catch (error) {
         console.error('Error stopping sessions:', error);
         res.status(500).send('Failed to stop sessions.');
-        process.exit(1);
+        setTimeout(() => process.exit(1), 100);
     }
 })
 
@@ -281,13 +341,9 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
     }
 });
 
-
-
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
-
-
 
 // Classify (fails?) → LLM Classify → Generate Test Data → Test Them
 //      ↓
