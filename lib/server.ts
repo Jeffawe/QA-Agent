@@ -11,10 +11,9 @@ import { ErrorValidator } from './services/validators/errorValidator.js';
 import { LLMUsageValidator } from './services/validators/llmValidator.js';
 import { WebSocketEventBridge } from './services/events/webSockets.js';
 import { State } from './types.js';
-import { setAPIKey } from './externalCall.js';
+import { checkUserKey, setAPIKey } from './externalCall.js';
 import { getAgents } from './agentConfig.js';
-import { encrypt } from './encryption.js';
-import { storeSessionApiKey } from './apiMemory.js';
+import { clearSessionApiKeys, encrypt, storeSessionApiKey } from './apiMemory.js';
 import { logManagers } from './services/memory/logMemory.js';
 import rateLimit from 'express-rate-limit';
 import slowDown from 'express-slow-down';
@@ -247,6 +246,7 @@ app.get('/stop', async (req: Request, res: Response) => {
         }
         sessions.clear();
         eventBusManager.clear();
+        clearSessionApiKeys();
 
         console.log('All sessions stopped successfully.');
         res.send('All sessions stopped successfully!');
@@ -262,9 +262,17 @@ app.post('/test/:key', async (req: Request, res: Response) => {
     const { goal, url } = req.body;
     const key = req.params.key;
     const sessionId = "test_" + key;
+    
     if (sessions.has(sessionId)) {
         console.log('Test Session already started.');
         res.status(400).send('Test Session already started.');
+        return;
+    }
+    
+    const getKey: boolean = process.env.NODE_ENV === 'production'
+    const success = await checkUserKey(sessionId, key, getKey);
+    if (!success) {
+        res.status(401).send('Unauthorized');
         return;
     }
 

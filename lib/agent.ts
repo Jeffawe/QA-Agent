@@ -14,6 +14,7 @@ import PlaywrightSession from './browserAuto/playWrightSession.js';
 import { clearAllImages } from './services/imageProcessor.js';
 import { eventBusManager } from './services/events/eventBus.js';
 import { logManagers } from './services/memory/logMemory.js';
+import { deleteSessionApiKey } from './apiMemory.js';
 
 export interface AgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
   name: string;
@@ -223,6 +224,7 @@ export default class BossAgent {
 
       clearAllImages();
       this.sessions.clear();
+      deleteSessionApiKey(this.sessionId);
       eventBusManager.removeBus(this.sessionId);
       logManagers.removeManager(this.sessionId);
       this.logManager.log("All Services have been stopped", State.DONE, true);

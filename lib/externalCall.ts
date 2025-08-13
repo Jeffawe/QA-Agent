@@ -2,6 +2,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
+import { encrypt, storeSessionApiKey } from './apiMemory';
 
 const API_ENDPOINT = 'https://qa-node-backend.onrender.com';
 
@@ -13,7 +14,7 @@ export const setAPIKey = (key: string): boolean => {
     if (!key.startsWith('TEST')) {
         return false;
     }
-    
+
     process.env.API_KEY = key;
     return true;
 }
@@ -76,5 +77,38 @@ export const generateContent = async (options: GeminiCallOptions) => {
             throw new Error(`API error: ${errMsg}`);
         }
         throw new Error(`Network error: ${error.message}`);
+    }
+};
+
+export const checkUserKey = async (sessionId: string, userKey: string, returnApiKey = false) : Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_ENDPOINT}/api/user/check-key`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                userKey,
+                returnApiKey
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to check user key');
+        }
+
+        if (returnApiKey && data.apiKey) {
+            const encryptedData = encrypt(data.apiKey);
+
+            // Store encrypted key mapped to sessionId
+            storeSessionApiKey(sessionId, encryptedData);
+        }
+
+        return data.exists as boolean;
+    } catch (error) {
+        console.error('Error checking user key:', error);
+        throw error;
     }
 };

@@ -31,23 +31,23 @@ export class GeminiLLm extends LLM {
         this.apiKey = getApiKeyForAgent(sessionId) ?? process.env.API_KEY;
 
         this.logManager = logManagers.getOrCreateManager(sessionId);
-        
+
         if (!this.apiKey) {
             this.logManager.error('API_KEY is not set. Please set the API_KEY', State.ERROR, true);
             throw new Error('API_KEY is not set. Please set the API_KEY');
         }
-
-        this.model = new ChatGoogleGenerativeAI({
-            model: "gemini-2.5-flash",
-            temperature: 0,
-            apiKey: this.apiKey
-        });
 
         this.eventBus = eventBusManager.getOrCreateBus(sessionId);
 
         if (!this.apiKey?.startsWith('TEST')) {
             try {
                 this.genAI = new GoogleGenAI({ apiKey: this.apiKey });
+
+                this.model = new ChatGoogleGenerativeAI({
+                    model: "gemini-2.5-flash",
+                    temperature: 0,
+                    apiKey: this.apiKey
+                });
             } catch (err) {
                 this.logManager.error(`Failed to create Googlethis.genAI instance: ${err}`, State.ERROR, true);
 
