@@ -117,8 +117,6 @@ app.set('trust proxy', 1);
 const PORT: number = parseInt(process.env.PORT || '3001');
 const WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
 
-const baseUrl = process.env.BASE_URL || 'https://scanmyfood.vercel.app/';
-
 let sessions = new Map<string, BossAgent>();
 
 app.use(bodyParser.urlencoded({ extended: true }));
