@@ -32,25 +32,29 @@ const allowedProdOrigins = [
 
 app.use(cors({
     origin: (origin, callback) => {
-        console.log('CORS check - Origin:', origin, 'NODE_ENV:', process.env.NODE_ENV);
+        console.log('=== CORS DEBUG ===');
+        console.log('Origin:', origin);
+        console.log('NODE_ENV:', process.env.NODE_ENV);
+        console.log('NODE_ENV === "production":', process.env.NODE_ENV === 'production');
         
         if (process.env.NODE_ENV !== 'production') {
-            // Dev: allow any origin (including undefined for same-origin requests)
+            console.log('Using DEV mode - allowing all origins');
             callback(null, true);
         } else {
-            // Prod: allow specific origins or no origin (for same-origin requests)
-            if (!origin || allowedProdOrigins.includes(origin)) {
+            console.log('Using PROD mode - checking specific origins');
+            if (origin === 'https://www.qa-agent.site') {
+                console.log('Origin ALLOWED');
                 callback(null, true);
             } else {
-                console.log('CORS rejected origin:', origin);
+                console.log('Origin REJECTED:', origin);
                 callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
             }
         }
+        console.log('=================');
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 app.use(helmet({
