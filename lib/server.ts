@@ -25,25 +25,32 @@ dotenv.config();
 
 const app = express();
 
-const allowedProdOrigin = 'https://www.qa-agent.site';
+const allowedProdOrigins = [
+    'https://www.qa-agent.site',
+    'https://qa-agent.site' // Also allow without www
+];
 
 app.use(cors({
     origin: (origin, callback) => {
+        console.log('CORS check - Origin:', origin, 'NODE_ENV:', process.env.NODE_ENV);
+        
         if (process.env.NODE_ENV !== 'production') {
-            // Dev: allow any origin
+            // Dev: allow any origin (including undefined for same-origin requests)
             callback(null, true);
         } else {
-            // Prod: only allow the official site
-            if (origin === allowedProdOrigin) {
+            // Prod: allow specific origins or no origin (for same-origin requests)
+            if (!origin || allowedProdOrigins.includes(origin)) {
                 callback(null, true);
             } else {
-                callback(new Error('Not allowed by CORS'));
+                console.log('CORS rejected origin:', origin);
+                callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
             }
         }
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 }));
 
 app.use(helmet({
