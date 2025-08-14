@@ -15,13 +15,15 @@ export class LogManager {
 
   private logs: string[] = [];
   private numberOfTokens: number = 0;
-  private logFilePath = path.join(LogManager.PROJECT_ROOT, "logs", "agent.log");
-  private filePath = path.join(LogManager.PROJECT_ROOT, "logs", "mission_log.md");
+  private logFilePath;
+  private filePath;
   private sessionId: string = "";
 
   constructor(sessionId: string) {
     this.log("🛠 LogManager initialized");
     this.sessionId = sessionId;
+    this.logFilePath = path.join(LogManager.PROJECT_ROOT, "logs", `agent_${sessionId}.log`);
+    this.filePath = path.join(LogManager.PROJECT_ROOT, "logs", `mission_log_${sessionId}.md`);
   }
 
   private resolveState(

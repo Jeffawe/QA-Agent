@@ -24,7 +24,7 @@ import cors from 'cors';
 dotenv.config();
 
 const app = express();
-const base_url = process.env.BASE_URL || '*';
+const base_url = process.env.BASE_URL || 'https://www.qa-agent.site';
 
 // CORS configuration
 app.use(cors({
