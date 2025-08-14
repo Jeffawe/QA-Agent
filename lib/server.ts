@@ -24,13 +24,23 @@ import cors from 'cors';
 dotenv.config();
 
 const app = express();
-const base_url = process.env.BASE_URL || 'https://www.qa-agent.site';
 
-// CORS configuration
+const allowedProdOrigin = 'https://www.qa-agent.site';
+
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production'
-        ? [base_url]
-        : ['*'],
+    origin: (origin, callback) => {
+        if (process.env.NODE_ENV !== 'production') {
+            // Dev: allow any origin
+            callback(null, true);
+        } else {
+            // Prod: only allow the official site
+            if (origin === allowedProdOrigin) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
