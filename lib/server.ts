@@ -25,33 +25,12 @@ dotenv.config();
 
 const app = express();
 
-const allowedProdOrigins = [
-    'https://www.qa-agent.site',
-    'https://qa-agent.site' // Also allow without www
-];
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+    ? ['https://www.qa-agent.site']
+    : true; // Allow all in development
 
 app.use(cors({
-    origin: (origin, callback) => {
-        console.log('=== CORS DEBUG ===');
-        console.log('Origin:', origin);
-        console.log('NODE_ENV:', process.env.NODE_ENV);
-        console.log('NODE_ENV === "production":', process.env.NODE_ENV === 'production');
-        
-        if (process.env.NODE_ENV !== 'production') {
-            console.log('Using DEV mode - allowing all origins');
-            callback(null, true);
-        } else {
-            console.log('Using PROD mode - checking specific origins');
-            if (origin === 'https://www.qa-agent.site') {
-                console.log('Origin ALLOWED');
-                callback(null, true);
-            } else {
-                console.log('Origin REJECTED:', origin);
-                callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
-            }
-        }
-        console.log('=================');
-    },
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
