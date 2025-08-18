@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { getSystemPrompt, getSystemSchema, STOP_LEVEL_ERRORS } from "./prompts.js";
 import { generateContent } from "../../externalCall.js";
-import { getApiKeyForAgent } from "../../apiMemory.js";
+import { getApiKeyForAgent } from "../../services/memory/apiMemory.js";
 
 import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genai";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
@@ -233,6 +233,8 @@ export class GeminiLLm extends LLM {
             if (!response) {
                 throw new Error("No response from Gemini LLM");
             }
+
+            this.logManager.log(response, State.INFO, true);
 
             if (response) {
                 this.eventBus?.emit({

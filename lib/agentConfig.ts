@@ -42,14 +42,6 @@ export const goalConfigWithDesc: AgentConfigWithDescription[] = [
 
 export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
     {
-        name: "crawler",
-        agentClass: Crawler,
-        sessionType: "playwright",
-        dependent: false,
-        description: "Crawl and navigate through entire websites to extract comprehensive data",
-        keywords: ["crawl", "scrape", "navigate", "website", "data", "extract", "comprehensive", "entire", "all pages"]
-    },
-    {
         name: "analyzer",
         agentClass: Analyzer,
         sessionType: "playwright",
@@ -73,6 +65,15 @@ export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
         agentDependencies: [],
         description: "Perform manual testing and detailed analysis of specific components",
         keywords: ["manual", "test", "detailed", "analysis", "specific", "components", "examine"]
+    },
+    {
+        name: "crawler",
+        agentClass: Crawler,
+        sessionType: "playwright",
+        dependent: false,
+        agentDependencies: ["tester", "manualanalyzer", "analyzer"],
+        description: "Crawl and navigate through entire websites to extract comprehensive data",
+        keywords: ["crawl", "scrape", "navigate", "website", "data", "extract", "comprehensive", "entire", "all pages"]
     }
 ];
 
@@ -109,7 +110,7 @@ export const getAgents = async (goal: string): Promise<AgentConfigWithDescriptio
         // Calculate keyword matches
         const goalLower = goal.toLowerCase();
         const allKeywords = configGroup.configs.flatMap(c => c.keywords);
-        const matchedKeywords = allKeywords.filter(keyword => 
+        const matchedKeywords = allKeywords.filter(keyword =>
             goalLower.includes(keyword.toLowerCase())
         );
 
@@ -159,10 +160,10 @@ export const getAgentsHybrid = async (goal: string): Promise<AgentConfigWithDesc
     const goalVec = await extractor(goal, options);
     const goalArray = Array.from(goalVec.data);
 
-    const matches: (ConfigMatch & { 
-        semanticSim: number; 
-        keywordSim: number; 
-        combinedScore: number 
+    const matches: (ConfigMatch & {
+        semanticSim: number;
+        keywordSim: number;
+        combinedScore: number
     })[] = [];
 
     for (const configGroup of allConfigs) {
@@ -181,7 +182,7 @@ export const getAgentsHybrid = async (goal: string): Promise<AgentConfigWithDesc
         const allKeywords = new Set(
             configGroup.configs.flatMap(c => c.keywords.map(k => k.toLowerCase()))
         );
-        
+
         const intersection = new Set([...goalWords].filter(word => allKeywords.has(word)));
         const union = new Set([...goalWords, ...allKeywords]);
         const keywordSim = intersection.size / union.size;

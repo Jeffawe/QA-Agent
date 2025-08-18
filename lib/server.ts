@@ -13,7 +13,7 @@ import { WebSocketEventBridge } from './services/events/webSockets.js';
 import { State } from './types.js';
 import { checkUserKey, setAPIKey } from './externalCall.js';
 import { getAgents } from './agentConfig.js';
-import { clearSessionApiKeys, encrypt, storeSessionApiKey } from './apiMemory.js';
+import { clearSessionApiKeys, encrypt, storeSessionApiKey } from './services/memory/apiMemory.js';
 import { logManagers } from './services/memory/logMemory.js';
 import rateLimit from 'express-rate-limit';
 import slowDown from 'express-slow-down';
@@ -25,8 +25,12 @@ dotenv.config();
 
 const app = express();
 
+// const allowedOrigins = process.env.NODE_ENV === 'production'
+//     ? ['https://www.qa-agent.site']
+//     : true; // Allow all in development
+
 const allowedOrigins = process.env.NODE_ENV === 'production'
-    ? ['https://www.qa-agent.site']
+    ? true
     : true; // Allow all in development
 
 app.use(cors({
@@ -101,7 +105,6 @@ app.use(apiLimiter);
 // Trust proxy (important for Render/Heroku/etc)
 app.set('trust proxy', 1);
 
-
 const PORT: number = parseInt(process.env.PORT || '3001');
 const WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
 
@@ -110,14 +113,20 @@ let sessions = new Map<string, BossAgent>();
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-const createValidators = (sessionId: string) => {
-    const eventBus = eventBusManager.getOrCreateBus(sessionId);
+function createValidators(sessionId: string): number {
+    try {
+        const eventBus = eventBusManager.getOrCreateBus(sessionId);
 
-    new ActionSpamValidator(eventBus);
-    new ErrorValidator(eventBus, sessionId);
-    new LLMUsageValidator(eventBus, sessionId);
+        new ActionSpamValidator(eventBus);
+        new ErrorValidator(eventBus, sessionId);
+        new LLMUsageValidator(eventBus, sessionId);
 
-    new WebSocketEventBridge(eventBus, sessionId, WebSocket_PORT);
+        const webSocketEventBridge = new WebSocketEventBridge(eventBus, sessionId, WebSocket_PORT);
+        return webSocketEventBridge.getPort() ?? WebSocket_PORT;
+    } catch (error) {
+        console.error('Error creating validators:', error);
+        throw error;
+    }
 }
 
 app.get('/', (req: Request, res: Response) => {
@@ -148,6 +157,11 @@ app.get('/start', (req: Request, res: Response) => {
 app.post('/start/:sessionId', async (req: Request, res: Response) => {
     const { goal, url } = req.body;
     const sessionId = req.params.sessionId;
+
+    if (sessions.size >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
+        res.status(429).send('We have reached the maximum number of sessions. Try again another time');
+    }
+
     if (sessions.has(sessionId)) {
         console.log('Session already started.');
         res.status(400).send('Session already started.');
@@ -160,49 +174,53 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
         return;
     }
 
-    const sessionEventBus = eventBusManager.getOrCreateBus(sessionId);
-    const logManager = logManagers.getOrCreateManager(sessionId);
+    try {
+        const sessionEventBus = eventBusManager.getOrCreateBus(sessionId);
+        const logManager = logManagers.getOrCreateManager(sessionId);
 
-    const stopHandler = async (evt: any) => {
-        if (evt.sessionId === sessionId) {
-            sessions.delete(sessionId);
-            logManager.log(`Session ${sessionId} stopped because of ${evt.message}`, State.INFO, true);
-            // Remove this specific listener
-            sessionEventBus.off('stop', stopHandler);
+        const stopHandler = async (evt: any) => {
+            if (evt.sessionId === sessionId) {
+                sessions.delete(sessionId);
+                logManager.log(`Session ${sessionId} stopped because of ${evt.message}`, State.INFO, true);
+                // Remove this specific listener
+                sessionEventBus.off('stop', stopHandler);
+            }
+        };
+
+        sessionEventBus.on('stop', stopHandler);
+
+        const websocketport = createValidators(sessionId);
+
+        const agents = await getAgents(goal);
+        const agent = new BossAgent({
+            sessionId: sessionId,
+            eventBus: sessionEventBus,
+            goalValue: goal,
+            agentConfigs: new Set<AgentConfig>(agents),
+        });
+        sessions.set(sessionId, agent);
+
+        if (process.env.API_KEY?.startsWith('TEST')) {
+            const success = setAPIKey(process.env.API_KEY);
+            if (!success) {
+                logManager.error('Failed to set API key.', State.ERROR, true);
+                res.status(500).send('Failed to set API key.');
+                return;
+            }
         }
-    };
 
-    sessionEventBus.on('stop', stopHandler);
-
-    createValidators(sessionId);
-
-    const agents = await getAgents(goal);
-    const agent = new BossAgent({
-        sessionId: sessionId,
-        eventBus: sessionEventBus,
-        goalValue: goal,
-        agentConfigs: new Set<AgentConfig>(agents),
-    });
-    sessions.set(sessionId, agent);
-
-    if (process.env.API_KEY?.startsWith('TEST')) {
-        const success = setAPIKey(process.env.API_KEY);
-        if (!success) {
-            logManager.error('Failed to set API key.', State.ERROR, true);
-            res.status(500).send('Failed to set API key.');
+        if (!process.env.API_KEY) {
+            logManager.error('API key is not set. Please set the API_KEY environment variable.', State.ERROR, true);
+            res.status(500).send('API key is not set. Please set the API_KEY environment variable.');
             return;
         }
-    }
 
-    if (!process.env.API_KEY) {
-        logManager.error('API key is not set. Please set the API_KEY environment variable.', State.ERROR, true);
-        res.status(500).send('API key is not set. Please set the API_KEY environment variable.');
-        return;
-    }
-
-    try {
         await agent.start(url);
-        res.send(`Session ${sessionId} started successfully!`);
+        res.json({
+            message: `Session ${sessionId} started successfully!`,
+            sessionId: sessionId,
+            websocketport: websocketport
+        });
     } catch (error) {
         console.error('Error starting session:', error);
         res.status(500).send('Failed to start session.');
@@ -255,10 +273,29 @@ app.get('/stop', async (req: Request, res: Response) => {
     }
 })
 
+const cleanup = async () => {
+    if (sessions.size === 0) {
+        console.log('No active sessions to stop.');
+        return;
+    }
+    for (const agent of sessions.values()) {
+        await agent.stop();
+    }
+    sessions.clear();
+    eventBusManager.clear();
+    clearSessionApiKeys();
+
+    console.log('All sessions stopped successfully.');
+}
+
 app.post('/test/:key', async (req: Request, res: Response) => {
     const { goal, url } = req.body;
     const key = req.params.key;
     const sessionId = "test_" + key;
+
+    if (sessions.size >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
+        res.status(429).send('We have reached the maximum number of sessions. Try again another time');
+    }
 
     if (sessions.has(sessionId)) {
         console.log('Test Session already started.');
@@ -288,7 +325,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
 
         sessionEventBus.on('stop', stopHandler);
 
-        createValidators(sessionId);
+        const websocketport = createValidators(sessionId);
 
         if (!goal) {
             logManager.error('USER_GOAL is not set. Please set the USER_GOAL environment variable.', State.ERROR, true);
@@ -306,7 +343,11 @@ app.post('/test/:key', async (req: Request, res: Response) => {
         sessions.set(sessionId, agent);
 
         await agent.start(url);
-        res.send(`Test Session started successfully!`);
+        res.json({
+            message: `Test Session started successfully!`,
+            sessionId: sessionId,
+            websocketport: websocketport
+        });
     } catch (error) {
         console.error('Error starting session:', error);
         res.status(500).send('Failed to start session.');
@@ -348,6 +389,18 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
 
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
+});
+
+process.on('SIGINT', () => {
+    console.log('\n🛑 Shutting down...');
+    cleanup();
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    console.log('\n🛑 SIGTERM received, shutting down...');
+    cleanup();
+    process.exit(0);
 });
 
 // Classify (fails?) → LLM Classify → Generate Test Data → Test Them

@@ -2,7 +2,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
-import { encrypt, storeSessionApiKey } from './apiMemory.js';
+import { encrypt, storeSessionApiKey } from './services/memory/apiMemory.js';
 
 const API_ENDPOINT = 'https://qa-node-backend.onrender.com';
 

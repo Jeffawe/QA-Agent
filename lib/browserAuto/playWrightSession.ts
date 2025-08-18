@@ -17,8 +17,6 @@ export default class PlaywrightSession extends Session<Page> {
       this.context = await browser.newContext();
       this.page = await this.context.newPage();
       await this.page.goto(url, { waitUntil: 'networkidle' });
-
-      console.log('Game should be running now!');
       return true;
     } catch (error) {
       console.error(error);

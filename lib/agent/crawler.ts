@@ -10,7 +10,7 @@ import Analyzer from "./analyzer.js";
 
 export class Crawler extends Agent {
     private isCurrentPageVisited = false;
-    private tester: Analyzer;
+    private analyzer: Analyzer;
     private manualTester: ManualAnalyzer;
 
     private playwrightSession: playwrightSession;
@@ -19,7 +19,7 @@ export class Crawler extends Agent {
         super("crawler", dependencies);
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
-        this.tester = this.requireAgent<Analyzer>("analyzer");
+        this.analyzer = this.requireAgent<Analyzer>("analyzer");
         this.manualTester = this.requireAgent<ManualAnalyzer>("manualanalyzer");
 
         this.playwrightSession = this.session as playwrightSession;
@@ -107,7 +107,7 @@ export class Crawler extends Agent {
                     if (isVisited) {
                         this.manualTester.enqueue(unvisited, isVisited);
                     } else {
-                        this.tester.enqueue(unvisited, isVisited);
+                        this.analyzer.enqueue(unvisited, isVisited);
                     }
 
                     this.isCurrentPageVisited = isVisited;
@@ -124,7 +124,7 @@ export class Crawler extends Agent {
                             this.setState(State.ACT);
                         }
                     } else {
-                        if (this.tester.isDone()) {
+                        if (this.analyzer.isDone()) {
                             this.logManager.log("Tester finished", this.buildState(), false);
                             this.setState(State.ACT);
                         }
@@ -135,7 +135,7 @@ export class Crawler extends Agent {
 
                 /*────────── 4. ACT → (START | DONE) ─*/
                 case State.ACT: {
-                    const next = this.isCurrentPageVisited ? this.manualTester.nextLink : this.tester.nextLink;
+                    const next = this.isCurrentPageVisited ? this.manualTester.nextLink : this.analyzer.nextLink;
                     if (next) {
                         PageMemory.markLinkVisited(this.currentUrl, next.text || next.href);
                         const finalUrl = page.url();

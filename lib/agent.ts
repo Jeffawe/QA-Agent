@@ -14,7 +14,7 @@ import PlaywrightSession from './browserAuto/playWrightSession.js';
 import { clearAllImages } from './services/imageProcessor.js';
 import { eventBusManager } from './services/events/eventBus.js';
 import { logManagers } from './services/memory/logMemory.js';
-import { deleteSessionApiKey } from './apiMemory.js';
+import { deleteSessionApiKey } from './services/memory/apiMemory.js';
 
 export interface AgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
   name: string;
@@ -54,7 +54,7 @@ export default class BossAgent {
   private readonly bus: EventBus;
   private readonly agentRegistry: AgentRegistry;
   private stopLoop: boolean = false;
-  protected logManager : LogManager;
+  protected logManager: LogManager;
 
   public sessions: Map<string, Session> = new Map();
   public actionServices: Map<string, ActionService> = new Map();
@@ -222,17 +222,22 @@ export default class BossAgent {
         await session.close();
       }
 
-      clearAllImages();
-      this.sessions.clear();
-      deleteSessionApiKey(this.sessionId);
-      eventBusManager.removeBus(this.sessionId);
-      logManagers.removeManager(this.sessionId);
+      this.cleanup();
       this.logManager.log("All Services have been stopped", State.DONE, true);
       return true;
     } catch (err) {
       this.logManager.error(`Error stopping agent: ${err}`, State.ERROR, true);
       return false;
     }
+  }
+
+  cleanup() {
+    this.agentRegistry.clear();
+    clearAllImages();
+    this.sessions.clear();
+    deleteSessionApiKey(this.sessionId);
+    eventBusManager.removeBus(this.sessionId);
+    logManagers.removeManager(this.sessionId);
   }
 
   // Public API to get agents (useful for external orchestration)

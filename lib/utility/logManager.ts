@@ -86,7 +86,7 @@ export class LogManager {
     logToConsole: boolean = true
   ): void {
     const resolvedState = this.resolveState(state, State.ERROR);
-    const errorMessage = `[ERROR] ${message} at [state: ${resolvedState}]`;
+    const errorMessage = `[${new Date().toISOString()}] [state: ${resolvedState}] ${message}`;
     this.logs.push(errorMessage);
     const eventBus = eventBusManager.getBusIfExists(this.sessionId);
     eventBus?.emit({ ts: Date.now(), type: "new_log", message: String(message) });

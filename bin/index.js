@@ -167,6 +167,7 @@ const websocket = args.websocket || config.websocket || 3002;
 const testMode = args['test-mode'] || config['test-mode'] || false;
 const autoStart = args['auto-start'] || config['auto-start'] || true;
 const daemonMode = args.daemon || args.d || false;
+const sessionid = args.sessionid || config.sessionid || null;
 
 if (args.help || args.h) {
   console.log(`
@@ -183,6 +184,7 @@ if (args.help || args.h) {
       --auto-start     Automatically start the agent (default: true)
       --help, -h       Show this help message
       --daemon, -d     Run in daemon mode
+      --sessionId      Session ID
 
     Logs:
       agent-run logs            Show main agent log
@@ -342,7 +344,9 @@ if (autoStart) {
   if (serverReady) {
     console.log('🚀 Server is ready, auto-starting agent...');
 
-    const endpoint = testMode ? `/test/${key}` : '/start/1';
+    const sessionId = sessionid ?? '1';
+
+    const endpoint = testMode ? `/test/${key}` : `/start/${sessionId}`;
     const baseUrl = `http://localhost:${port}`;
 
     // Wait a bit more to ensure server is fully initialized

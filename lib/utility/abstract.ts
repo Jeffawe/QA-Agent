@@ -144,6 +144,10 @@ export class AgentRegistry {
     hasAgent(name: string): boolean {
         return this.agents.has(name);
     }
+
+    clear(): void {
+        this.agents.clear();
+    }
 }
 
 export abstract class Session<TPage = any> {

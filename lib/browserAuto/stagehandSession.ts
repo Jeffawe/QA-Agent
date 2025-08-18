@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { State } from "../types.js";
 import { eventBusManager } from "../services/events/eventBus.js";
-import { getApiKeyForAgent } from "../apiMemory.js";
+import { getApiKeyForAgent } from "../services/memory/apiMemory.js";
 
 export default class StagehandSession extends Session<Page> {
     public stagehand: Stagehand | null;
