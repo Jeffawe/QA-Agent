@@ -215,7 +215,10 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
             return;
         }
 
-        await agent.start(url);
+        agent.start(url).catch(error => {
+            console.error(`Agent error for session ${sessionId}:`, error);
+            logManager.error(`Agent error for session ${sessionId}: ${error}`, State.ERROR, true);
+        });
         res.json({
             message: `Session ${sessionId} started successfully!`,
             sessionId: sessionId,
@@ -342,7 +345,11 @@ app.post('/test/:key', async (req: Request, res: Response) => {
         });
         sessions.set(sessionId, agent);
 
-        await agent.start(url);
+        agent.start(url).catch(error => {
+            console.error(`Agent error for session ${sessionId}:`, error);
+            logManager.error(`Agent error for session ${sessionId}: ${error}`, State.ERROR, true);
+        });
+
         res.json({
             message: `Test Session started successfully!`,
             sessionId: sessionId,
