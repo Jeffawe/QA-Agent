@@ -80,7 +80,7 @@ export const generateContent = async (options: GeminiCallOptions) => {
     }
 };
 
-export const checkUserKey = async (sessionId: string, userKey: string, returnApiKey = false): Promise<boolean> => {
+export const checkUserKey = async (sessionId: string, userKey: string, returnApiKey = false, retries = 3): Promise<boolean> => {
     try {
         const response = await fetch(`${API_ENDPOINT}/api/user/check-key`, {
             method: 'POST',
@@ -94,6 +94,12 @@ export const checkUserKey = async (sessionId: string, userKey: string, returnApi
         });
 
         if (response.status === 429) {
+            if (retries > 0) {
+                // Wait before retrying (exponential backoff)
+                const delay = Math.pow(2, 3 - retries) * 1000; // 1s, 2s, 4s
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return checkUserKey(sessionId, userKey, returnApiKey, retries - 1);
+            }
             throw new Error('Too many requests. Please try again later.');
         }
 
