@@ -89,10 +89,11 @@ export class LogManager {
     const errorMessage = `[ERROR] ${message} at [state: ${resolvedState}]`;
     this.logs.push(errorMessage);
     const eventBus = eventBusManager.getBusIfExists(this.sessionId);
+    eventBus?.emit({ ts: Date.now(), type: "new_log", message: String(message) });
     eventBus?.emit({ ts: Date.now(), type: "error", message: String(message) });
 
     if(this.logFilePath === undefined || this.logFilePath === null) return;
-    
+
     if (logToConsole) {
       console.error(errorMessage);
     }

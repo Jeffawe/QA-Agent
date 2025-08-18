@@ -9,8 +9,5 @@ export class ErrorValidator {
         bus.on("error", evt => this.onAction(evt.message, evt.error));
     }
 
-    private onAction(message: string, error?: Error) {
-        const logManager = logManagers.getOrCreateManager(this.sessionId);
-        logManager.error(message, State.ERROR, true);
-    }
+    private onAction(message: string, error?: Error) {}
 }
