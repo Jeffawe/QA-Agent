@@ -106,7 +106,7 @@ export enum State {
 }
 
 type StateValue = `${State}`;
-export type Namespaces = "crawler" | "tester" | "analyzer" | "goalagent" | "planneragent" | "manualtester"; // add more if needed
+export type Namespaces = "crawler" | "tester" | "analyzer" | "goalagent" | "planneragent" | "manualanalyzer"; // add more if needed
 
 export type NamespacedState = `${Namespaces}.${StateValue}`;
 

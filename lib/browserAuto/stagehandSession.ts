@@ -4,15 +4,19 @@ import fs from 'fs';
 import path from 'path';
 import { State } from "../types.js";
 import { eventBusManager } from "../services/events/eventBus.js";
+import { getApiKeyForAgent } from "../apiMemory.js";
 
 export default class StagehandSession extends Session<Page> {
     public stagehand: Stagehand | null;
-
+    private apiKey: string;
+    
     constructor(sessionId: string) {
         super(sessionId);
 
+        this.apiKey = getApiKeyForAgent(sessionId) ?? process.env.API_KEY;
+
         try {
-            if (!process.env.API_KEY || process.env.API_KEY.startsWith('TEST')) {
+            if (!this.apiKey || this.apiKey.startsWith('TEST')) {
                 const errorMessage = "API_KEY environment variable is not set or is a test key. Please set a valid API key.";
                 this.logManager.error(errorMessage, State.ERROR, true)
                 const eventBus = eventBusManager.getBusIfExists(sessionId);
@@ -28,7 +32,7 @@ export default class StagehandSession extends Session<Page> {
                 env: "LOCAL",
                 modelName: "google/gemini-2.5-flash",
                 modelClientOptions: {
-                    apiKey: process.env.API_KEY,
+                    apiKey: this.apiKey,
                 },
                 localBrowserLaunchOptions: {
                     headless: false

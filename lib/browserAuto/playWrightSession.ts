@@ -2,10 +2,8 @@ import { Browser, Page, Frame, BrowserContext } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import { ClicKType, Rect, State } from '../types.js';
-import { LogManager } from '../utility/logManager.js';
 import { Session } from '../utility/abstract.js';
 import { getBrowser } from '../browserManager.js';
-import { logManagers } from '../services/memory/logMemory.js';
 
 export default class PlaywrightSession extends Session<Page> {
   private browser: Browser | null = null;

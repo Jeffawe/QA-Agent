@@ -2,7 +2,7 @@ import playwrightSession from "../browserAuto/playWrightSession.js";
 import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 
-export default class ManualTester extends Agent {
+export default class ManualAnalyzer extends Agent {
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
     private playwrightSession: playwrightSession;
 
@@ -10,7 +10,7 @@ export default class ManualTester extends Agent {
     private goal: string = "";
 
     constructor(dependencies: BaseAgentDependencies) {
-        super("manualtester", dependencies);
+        super("manualanalyzer", dependencies);
         this.goal = "";
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
@@ -24,9 +24,9 @@ export default class ManualTester extends Agent {
 
     protected validateSessionType(): void {
         if (!(this.session instanceof playwrightSession)) {
-            this.logManager.error(`ManualTester requires playwrightSession, got ${this.session.constructor.name}`);
+            this.logManager.error(`ManualAnalyzer requires playwrightSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
-            throw new Error(`ManualTester requires playwrightSession, got ${this.session.constructor.name}`);
+            throw new Error(`ManualAnalyzer requires playwrightSession, got ${this.session.constructor.name}`);
         }
 
         this.playwrightSession = this.session as playwrightSession;

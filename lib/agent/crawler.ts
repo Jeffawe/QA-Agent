@@ -4,14 +4,14 @@ import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { InteractiveElement, LinkInfo, State } from "../types.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
-import ManualTester from "./manualTester.js";
+import ManualAnalyzer from "./manualAnalyzer.js";
 import playwrightSession from "../browserAuto/playWrightSession.js";
 import Analyzer from "./analyzer.js";
 
 export class Crawler extends Agent {
     private isCurrentPageVisited = false;
     private tester: Analyzer;
-    private manualTester: ManualTester;
+    private manualTester: ManualAnalyzer;
 
     private playwrightSession: playwrightSession;
 
@@ -20,7 +20,7 @@ export class Crawler extends Agent {
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
         this.tester = this.requireAgent<Analyzer>("analyzer");
-        this.manualTester = this.requireAgent<ManualTester>("manualtester");
+        this.manualTester = this.requireAgent<ManualAnalyzer>("manualanalyzer");
 
         this.playwrightSession = this.session as playwrightSession;
     }
