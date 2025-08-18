@@ -28,10 +28,10 @@ export class LogManager {
     if (!sessionId) {
       throw new Error('sessionId is required');
     }
-    this.log("🛠 LogManager initialized", State.INFO);
     this.sessionId = sessionId;
     this.logFilePath = path.join(LogManager.PROJECT_ROOT, "logs", `agent_${sessionId}.log`);
     this.filePath = path.join(LogManager.PROJECT_ROOT, "logs", `mission_log_${sessionId}.md`);
+    this.log("🛠 LogManager initialized", State.INFO);
   }
 
   private resolveState(
