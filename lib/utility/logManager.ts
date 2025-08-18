@@ -64,6 +64,7 @@ export class LogManager {
     const eventBus = eventBusManager.getBusIfExists(this.sessionId);
     eventBus?.emit({ ts: Date.now(), type: "new_log", message: String(message) });
 
+    if(this.logFilePath === undefined || this.logFilePath === null) return;
     try {
       fs.mkdirSync(path.dirname(this.logFilePath), { recursive: true });
       fs.appendFileSync(this.logFilePath, timestamped + "\n");
@@ -90,6 +91,8 @@ export class LogManager {
     const eventBus = eventBusManager.getBusIfExists(this.sessionId);
     eventBus?.emit({ ts: Date.now(), type: "error", message: String(message) });
 
+    if(this.logFilePath === undefined || this.logFilePath === null) return;
+    
     if (logToConsole) {
       console.error(errorMessage);
     }
