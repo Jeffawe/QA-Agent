@@ -80,7 +80,7 @@ export const generateContent = async (options: GeminiCallOptions) => {
     }
 };
 
-export const checkUserKey = async (sessionId: string, userKey: string, returnApiKey = false) : Promise<boolean> => {
+export const checkUserKey = async (sessionId: string, userKey: string, returnApiKey = false): Promise<boolean> => {
     try {
         const response = await fetch(`${API_ENDPOINT}/api/user/check-key`, {
             method: 'POST',
@@ -92,6 +92,17 @@ export const checkUserKey = async (sessionId: string, userKey: string, returnApi
                 returnApiKey
             })
         });
+
+        if (response.status === 429) {
+            throw new Error('Too many requests. Please try again later.');
+        }
+
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const textResponse = await response.text();
+            throw new Error(`Server returned non-JSON response: ${textResponse}`);
+        }
 
         const data = await response.json();
 
