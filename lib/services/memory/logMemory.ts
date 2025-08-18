@@ -4,10 +4,14 @@ export class LogBusManager {
     private logManagers = new Map<string, LogManager>();
 
     getOrCreateManager(sessionId: string): LogManager {
-        if (!this.logManagers.has(sessionId)) {
-            this.logManagers.set(sessionId, new LogManager(sessionId));
+        try {
+            if (!this.logManagers.has(sessionId)) {
+                this.logManagers.set(sessionId, new LogManager(sessionId));
+            }
+            return this.logManagers.get(sessionId)!;
+        } catch (error) {
+            throw error;
         }
-        return this.logManagers.get(sessionId)!;
     }
 
     getManagerIfExists(sessionId: string): LogManager | undefined {

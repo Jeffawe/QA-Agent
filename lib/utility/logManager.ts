@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { NamespacedState, State } from '../types.js';
 import { eventBusManager } from '../services/events/eventBus.js';
 
@@ -11,7 +12,7 @@ interface Entry {
 }
 
 export class LogManager {
-  static PROJECT_ROOT = process.cwd()
+  static PROJECT_ROOT = process.cwd() || path.dirname(fileURLToPath(import.meta.url)) || '.';
 
   private logs: string[] = [];
   private numberOfTokens: number = 0;
@@ -20,7 +21,14 @@ export class LogManager {
   private sessionId: string = "";
 
   constructor(sessionId: string) {
-    this.log("🛠 LogManager initialized");
+    if (!LogManager.PROJECT_ROOT) {
+      throw new Error('PROJECT_ROOT is undefined');
+    }
+
+    if (!sessionId) {
+      throw new Error('sessionId is required');
+    }
+    this.log("🛠 LogManager initialized", State.INFO);
     this.sessionId = sessionId;
     this.logFilePath = path.join(LogManager.PROJECT_ROOT, "logs", `agent_${sessionId}.log`);
     this.filePath = path.join(LogManager.PROJECT_ROOT, "logs", `mission_log_${sessionId}.md`);

@@ -25,7 +25,7 @@ dotenv.config();
 
 const app = express();
 
-const allowedOrigins = process.env.NODE_ENV === 'production' 
+const allowedOrigins = process.env.NODE_ENV === 'production'
     ? ['https://www.qa-agent.site']
     : true; // Allow all in development
 
@@ -259,52 +259,52 @@ app.post('/test/:key', async (req: Request, res: Response) => {
     const { goal, url } = req.body;
     const key = req.params.key;
     const sessionId = "test_" + key;
-    
+
     if (sessions.has(sessionId)) {
         console.log('Test Session already started.');
         res.status(400).send('Test Session already started.');
         return;
     }
-    
-    const getKey: boolean = process.env.NODE_ENV === 'production'
-    const success = await checkUserKey(sessionId, key, getKey);
-    if (!success) {
-        res.status(401).send('Unauthorized');
-        return;
-    }
-
-    const sessionEventBus = eventBusManager.getOrCreateBus(sessionId);
-    const logManager = logManagers.getOrCreateManager(sessionId);
-
-    const stopHandler = async (evt: any) => {
-        if (evt.sessionId === sessionId) {
-            sessions.delete(sessionId);
-            logManager.log(`Session ${sessionId} stopped because of ${evt.message}`, State.INFO, true);
-            // Remove this specific listener
-            sessionEventBus.off('stop', stopHandler);
-        }
-    };
-
-    sessionEventBus.on('stop', stopHandler);
-
-    createValidators(sessionId);
-
-    if (!goal) {
-        logManager.error('USER_GOAL is not set. Please set the USER_GOAL environment variable.', State.ERROR, true);
-        res.status(500).send('USER_GOAL is not set. Please set the USER_GOAL environment variable.');
-        return;
-    }
-
-    const agents = await getAgents(goal);
-    const agent = new BossAgent({
-        sessionId: sessionId,
-        eventBus: sessionEventBus,
-        goalValue: goal,
-        agentConfigs: new Set<AgentConfig>(agents),
-    });
-    sessions.set(sessionId, agent);
 
     try {
+        const getKey: boolean = process.env.NODE_ENV === 'production'
+        const success = await checkUserKey(sessionId, key, getKey);
+        if (!success) {
+            res.status(401).send('Unauthorized');
+            return;
+        }
+
+        const sessionEventBus = eventBusManager.getOrCreateBus(sessionId);
+        const logManager = logManagers.getOrCreateManager(sessionId);
+
+        const stopHandler = async (evt: any) => {
+            if (evt.sessionId === sessionId) {
+                sessions.delete(sessionId);
+                logManager.log(`Session ${sessionId} stopped because of ${evt.message}`, State.INFO, true);
+                // Remove this specific listener
+                sessionEventBus.off('stop', stopHandler);
+            }
+        };
+
+        sessionEventBus.on('stop', stopHandler);
+
+        createValidators(sessionId);
+
+        if (!goal) {
+            logManager.error('USER_GOAL is not set. Please set the USER_GOAL environment variable.', State.ERROR, true);
+            res.status(500).send('USER_GOAL is not set. Please set the USER_GOAL environment variable.');
+            return;
+        }
+
+        const agents = await getAgents(goal);
+        const agent = new BossAgent({
+            sessionId: sessionId,
+            eventBus: sessionEventBus,
+            goalValue: goal,
+            agentConfigs: new Set<AgentConfig>(agents),
+        });
+        sessions.set(sessionId, agent);
+
         await agent.start(url);
         res.send(`Test Session started successfully!`);
     } catch (error) {
