@@ -40,11 +40,11 @@ export class WebSocketEventBridge {
         this.eventBus = eventBus;
         this.clients = new Set();
         this.logManager = logManagers.getOrCreateManager(sessionId);
-        this.port = this.findAvailablePort(port);
+        this.port = port
 
         // Create WebSocket server
-        this.wss = new WebSocketServer({ port });
-        console.log(`🚀 WebSocket server started on port ${port}`);
+        this.wss = new WebSocketServer({ port: this.port });
+        console.log(`🚀 WebSocket server started on port ${this.port}`);
 
         // Handle new client connections
         this.wss.on('connection', (ws: WebSocket) => {
@@ -77,21 +77,6 @@ export class WebSocketEventBridge {
 
         // Set up event listeners
         this.setupEventListeners();
-    }
-
-    private findAvailablePort(startPort: number): number {
-        // Try ports incrementally until one is available
-        for (let port = startPort; port < startPort + 100; port++) {
-            try {
-                const testServer = new WebSocketServer({ port });
-                testServer.close();
-                return port;
-            } catch (error) {
-                continue; // Port in use, try next
-            }
-        }
-        
-        throw new Error('No available ports found');
     }
 
     getPort(): number {

@@ -106,7 +106,7 @@ app.use(apiLimiter);
 app.set('trust proxy', 1);
 
 const PORT: number = parseInt(process.env.PORT || '3001');
-const WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
+let WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
 
 let sessions = new Map<string, BossAgent>();
 
@@ -121,8 +121,12 @@ function createValidators(sessionId: string): number {
         new ErrorValidator(eventBus, sessionId);
         new LLMUsageValidator(eventBus, sessionId);
 
+        if (process.env.NODE_ENV === 'production'){
+            WebSocket_PORT = 0;
+        }
+
         const webSocketEventBridge = new WebSocketEventBridge(eventBus, sessionId, WebSocket_PORT);
-        return webSocketEventBridge.getPort() ?? WebSocket_PORT;
+        return webSocketEventBridge.getPort();
     } catch (error) {
         console.error('Error creating validators:', error);
         throw error;
