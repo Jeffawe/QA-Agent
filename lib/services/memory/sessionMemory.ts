@@ -1,9 +1,8 @@
-import BossAgent from "../../agent";
+import BossAgent from "../../agent.js";
 import { Worker } from 'worker_threads';
 
 interface SessionData {
-    agent: BossAgent;  // Keep this for compatibility if needed
-    worker?: Worker;    // Add worker reference
+    worker: Worker;    // Add worker reference
     status: string;
 }
 

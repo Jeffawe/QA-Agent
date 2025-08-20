@@ -28,14 +28,16 @@ export class GeminiLLm extends LLM {
     constructor(sessionId: string) {
         super();
         this.sessionId = sessionId;
-        this.apiKey = getApiKeyForAgent(sessionId) ?? process.env.API_KEY;
+        const key = getApiKeyForAgent(sessionId);
 
         this.logManager = logManagers.getOrCreateManager(sessionId);
 
-        if (!this.apiKey) {
+        if (!key) {
             this.logManager.error('API_KEY is not set. Please set the API_KEY', State.ERROR, true);
             throw new Error('API_KEY is not set. Please set the API_KEY');
         }
+
+        this.apiKey = key;
 
         this.eventBus = eventBusManager.getOrCreateBus(sessionId);
 

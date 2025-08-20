@@ -6,11 +6,15 @@
     "outDir": "./dist",                        
 
     /* Modules */
-    "module": "es2020",                               
+    "module": "nodenext",                               
     "rootDir": "./lib",                                 
-    "moduleResolution": "node10",                    
+    "moduleResolution": "nodenext",  
+    "allowSyntheticDefaultImports": true,                  
     "esModuleInterop": true,                           
     "forceConsistentCasingInFileNames": true, 
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
              
 
     /* Type Checking */
@@ -18,5 +22,11 @@
     "skipLibCheck": true,    
     "incremental": true                             
   },
-  "include": ["lib/**/*"]
+  "include": ["lib/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
 }

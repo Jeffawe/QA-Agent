@@ -11,19 +11,18 @@ import { Worker } from 'worker_threads';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-import BossAgent, { AgentConfig } from './agent.js';
 import { eventBusManager } from './services/events/eventBus.js';
 import { ActionSpamValidator } from './services/validators/actionValidator.js';
 import { ErrorValidator } from './services/validators/errorValidator.js';
 import { LLMUsageValidator } from './services/validators/llmValidator.js';
 import { WebSocketEventBridge } from './services/events/webSockets.js';
 
-import { State } from './types.js';
+import { MiniAgentConfig, State } from './types.js';
 import { checkUserKey } from './externalCall.js';
 import { getAgents } from './agentConfig.js';
 
 import { clearSessions, deleteSession, getSession, getSessions, getSessionSize, hasSession, setSession } from './services/memory/sessionMemory.js';
-import { clearSessionApiKeys, storeSessionApiKey } from './services/memory/apiMemory.js';
+import { clearSessionApiKeys, getApiKeyForAgent, storeSessionApiKey } from './services/memory/apiMemory.js';
 import { logManagers } from './services/memory/logMemory.js';
 import { LogManager } from './utility/logManager.js';
 
@@ -163,7 +162,7 @@ const cleanup = async () => {
     console.log('All sessions stopped successfully.');
 }
 
-const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, agents: Set<AgentConfig>) => {
+const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, serializableConfigs: MiniAgentConfig[]) => {
     // Handle worker messages (minimal)
     worker.on('message', (message) => {
         if (message.type === 'error') {
@@ -184,11 +183,11 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, agen
     // Send the agent instance to worker to run start()
     worker.postMessage({
         command: 'start',
-        // We'll recreate the agent in worker with same config
         agentConfig: {
             sessionId,
+            apiKey: getApiKeyForAgent(sessionId),
             goalValue: goal,
-            agentConfigs: Array.from(agents)
+            agentConfigs: serializableConfigs
         }
     });
 }
@@ -199,7 +198,7 @@ app.get('/', (req: Request, res: Response) => {
 
 app.get('/health', (req: Request, res: Response) => {
     const message = 'Server is running fine!';
-    const data = `Running ${getSessionSize()} sessions`;
+    const data = `Running ${getSessionSize()} sessions which are ${Array.from(getSessions().keys()).join(', ')}`;
     res.send({ message, data });
 });
 
@@ -240,15 +239,14 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
 
     try {
         const sessionEventBus = eventBusManager.getOrCreateBus(sessionId);
-        const logManager = logManagers.getOrCreateManager(sessionId);
 
         const stopHandler = async (evt: any) => {
             const sessionId = evt.sessionId;
             const session = getSession(evt.sessionId);
             deleteSession(sessionId);
+            // Remove this specific listener
             sessionEventBus.off('stop', stopHandler);
             session?.worker?.postMessage({ command: 'stop' });
-            // Remove this specific listener
         };
 
         sessionEventBus.on('stop', stopHandler);
@@ -256,31 +254,25 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
         const websocketport = createValidators(sessionId);
 
         const agents = await getAgents(goal);
-        const agent = new BossAgent({
-            sessionId: sessionId,
-            eventBus: sessionEventBus,
-            goalValue: goal,
-            agentConfigs: new Set<AgentConfig>(agents),
-        });
+        const serializableConfigs: MiniAgentConfig[] = Array.from(agents).map(config => ({
+            name: config.name,
+            sessionType: config.sessionType,
+            dependent: config.dependent,
+            agentDependencies: config.agentDependencies,
+        }));
 
         const worker = new Worker(join(__dirname, 'agent-worker.js'), {
             workerData: { sessionId, url }
         });
 
-        // Store both agent and worker
+        setUpWorkerEvents(worker, sessionId, goal, serializableConfigs);
+
         setSession(sessionId, {
-            agent,
             worker,
             status: 'starting'
         });
 
-        setUpWorkerEvents(worker, sessionId, goal, new Set<AgentConfig>(agents));
-
-        if (!process.env.API_KEY) {
-            logManager.error('API key is not set. Please set the API_KEY environment variable.', State.ERROR, true);
-            res.status(500).send('API key is not set. Please set the API_KEY environment variable.');
-            return;
-        }
+        console.log(`Session ${sessionId} started successfully!`);
 
         res.json({
             message: `Session ${sessionId} started successfully!`,
@@ -332,7 +324,7 @@ app.get('/stop', async (req: Request, res: Response) => {
             res.status(404).send('No active sessions to stop.');
             return;
         }
-        
+
         for (const session of getSessions().values()) {
             if (session.worker) {
                 session.worker.postMessage({ command: 'stop' });
@@ -401,30 +393,25 @@ app.post('/test/:key', async (req: Request, res: Response) => {
         }
 
         const agents = await getAgents(goal);
-        const agent = new BossAgent({
-            sessionId: sessionId,
-            eventBus: sessionEventBus,
-            goalValue: goal,
-            agentConfigs: new Set<AgentConfig>(agents),
-        });
+        const serializableConfigs: MiniAgentConfig[] = Array.from(agents).map(config => ({
+            name: config.name,
+            sessionType: config.sessionType,
+            dependent: config.dependent,
+            agentDependencies: config.agentDependencies,
+        }));
 
         const worker = new Worker(join(__dirname, 'agent-worker.js'), {
             workerData: { sessionId, url }
         });
 
-        // Store both agent and worker
+        setUpWorkerEvents(worker, sessionId, goal, serializableConfigs);
+
         setSession(sessionId, {
-            agent,
             worker,
             status: 'starting'
         });
 
-        setUpWorkerEvents(worker, sessionId, goal, new Set<AgentConfig>(agents));
-
-        agent.start(url).catch(error => {
-            console.error(`Agent error for session ${sessionId}:`, error);
-            logManager.error(`Agent error for session ${sessionId}: ${error}`, State.ERROR, true);
-        });
+        console.log(`Starting Test Session: ${sessionId}`);
 
         res.json({
             message: `Test Session started successfully!`,
@@ -455,6 +442,8 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
 
         // Store encrypted key mapped to sessionId
         storeSessionApiKey(sessionId, apiKey);
+
+        console.log(`🔑 API key stored for session ${sessionId}`);
 
         res.json({
             success: true,

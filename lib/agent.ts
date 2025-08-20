@@ -2,7 +2,7 @@ import ActionService from './services/actions/actionService.js';
 import { AgentRegistry, BaseAgentDependencies, Session, Thinker } from "./utility/abstract.js";
 import { LogManager } from "./utility/logManager.js";
 import { EventBus } from "./services/events/event.js";
-import { State } from "./types.js";
+import { AgentConfig, State } from "./types.js";
 import { CombinedThinker } from "./services/thinkers/combinedThinker.js";
 
 import NavigationTree from "./utility/navigationTree.js";
@@ -15,15 +15,6 @@ import { clearAllImages } from './services/imageProcessor.js';
 import { eventBusManager } from './services/events/eventBus.js';
 import { logManagers } from './services/memory/logMemory.js';
 import { deleteSessionApiKey } from './services/memory/apiMemory.js';
-
-export interface AgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
-  name: string;
-  agentClass: new (dependencies: T) => Agent;
-  sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
-  dependent?: boolean; // If true, agent won't start until another agent triggers it
-  dependencies?: Partial<T>; // Additional/override dependencies
-  agentDependencies?: string[]; // Names of other agents this agent depends on
-}
 
 export interface AgentDependencies {
   sessionId: string;
@@ -92,49 +83,53 @@ export default class BossAgent {
   }
 
   private initializeAgents(sessionId: string, agentConfigs: Set<AgentConfig>): void {
-    // First pass: Create all agents without dependencies
-    const agentInstances: Array<{ config: AgentConfig; agent: Agent }> = [];
-
-    for (const config of agentConfigs) {
-      try {
-        if (!this.sessions.has(sessionId)) {
-          const session = SessionFactory.createSession(config.sessionType, sessionId);
-          this.sessions.set(sessionId, session);
-        }
-
-        // Retrieve existing or newly created session
-        const session = this.sessions.get(sessionId)!;
-
-        const actionService = new ActionService(session as PlaywrightSession);
-        this.actionServices.set(config.name, actionService);
-
-        const baseDependencies: BaseAgentDependencies = {
-          session,
-          thinker: this.thinker,
-          sessionId,
-          actionService,
-          eventBus: this.bus,
-          agentRegistry: this.agentRegistry,
-          dependent: config.dependent ?? false,
-        };
-
-        const agent = new config.agentClass(baseDependencies);
-        agentInstances.push({ config, agent });
-
-        // Register the agent immediately so other agents can reference it
-        this.agentRegistry.register(config.name, agent);
-
-        this.logManager.log(`Initialized agent: ${config.name}`, State.INFO);
-      } catch (error) {
-        this.logManager.error(`Failed to initialize agent ${config.name}: ${error}`, State.ERROR);
-        throw error;
-      }
-    }
-
-    // Second pass: Validate agent dependencies
     try {
+      // First pass: Create all agents without dependencies
+      const agentInstances: Array<{ config: AgentConfig; agent: Agent }> = [];
+
+      for (const config of agentConfigs) {
+        try {
+          if (!this.sessions.has(sessionId)) {
+            const session = SessionFactory.createSession(config.sessionType, sessionId);
+            this.sessions.set(sessionId, session);
+          }
+
+          // Retrieve existing or newly created session
+          const session = this.sessions.get(sessionId)!;
+
+          const actionService = new ActionService(session as PlaywrightSession);
+          this.actionServices.set(config.name, actionService);
+
+          const baseDependencies: BaseAgentDependencies = {
+            session,
+            thinker: this.thinker,
+            sessionId,
+            actionService,
+            eventBus: this.bus,
+            agentRegistry: this.agentRegistry,
+            dependent: config.dependent ?? false,
+          };
+
+          const agent = new config.agentClass(baseDependencies);
+          agentInstances.push({ config, agent });
+
+          // Register the agent immediately so other agents can reference it
+          this.agentRegistry.register(config.name, agent);
+
+          this.logManager.log(`Initialized agent: ${config.name}`, State.INFO);
+        } catch (error) {
+          this.logManager.error(`Failed to initialize agent ${config.name}: ${error}`, State.ERROR);
+          throw error;
+        }
+      }
+
+      // Second pass: Validate agent dependencies
       this.validateAgentDependencies(agentConfigs);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (this.logManager) {
+        this.logManager.error(`Failed to initialize agents: ${errorMessage}`, State.ERROR);
+      }
       throw error;
     }
   }
@@ -236,7 +231,7 @@ export default class BossAgent {
     this.sessions.clear();
     deleteSessionApiKey(this.sessionId);
     eventBusManager.removeBus(this.sessionId);
-    this.logManager.deleteLogFile();
+    //this.logManager.deleteLogFile();
     logManagers.removeManager(this.sessionId);
   }
 

@@ -2,6 +2,9 @@ import { parentPort, workerData } from 'worker_threads';
 import BossAgent from './agent.js';
 import { eventBusManager } from './services/events/eventBus.js';
 import { deleteSession } from './services/memory/sessionMemory.js';
+import { AgentFactory } from './agentFactory.js';
+import { AgentConfig, MiniAgentConfig } from './types.js';
+import { storeSessionApiKey } from './services/memory/apiMemory.js';
 
 let agent: BossAgent | null = null;
 
@@ -9,21 +12,30 @@ if (parentPort) {
     parentPort.on('message', async (data) => {
         if (data.command === 'start') {
             try {
-                console.log(`🚀 Worker starting agent for session ${data.agentConfig.sessionId}`);
+                if (agent) {
+                    console.warn(`Agent already running for session ${workerData.sessionId}`);
+                    return;
+                }
 
-                // Recreate the agent in worker thread
-                // NOTE: This creates a separate eventBus instance in worker
-                // If you need the SAME eventBus, we'd need to pass it differently
                 const workerEventBus = eventBusManager.getOrCreateBus(data.agentConfig.sessionId);
+
+                // Convert serializable configs back to full AgentConfigs
+                const fullAgentConfigs: Set<AgentConfig> = new Set(
+                    data.agentConfig.agentConfigs.map((config: MiniAgentConfig) => ({
+                        ...config,
+                        agentClass: AgentFactory.getAgentClass(config.name) // Recreate class reference
+                    }))
+                );
+
+                storeSessionApiKey(data.agentConfig.sessionId, data.agentConfig.apiKey);
 
                 agent = new BossAgent({
                     sessionId: data.agentConfig.sessionId,
                     eventBus: workerEventBus,
                     goalValue: data.agentConfig.goalValue,
-                    agentConfigs: new Set(data.agentConfig.agentConfigs),
+                    agentConfigs: fullAgentConfigs,
                 });
 
-                // THIS is the blocking call that now runs in worker thread
                 await agent.start(workerData.url);
 
                 console.log(`✅ Agent completed for session ${data.agentConfig.sessionId}`);
@@ -43,6 +55,7 @@ if (parentPort) {
 
             if (agent) {
                 await agent.stop();
+                agent = null; // Clear the reference
             }
 
             deleteSession(workerData.sessionId);

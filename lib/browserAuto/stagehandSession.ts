@@ -13,10 +13,10 @@ export default class StagehandSession extends Session<Page> {
     constructor(sessionId: string) {
         super(sessionId);
 
-        this.apiKey = getApiKeyForAgent(sessionId) ?? process.env.API_KEY;
+        const key = getApiKeyForAgent(sessionId);
 
         try {
-            if (!this.apiKey || this.apiKey.startsWith('TEST')) {
+            if (!key || key.startsWith('TEST')) {
                 const errorMessage = "API_KEY environment variable is not set or is a test key. Please set a valid API key.";
                 this.logManager.error(errorMessage, State.ERROR, true)
                 const eventBus = eventBusManager.getBusIfExists(sessionId);
@@ -29,6 +29,7 @@ export default class StagehandSession extends Session<Page> {
                 throw new Error(errorMessage);
             }
 
+            this.apiKey = key;
             this.stagehand = new Stagehand({
                 env: "LOCAL",
                 modelName: "google/gemini-2.5-flash",

@@ -1,5 +1,5 @@
-import { LinkInfo, State } from "../types";
-import { Agent, BaseAgentDependencies } from "../utility/abstract";
+import { LinkInfo, State } from "../types.js";
+import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import playwrightSession from "../browserAuto/playWrightSession.js";
 
 export default class Tester extends Agent {

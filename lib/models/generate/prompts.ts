@@ -1,4 +1,4 @@
-import { Namespaces } from "../../types";
+import { Namespaces } from "../../types.js";
 import { z } from "zod";
 
 export const systemPromptSchema = z.object({

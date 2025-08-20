@@ -14,6 +14,7 @@ export const storeSessionApiKey = (sessionId: string, apiKey: string) => {
 
     // Set TTL - auto-delete after 4 hours
     setTimeout(() => {
+        if (!sessionApiKeys.has(sessionId)) return;
         sessionApiKeys.delete(sessionId);
         console.log(`🔑 API key for session ${sessionId} expired and deleted`);
     }, 4 * 60 * 60 * 1000);
@@ -37,12 +38,14 @@ export const getApiKeyForAgent = (sessionId: string) => {
         const encryptedData = sessionApiKeys.get(sessionId);
 
         if (!encryptedData) {
-            throw new Error(`No API key found for session: ${sessionId}`);
+            if (process.env.NODE_ENV === 'development') return process.env.API_KEY
+            return null;
         }
 
         return decrypt(encryptedData);
     } catch (error) {
-        console.error(`❌ Error retrieving API key for session ${sessionId}:`, error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`❌ Error retrieving API key for session ${sessionId}:`, errorMessage);
         throw error;
     }
 };

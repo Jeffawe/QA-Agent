@@ -1,3 +1,5 @@
+import { Agent, BaseAgentDependencies } from "./utility/abstract.js";
+
 export interface Action {
     step: 'move_mouse_to' | 'click' | 'press_key' | 'wait' | 'no_op' | 'done' | string;
     args: any[];
@@ -144,4 +146,21 @@ export interface LinkInfo {
     selector: string;
     href: string;
     visited: boolean;
+}
+
+export interface AgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
+  name: Namespaces;
+  agentClass: new (dependencies: T) => Agent;
+  sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
+  dependent?: boolean; // If true, agent won't start until another agent triggers it
+  dependencies?: Partial<T>; // Additional/override dependencies
+  agentDependencies?: string[]; // Names of other agents this agent depends on
+}
+
+export interface MiniAgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
+  name: Namespaces;
+  sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
+  dependent?: boolean; // If true, agent won't start until another agent triggers it
+  dependencies?: Partial<T>; // Additional/override dependencies
+  agentDependencies?: string[]; // Names of other agents this agent depends on
 }

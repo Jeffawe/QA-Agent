@@ -1,14 +1,7 @@
-import { AgentConfig } from "./agent.js";
-import { Crawler } from "./agent/crawler.js";
-import { GoalAgent } from "./agent/goalIntelliAgent.js";
-import ManualAnalyzer from "./agent/manualAnalyzer.js";
-import PlannerAgent from "./agent/plannerAgent.js";
-import Tester from "./agent/analyzer.js";
 import { pipeline } from '@xenova/transformers';
-import { ExtractorOptions } from "./types.js";
-import Analyzer from "./agent/analyzer.js";
+import { ExtractorOptions, MiniAgentConfig } from "./types.js";
 
-interface AgentConfigWithDescription extends AgentConfig {
+interface AgentConfigWithDescription extends MiniAgentConfig {
     description: string;
     keywords: string[];
 }
@@ -23,15 +16,13 @@ interface ConfigMatch {
 export const goalConfigWithDesc: AgentConfigWithDescription[] = [
     {
         name: "goalagent",
-        agentClass: GoalAgent,
         sessionType: "stagehand",
         dependent: true,
         description: "Accomplish specific tasks and objectives with intelligent planning",
         keywords: ["goal", "task", "objective", "accomplish", "achieve", "complete", "intelligent", "planning"]
     },
     {
-        name: "planner",
-        agentClass: PlannerAgent,
+        name: "planneragent",
         sessionType: "stagehand",
         dependent: false,
         agentDependencies: ["goalagent"],
@@ -43,23 +34,20 @@ export const goalConfigWithDesc: AgentConfigWithDescription[] = [
 export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
     {
         name: "analyzer",
-        agentClass: Analyzer,
         sessionType: "playwright",
         dependent: true,
         description: "Analyze and process extracted content for insights and patterns",
         keywords: ["analyze", "process", "insights", "patterns", "evaluate", "examine", "study"]
     },
-    {
-        name: "tester",
-        agentClass: Tester,
-        sessionType: "stagehand",
-        dependent: true,
-        description: "Test functionality and validate system behavior automatically",
-        keywords: ["test", "validate", "verify", "check", "functionality", "behavior", "automatic"]
-    },
+    // {
+    //     name: "tester",
+    //     sessionType: "stagehand",
+    //     dependent: true,
+    //     description: "Test functionality and validate system behavior automatically",
+    //     keywords: ["test", "validate", "verify", "check", "functionality", "behavior", "automatic"]
+    // },
     {
         name: "manualanalyzer",
-        agentClass: ManualAnalyzer,
         sessionType: "playwright",
         dependent: true,
         agentDependencies: [],
@@ -68,10 +56,9 @@ export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
     },
     {
         name: "crawler",
-        agentClass: Crawler,
         sessionType: "playwright",
         dependent: false,
-        agentDependencies: ["tester", "manualanalyzer", "analyzer"],
+        agentDependencies: ["manualanalyzer", "analyzer"],
         description: "Crawl and navigate through entire websites to extract comprehensive data",
         keywords: ["crawl", "scrape", "navigate", "website", "data", "extract", "comprehensive", "entire", "all pages"]
     }
