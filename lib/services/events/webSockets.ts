@@ -44,6 +44,8 @@ export class WebSocketEventBridge {
 
         // Create WebSocket server
         this.wss = new WebSocketServer({ port: this.port });
+
+        this.port = (this.wss.address() as any)?.port || port;
         console.log(`🚀 WebSocket server started on port ${this.port}`);
 
         // Handle new client connections

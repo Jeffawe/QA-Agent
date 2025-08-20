@@ -167,7 +167,6 @@ export default class BossAgent {
     }
 
     this.bus.on('stop', async (evt) => {
-      await this.stop();
       this.stopLoop = true;
       this.logManager.log(`Agent stopped because of ${evt.message}`, State.ERROR, true);
     });
@@ -237,6 +236,7 @@ export default class BossAgent {
     this.sessions.clear();
     deleteSessionApiKey(this.sessionId);
     eventBusManager.removeBus(this.sessionId);
+    this.logManager.deleteLogFile();
     logManagers.removeManager(this.sessionId);
   }
 

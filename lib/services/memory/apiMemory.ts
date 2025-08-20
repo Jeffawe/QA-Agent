@@ -7,7 +7,9 @@ const SECRET_KEY = process.env.ENCRYPTION_SECRET || 'your-secret-key-min-32-char
 
 const sessionApiKeys = new Map();
 
-export const storeSessionApiKey = (sessionId: string, encryptedData: EncryptedData) => {
+export const storeSessionApiKey = (sessionId: string, apiKey: string) => {
+    const encryptedData = encrypt(apiKey);
+
     sessionApiKeys.set(sessionId, encryptedData);
 
     // Set TTL - auto-delete after 4 hours
@@ -18,8 +20,10 @@ export const storeSessionApiKey = (sessionId: string, encryptedData: EncryptedDa
 };
 
 export const deleteSessionApiKey = (sessionId: string) => {
-    sessionApiKeys.delete(sessionId);
-    console.log(`🔑 API key for session ${sessionId} deleted`);
+    if (sessionApiKeys.has(sessionId)) {
+        sessionApiKeys.delete(sessionId);
+        console.log(`🔑 API key for session ${sessionId} deleted`);
+    }
 };
 
 export const clearSessionApiKeys = () => {

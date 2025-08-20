@@ -55,6 +55,7 @@ export class GeminiLLm extends LLM {
                 this.eventBus.emit({
                     ts: Date.now(),
                     type: "stop",
+                    sessionId: this.sessionId,
                     message: `Failed to generate multimodal action: ${err}`,
                 });
 
@@ -165,6 +166,7 @@ export class GeminiLLm extends LLM {
                 this.eventBus?.emit({
                     ts: Date.now(),
                     type: "stop",
+                    sessionId: this.sessionId,
                     message: `Failed to generate multimodal action: ${err}`,
                 });
             }
@@ -268,6 +270,7 @@ export class GeminiLLm extends LLM {
                 this.eventBus?.emit({
                     ts: Date.now(),
                     type: "stop",
+                    sessionId: this.sessionId,
                     message: `Failed to generate multimodal action: ${err}`,
                 });
             }

@@ -28,6 +28,10 @@ export class LogBusManager {
     getAllActiveSessions(): string[] {
         return Array.from(this.logManagers.keys());
     }
+
+    clear() {
+        this.logManagers.clear();
+    }
 }
 
 // Global manager instance

@@ -2,22 +2,9 @@ import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
-import { encrypt, storeSessionApiKey } from './services/memory/apiMemory.js';
+import { storeSessionApiKey } from './services/memory/apiMemory.js';
 
 const API_ENDPOINT = 'https://qa-node-backend.onrender.com';
-
-export const setAPIKey = (key: string): boolean => {
-    if (!key) {
-        throw new Error('API key is required');
-    }
-
-    if (!key.startsWith('TEST')) {
-        return false;
-    }
-
-    process.env.API_KEY = key;
-    return true;
-}
 
 interface GeminiCallOptions {
     prompt: string;
@@ -117,10 +104,8 @@ export const checkUserKey = async (sessionId: string, userKey: string, returnApi
         }
 
         if (returnApiKey && data.apiKey) {
-            const encryptedData = encrypt(data.apiKey);
-
             // Store encrypted key mapped to sessionId
-            storeSessionApiKey(sessionId, encryptedData);
+            storeSessionApiKey(sessionId, data.apiKey);
         }
 
         return data.exists as boolean;

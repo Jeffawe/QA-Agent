@@ -2,26 +2,36 @@ import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import bodyParser from 'body-parser';
 import { v4 as uuidv4 } from 'uuid';
-
-import BossAgent, { AgentConfig } from './agent.js';
-import { eventBusManager } from './services/events/eventBus.js';
-
-import { ActionSpamValidator } from './services/validators/actionValidator.js';
-import { ErrorValidator } from './services/validators/errorValidator.js';
-import { LLMUsageValidator } from './services/validators/llmValidator.js';
-import { WebSocketEventBridge } from './services/events/webSockets.js';
-import { State } from './types.js';
-import { checkUserKey, setAPIKey } from './externalCall.js';
-import { getAgents } from './agentConfig.js';
-import { clearSessionApiKeys, encrypt, storeSessionApiKey } from './services/memory/apiMemory.js';
-import { logManagers } from './services/memory/logMemory.js';
 import rateLimit from 'express-rate-limit';
 import slowDown from 'express-slow-down';
 import compression from 'compression';
 import helmet from 'helmet';
 import cors from 'cors';
+import { Worker } from 'worker_threads';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+import BossAgent, { AgentConfig } from './agent.js';
+import { eventBusManager } from './services/events/eventBus.js';
+import { ActionSpamValidator } from './services/validators/actionValidator.js';
+import { ErrorValidator } from './services/validators/errorValidator.js';
+import { LLMUsageValidator } from './services/validators/llmValidator.js';
+import { WebSocketEventBridge } from './services/events/webSockets.js';
+
+import { State } from './types.js';
+import { checkUserKey } from './externalCall.js';
+import { getAgents } from './agentConfig.js';
+
+import { clearSessions, deleteSession, getSession, getSessions, getSessionSize, hasSession, setSession } from './services/memory/sessionMemory.js';
+import { clearSessionApiKeys, storeSessionApiKey } from './services/memory/apiMemory.js';
+import { logManagers } from './services/memory/logMemory.js';
+import { LogManager } from './utility/logManager.js';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 
 const app = express();
 
@@ -108,12 +118,10 @@ app.set('trust proxy', 1);
 const PORT: number = parseInt(process.env.PORT || '3001');
 let WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
 
-let sessions = new Map<string, BossAgent>();
-
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-function createValidators(sessionId: string): number {
+const createValidators = (sessionId: string): number => {
     try {
         const eventBus = eventBusManager.getOrCreateBus(sessionId);
 
@@ -121,7 +129,7 @@ function createValidators(sessionId: string): number {
         new ErrorValidator(eventBus, sessionId);
         new LLMUsageValidator(eventBus, sessionId);
 
-        if (process.env.NODE_ENV === 'production'){
+        if (process.env.NODE_ENV === 'production') {
             WebSocket_PORT = 0;
         }
 
@@ -133,19 +141,71 @@ function createValidators(sessionId: string): number {
     }
 }
 
+const cleanup = async () => {
+    if (getSessionSize() === 0) {
+        console.log('No active sessions to stop.');
+        return;
+    }
+    for (const session of getSessions().values()) {
+        if (session.worker) {
+            session.worker.postMessage({ command: 'stop' });
+
+            // Force terminate after timeout
+            setTimeout(() => {
+                session.worker?.terminate();
+            }, 5000);
+        }
+    }
+    clearSessions();
+    eventBusManager.clear();
+    clearSessionApiKeys();
+
+    console.log('All sessions stopped successfully.');
+}
+
+const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, agents: Set<AgentConfig>) => {
+    // Handle worker messages (minimal)
+    worker.on('message', (message) => {
+        if (message.type === 'error') {
+            console.error(`Agent error for session ${sessionId}:`, message.error);
+        }
+    });
+
+    worker.on('error', (error) => {
+        console.error(`Worker error for session ${sessionId}:`, error);
+        deleteSession(sessionId);
+    });
+
+    worker.on('exit', (code) => {
+        console.log(`Worker ${sessionId} exited with code ${code}`);
+        deleteSession(sessionId);
+    });
+
+    // Send the agent instance to worker to run start()
+    worker.postMessage({
+        command: 'start',
+        // We'll recreate the agent in worker with same config
+        agentConfig: {
+            sessionId,
+            goalValue: goal,
+            agentConfigs: Array.from(agents)
+        }
+    });
+}
+
 app.get('/', (req: Request, res: Response) => {
     res.send('Welcome to QA-Agent! Go to https://www.qa-agent.site/ for more info.');
 });
 
 app.get('/health', (req: Request, res: Response) => {
     const message = 'Server is running fine!';
-    const data = `Running ${sessions.size} sessions`;
+    const data = `Running ${getSessionSize()} sessions`;
     res.send({ message, data });
 });
 
 app.get('/start', (req: Request, res: Response) => {
     try {
-        if (sessions.size >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
+        if (getSessionSize() >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
             res.status(429).send('We have reached the maximum number of sessions. Try again another time');
         }
 
@@ -162,11 +222,11 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
     const { goal, url } = req.body;
     const sessionId = req.params.sessionId;
 
-    if (sessions.size >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
+    if (getSessionSize() >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
         res.status(429).send('We have reached the maximum number of sessions. Try again another time');
     }
 
-    if (sessions.has(sessionId)) {
+    if (hasSession(sessionId)) {
         console.log('Session already started.');
         res.status(400).send('Session already started.');
         return;
@@ -183,12 +243,12 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
         const logManager = logManagers.getOrCreateManager(sessionId);
 
         const stopHandler = async (evt: any) => {
-            if (evt.sessionId === sessionId) {
-                sessions.delete(sessionId);
-                logManager.log(`Session ${sessionId} stopped because of ${evt.message}`, State.INFO, true);
-                // Remove this specific listener
-                sessionEventBus.off('stop', stopHandler);
-            }
+            const sessionId = evt.sessionId;
+            const session = getSession(evt.sessionId);
+            deleteSession(sessionId);
+            sessionEventBus.off('stop', stopHandler);
+            session?.worker?.postMessage({ command: 'stop' });
+            // Remove this specific listener
         };
 
         sessionEventBus.on('stop', stopHandler);
@@ -202,16 +262,19 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
             goalValue: goal,
             agentConfigs: new Set<AgentConfig>(agents),
         });
-        sessions.set(sessionId, agent);
 
-        if (process.env.API_KEY?.startsWith('TEST')) {
-            const success = setAPIKey(process.env.API_KEY);
-            if (!success) {
-                logManager.error('Failed to set API key.', State.ERROR, true);
-                res.status(500).send('Failed to set API key.');
-                return;
-            }
-        }
+        const worker = new Worker(join(__dirname, 'agent-worker.js'), {
+            workerData: { sessionId, url }
+        });
+
+        // Store both agent and worker
+        setSession(sessionId, {
+            agent,
+            worker,
+            status: 'starting'
+        });
+
+        setUpWorkerEvents(worker, sessionId, goal, new Set<AgentConfig>(agents));
 
         if (!process.env.API_KEY) {
             logManager.error('API key is not set. Please set the API_KEY environment variable.', State.ERROR, true);
@@ -219,10 +282,6 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
             return;
         }
 
-        agent.start(url).catch(error => {
-            console.error(`Agent error for session ${sessionId}:`, error);
-            logManager.error(`Agent error for session ${sessionId}: ${error}`, State.ERROR, true);
-        });
         res.json({
             message: `Session ${sessionId} started successfully!`,
             sessionId: sessionId,
@@ -235,40 +294,56 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
 });
 
 app.get('/stop/:sessionId', async (req: Request, res: Response) => {
+    const sessionId = req.params.sessionId;
+    console.log(`🔄 Attempting to stop session: ${sessionId}`);
+
     try {
-        if (!sessions.has(req.params.sessionId)) {
-            console.log('Session not found.');
+        const session = getSession(sessionId);
+
+        if (!session) {
+            console.log(`❌ Session ${sessionId} not found.`);
             res.status(404).send('Session not found.');
             return;
         }
 
-        const agent = sessions.get(req.params.sessionId);
-        const hasStopped = await agent?.stop();
+        if (session.worker) {
+            session.worker.postMessage({ command: 'stop' });
 
-        if (!hasStopped) throw new Error('Failed to stop session');
+            setTimeout(() => {
+                console.log(`⏰ Force terminating stuck worker ${sessionId}`);
+                session.worker?.terminate();
+                deleteSession(sessionId);
+            }, 10000);
+        }
 
-        sessions.delete(req.params.sessionId);
-        console.log(`Session ${req.params.sessionId} stopped successfully.`);
+        console.log(`✅ Session ${sessionId} stopped successfully.`);
         res.send('Session stopped successfully!');
     } catch (error) {
-        console.error('Error stopping session:', error);
-        res.status(500).send('Failed to stop session.');
+        const err = error as Error;
+        console.error(`💥 Error stopping session ${sessionId}:`, error);
+        res.status(500).send(`Failed to stop session: ${err.message}`);
     }
 });
 
 app.get('/stop', async (req: Request, res: Response) => {
     try {
-        if (sessions.size === 0) {
+        if (getSessionSize() === 0) {
             console.log('No active sessions to stop.');
             res.status(404).send('No active sessions to stop.');
             return;
         }
-        for (const agent of sessions.values()) {
-            await agent.stop();
+        
+        for (const session of getSessions().values()) {
+            if (session.worker) {
+                session.worker.postMessage({ command: 'stop' });
+            }
         }
-        sessions.clear();
+
+        clearSessions();
         eventBusManager.clear();
         clearSessionApiKeys();
+        logManagers.clear();
+        LogManager.deleteAllLogFiles();
 
         console.log('All sessions stopped successfully.');
         res.send('All sessions stopped successfully!');
@@ -280,31 +355,16 @@ app.get('/stop', async (req: Request, res: Response) => {
     }
 })
 
-const cleanup = async () => {
-    if (sessions.size === 0) {
-        console.log('No active sessions to stop.');
-        return;
-    }
-    for (const agent of sessions.values()) {
-        await agent.stop();
-    }
-    sessions.clear();
-    eventBusManager.clear();
-    clearSessionApiKeys();
-
-    console.log('All sessions stopped successfully.');
-}
-
 app.post('/test/:key', async (req: Request, res: Response) => {
     const { goal, url } = req.body;
     const key = req.params.key;
     const sessionId = "test_" + key;
 
-    if (sessions.size >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
+    if (getSessionSize() >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
         res.status(429).send('We have reached the maximum number of sessions. Try again another time');
     }
 
-    if (sessions.has(sessionId)) {
+    if (hasSession(sessionId)) {
         console.log('Test Session already started.');
         res.status(400).send('Test Session already started.');
         return;
@@ -322,12 +382,12 @@ app.post('/test/:key', async (req: Request, res: Response) => {
         const logManager = logManagers.getOrCreateManager(sessionId);
 
         const stopHandler = async (evt: any) => {
-            if (evt.sessionId === sessionId) {
-                sessions.delete(sessionId);
-                logManager.log(`Session ${sessionId} stopped because of ${evt.message}`, State.INFO, true);
-                // Remove this specific listener
-                sessionEventBus.off('stop', stopHandler);
-            }
+            const sessionId = evt.sessionId;
+            const session = getSession(evt.sessionId);
+            deleteSession(sessionId);
+            sessionEventBus.off('stop', stopHandler);
+            session?.worker?.postMessage({ command: 'stop' });
+            // Remove this specific listener
         };
 
         sessionEventBus.on('stop', stopHandler);
@@ -347,7 +407,19 @@ app.post('/test/:key', async (req: Request, res: Response) => {
             goalValue: goal,
             agentConfigs: new Set<AgentConfig>(agents),
         });
-        sessions.set(sessionId, agent);
+
+        const worker = new Worker(join(__dirname, 'agent-worker.js'), {
+            workerData: { sessionId, url }
+        });
+
+        // Store both agent and worker
+        setSession(sessionId, {
+            agent,
+            worker,
+            status: 'starting'
+        });
+
+        setUpWorkerEvents(worker, sessionId, goal, new Set<AgentConfig>(agents));
 
         agent.start(url).catch(error => {
             console.error(`Agent error for session ${sessionId}:`, error);
@@ -381,10 +453,8 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
             return;
         }
 
-        const encryptedData = encrypt(apiKey);
-
         // Store encrypted key mapped to sessionId
-        storeSessionApiKey(sessionId, encryptedData);
+        storeSessionApiKey(sessionId, apiKey);
 
         res.json({
             success: true,

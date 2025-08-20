@@ -23,6 +23,7 @@ export default class StagehandSession extends Session<Page> {
                 eventBus?.emit({
                     ts: Date.now(),
                     type: "stop",
+                    sessionId: sessionId,
                     message: errorMessage
                 });
                 throw new Error(errorMessage);

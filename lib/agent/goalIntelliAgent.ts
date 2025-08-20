@@ -71,6 +71,7 @@ export class GoalAgent extends Agent {
                         this.bus.emit({
                             ts: Date.now(),
                             type: "stop",
+                            sessionId: this.sessionId,
                             message: "GoalAgent started without a goal"
                         });
                         break;

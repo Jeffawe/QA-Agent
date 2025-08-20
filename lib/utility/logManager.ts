@@ -64,7 +64,7 @@ export class LogManager {
     const eventBus = eventBusManager.getBusIfExists(this.sessionId);
     eventBus?.emit({ ts: Date.now(), type: "new_log", message: String(message) });
 
-    if(this.logFilePath === undefined || this.logFilePath === null) return;
+    if (this.logFilePath === undefined || this.logFilePath === null) return;
     try {
       fs.mkdirSync(path.dirname(this.logFilePath), { recursive: true });
       fs.appendFileSync(this.logFilePath, timestamped + "\n");
@@ -92,7 +92,7 @@ export class LogManager {
     eventBus?.emit({ ts: Date.now(), type: "new_log", message: String(message) });
     eventBus?.emit({ ts: Date.now(), type: "error", message: String(message) });
 
-    if(this.logFilePath === undefined || this.logFilePath === null) return;
+    if (this.logFilePath === undefined || this.logFilePath === null) return;
 
     if (logToConsole) {
       console.error(errorMessage);
@@ -273,5 +273,74 @@ export class LogManager {
  */
   private escapeRegExp(text: string) {
     return text.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  }
+
+  /**
+ * Deletes the log file for this session.
+ * This should be called when the session is complete and logs are no longer needed.
+ * @param deleteMarkdown - Whether to also delete the markdown mission log file (default: false)
+ */
+  deleteLogFile(deleteMarkdown: boolean = false): void {
+    try {
+      // Delete the main log file
+      if (fs.existsSync(this.logFilePath)) {
+        fs.unlinkSync(this.logFilePath);
+        this.log(`🗑️ Log file deleted: ${this.logFilePath}`, State.INFO);
+      } else {
+        this.log(`⚠️ Log file not found for deletion: ${this.logFilePath}`, State.ERROR);
+      }
+
+      // Optionally delete the markdown mission log file
+      if (deleteMarkdown && fs.existsSync(this.filePath)) {
+        fs.unlinkSync(this.filePath);
+        this.log(`🗑️ Mission log file deleted: ${this.filePath}`, State.INFO);
+      }
+
+      // Clear in-memory logs as well
+      this.clearLogs();
+
+    } catch (err) {
+      const errorMessage = `Error deleting log file(s): ${err}`;
+      console.error(errorMessage);
+      // Note: We can't use this.log() here since we might have deleted the file
+      // and this.log() tries to write to it
+    }
+  }
+
+  /**
+   * Deletes all log files in the logs directory for cleanup.
+   * Use with caution - this will delete ALL session logs.
+   */
+  static deleteAllLogFiles(): void {
+    try {
+      const logsDir = path.join(LogManager.PROJECT_ROOT, "logs");
+
+      if (fs.existsSync(logsDir)) {
+        const files = fs.readdirSync(logsDir);
+        let deletedCount = 0;
+
+        for (const file of files) {
+          if (file.startsWith('agent_') && file.endsWith('.log') ||
+            file.startsWith('mission_log_') && file.endsWith('.md')) {
+            const filePath = path.join(logsDir, file);
+            fs.unlinkSync(filePath);
+            deletedCount++;
+          }
+        }
+
+        console.log(`🗑️ Deleted ${deletedCount} log files from ${logsDir}`);
+
+        // Remove the logs directory if it's empty
+        const remainingFiles = fs.readdirSync(logsDir);
+        if (remainingFiles.length === 0) {
+          fs.rmdirSync(logsDir);
+          console.log(`🗑️ Removed empty logs directory: ${logsDir}`);
+        }
+      } else {
+        console.log(`⚠️ Logs directory not found: ${logsDir}`);
+      }
+    } catch (err) {
+      console.error(`Error deleting log files: ${err}`);
+    }
   }
 }
