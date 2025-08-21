@@ -34,9 +34,23 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
 //     ? true
 //     : true; // Allow all in development
 
-
 app.use(cors({
-    origin: allowedOrigins,
+    origin: function (origin, callback) {
+        console.log('🔍 Incoming origin:', origin);
+        console.log('🔍 Allowed origins:', allowedOrigins);
+        
+        if (!origin) {
+            // Allow requests with no origin (like mobile apps, Postman, etc.)
+            return callback(null, true);
+        }
+        
+        if (allowedOrigins === true || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            console.log('❌ CORS blocked:', origin);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
