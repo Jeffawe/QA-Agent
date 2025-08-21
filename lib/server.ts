@@ -11,7 +11,7 @@ import { Worker } from 'worker_threads';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-import { MiniAgentConfig, State } from './types.js';
+import { MiniAgentConfig } from './types.js';
 import { checkUserKey } from './externalCall.js';
 import { getAgents } from './agentConfig.js';
 
@@ -446,8 +446,8 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server listening on port ${PORT} on all interfaces`);
 });
 
 process.on('SIGINT', () => {
