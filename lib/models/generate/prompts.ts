@@ -1,6 +1,13 @@
 import { Namespaces } from "../../types.js";
 import { z } from "zod";
 
+const argSchema = z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null()
+]);
+
 export const systemPromptSchema = z.object({
     analysis: z.object({
         bugs: z.array(
@@ -24,7 +31,7 @@ export const systemPromptSchema = z.object({
 
     action: z.object({
         step: z.string().describe("The command name to execute"),
-        args: z.array(z.any()).describe("Arguments for the command"),
+        args: z.array(argSchema).describe("Arguments for the command"),
         reason: z.string().describe("Why this command keeps the crawl progressing (Make it short)"),
         newGoal: z.string().describe("New mission goal for the next step"),
         nextLink: z.string().optional().describe("The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)")
@@ -38,10 +45,14 @@ export const systemPromptSchema = z.object({
 
 export const actionSchema = z.object({
     step: z.string().describe("The command name to execute"),
-    args: z.array(z.any()).describe("Arguments for the command"),
+    args: z.array(argSchema).describe("Arguments for the command"),
     reason: z.string().describe("Why this command keeps the crawl progressing (Make it short)"),
     newGoal: z.string().describe("New mission goal for the next step"),
     nextLink: z.string().optional().describe("The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)")
+});
+
+export const testSchema = z.object({
+    confirmation: z.string().describe("Confirmation of the action taken (e.g. 'Login successful', 'Page loaded')")
 });
 
 const goalSchema = z.object({
@@ -67,7 +78,7 @@ const goalSchema = z.object({
 
     action: z.object({
         step: z.string().describe("Action to perform - must match one of the given possibleLabels exactly (if you wish the system to wait for a period of time, just put 'wait' here)"),
-        args: z.array(z.any()).describe("Arguments for the action, e.g. time to wait in milliseconds [5000]"),
+        args: z.array(argSchema).describe("Arguments for the action, e.g. time to wait in milliseconds [5000]"),
         reason: z.string().describe("The reason for this action"),
         progressDescription: z.string().describe("Description of current progress (e.g. 'Filled login form and submitting credentials')"),
         newGoal: z.string().describe("New mission goal for the next step (e.g. 'Wait for dashboard to load after login')"),

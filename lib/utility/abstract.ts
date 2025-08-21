@@ -15,6 +15,14 @@ export abstract class Thinker {
 }
 
 export abstract class LLM {
+    public name: string;
+
+    constructor(name: string) {
+        this.name = name;
+    }
+
+    abstract testModel(): Promise<boolean>;
+
     abstract generateImageResponse(prompt: string, image: string): Promise<string>;
 
     abstract generateTextResponse(prompt: string): Promise<Action>;
@@ -37,6 +45,12 @@ export abstract class Agent {
     public state: State = State.START;
     public baseUrl: string | null = null;
 
+    // Indicates if the agent had any errors during its operation
+    public noErrors: boolean = false;
+
+    // In case of paused agent. This is the state it will return to when resumed.
+    protected pausedState: State = State.START;
+
     protected currentUrl: string = "";
     protected sessionId: string = "";
     protected timeTaken = 0;
@@ -46,6 +60,10 @@ export abstract class Agent {
     protected actionService: ActionService;
     protected agentRegistry?: AgentRegistry;
     protected response: string = "";
+    protected paused: boolean = false;
+
+    // Default state to go to after a validator warning
+    // This is set to START by default, meaning it will reset the agent to the initial state
     protected validatorWarningState: State = State.START;
     protected logManager: LogManager;
 
@@ -81,6 +99,27 @@ export abstract class Agent {
     public setBaseValues(url: string, mainGoal?: string): void {
         this.baseUrl = url;
         this.currentUrl = url;
+    }
+
+    public pauseAgent(): void {
+        if (!this.paused) {
+            this.pausedState = this.state;
+            this.setState(State.PAUSE);
+            this.paused = true;
+        }
+    }
+
+    public resumeAgent(): void {
+        if (this.paused) {
+            this.setState(State.RESUME);
+            this.logManager.log(`Resuming agent ${this.name} from state ${this.pausedState}`, this.buildState(), true);
+            this.pausedState = State.START; // Reset paused state
+            this.paused = false;
+        }
+    }
+
+    public isPaused(): boolean {
+        return this.paused;
     }
 
     protected abstract validateSessionType(): void;

@@ -38,6 +38,7 @@ export interface ThinkResult {
     analysis?: Analysis;
     pageDetails?: LLMPageResult;
     testResult?: TestResult
+    noErrors?: boolean; // Indicates if the action was performed without errors
 }
 
 export interface GetNextActionContext {
@@ -105,6 +106,8 @@ export enum State {
     INFO = "INFO",
     VALIDATE = "VALIDATE",
     PLAN = "PLAN",
+    PAUSE = "PAUSE",
+    RESUME = "RESUME",
 }
 
 type StateValue = `${State}`;

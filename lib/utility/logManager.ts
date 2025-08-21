@@ -56,7 +56,7 @@ export class LogManager {
     state?: NamespacedState | State,
     logToConsole: boolean = true
   ): void {
-    const resolvedState = this.resolveState(state, State.ERROR);
+    const resolvedState = this.resolveState(state, State.INFO);
     const timestamped = `[${new Date().toISOString()}] [state: ${resolvedState}] ${message}`;
     this.logs.push(timestamped);
 
@@ -92,10 +92,17 @@ export class LogManager {
     eventBus?.emit({ ts: Date.now(), type: "new_log", message: String(message) });
     eventBus?.emit({ ts: Date.now(), type: "error", message: String(message) });
 
-    if (this.logFilePath === undefined || this.logFilePath === null) return;
-
     if (logToConsole) {
       console.error(errorMessage);
+    }
+
+    if (this.logFilePath === undefined || this.logFilePath === null) return;
+
+    try {
+      fs.mkdirSync(path.dirname(this.logFilePath), { recursive: true });
+      fs.appendFileSync(this.logFilePath, errorMessage + "\n");
+    } catch (err) {
+      console.error("Error writing to log file:", err);
     }
   }
 

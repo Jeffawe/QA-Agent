@@ -11,19 +11,12 @@ import { Worker } from 'worker_threads';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-import { eventBusManager } from './services/events/eventBus.js';
-import { ActionSpamValidator } from './services/validators/actionValidator.js';
-import { ErrorValidator } from './services/validators/errorValidator.js';
-import { LLMUsageValidator } from './services/validators/llmValidator.js';
-import { WebSocketEventBridge } from './services/events/webSockets.js';
-
 import { MiniAgentConfig, State } from './types.js';
 import { checkUserKey } from './externalCall.js';
 import { getAgents } from './agentConfig.js';
 
 import { clearSessions, deleteSession, getSession, getSessions, getSessionSize, hasSession, setSession } from './services/memory/sessionMemory.js';
-import { clearSessionApiKeys, getApiKeyForAgent, storeSessionApiKey } from './services/memory/apiMemory.js';
-import { logManagers } from './services/memory/logMemory.js';
+import { clearSessionApiKeys, deleteSessionApiKey, getApiKeyForAgent, storeSessionApiKey } from './services/memory/apiMemory.js';
 import { LogManager } from './utility/logManager.js';
 
 dotenv.config();
@@ -31,16 +24,15 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-
 const app = express();
 
-// const allowedOrigins = process.env.NODE_ENV === 'production'
-//     ? ['https://www.qa-agent.site']
-//     : true; // Allow all in development
-
 const allowedOrigins = process.env.NODE_ENV === 'production'
-    ? true
+    ? ['https://www.qa-agent.site']
     : true; // Allow all in development
+
+// const allowedOrigins = process.env.NODE_ENV === 'production'
+//     ? true
+//     : true; // Allow all in development
 
 app.use(cors({
     origin: allowedOrigins,
@@ -115,30 +107,9 @@ app.use(apiLimiter);
 app.set('trust proxy', 1);
 
 const PORT: number = parseInt(process.env.PORT || '3001');
-let WebSocket_PORT: number = parseInt(process.env.WEBSOCKET_PORT || '3002');
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-
-const createValidators = (sessionId: string): number => {
-    try {
-        const eventBus = eventBusManager.getOrCreateBus(sessionId);
-
-        new ActionSpamValidator(eventBus);
-        new ErrorValidator(eventBus, sessionId);
-        new LLMUsageValidator(eventBus, sessionId);
-
-        if (process.env.NODE_ENV === 'production') {
-            WebSocket_PORT = 0;
-        }
-
-        const webSocketEventBridge = new WebSocketEventBridge(eventBus, sessionId, WebSocket_PORT);
-        return webSocketEventBridge.getPort();
-    } catch (error) {
-        console.error('Error creating validators:', error);
-        throw error;
-    }
-}
 
 const cleanup = async () => {
     if (getSessionSize() === 0) {
@@ -155,42 +126,78 @@ const cleanup = async () => {
             }, 5000);
         }
     }
+
     clearSessions();
-    eventBusManager.clear();
     clearSessionApiKeys();
 
     console.log('All sessions stopped successfully.');
 }
 
-const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, serializableConfigs: MiniAgentConfig[]) => {
-    // Handle worker messages (minimal)
-    worker.on('message', (message) => {
-        if (message.type === 'error') {
-            console.error(`Agent error for session ${sessionId}:`, message.error);
-        }
-    });
+// Sets up the worker events and returns the websocket port
+const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, serializableConfigs: MiniAgentConfig[]): Promise<number> => {
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject(new Error('Worker initialization timeout'));
+        }, 10000);
 
-    worker.on('error', (error) => {
-        console.error(`Worker error for session ${sessionId}:`, error);
-        deleteSession(sessionId);
-    });
+        const messageHandler = (message: any) => {
+            switch (message.type) {
+                case 'initialized':
+                    if (!resolved) {
+                        clearTimeout(timeout);
+                        resolved = true;
+                        resolve(message.websocketPort);
+                    }
+                    break;
 
-    worker.on('exit', (code) => {
-        console.log(`Worker ${sessionId} exited with code ${code}`);
-        deleteSession(sessionId);
-    });
+                case 'session_cleanup':
+                    console.log(`Received cleanup request for session ${message.sessionId}`);
+                    deleteSession(message.sessionId);
+                    deleteSessionApiKey(message.sessionId);
+                    break;
 
-    // Send the agent instance to worker to run start()
-    worker.postMessage({
-        command: 'start',
-        agentConfig: {
-            sessionId,
-            apiKey: getApiKeyForAgent(sessionId),
-            goalValue: goal,
-            agentConfigs: serializableConfigs
-        }
+                case 'error':
+                    console.error(`Agent error for session ${sessionId}:`, message.error);
+                    if (!resolved) {
+                        clearTimeout(timeout);
+                        resolved = true;
+                        reject(new Error(`Worker initialization error: ${message.error}`));
+                    }
+                    break;
+            }
+        };
+
+        let resolved = false;
+
+        worker.on('message', messageHandler);
+
+        worker.on('error', (error) => {
+            console.error(`Worker error for session ${sessionId}:`, error);
+            if (!resolved) {
+                clearTimeout(timeout);
+                resolved = true;
+                reject(error);
+            }
+            worker.postMessage({ command: 'stop' });
+        });
+
+        worker.on('exit', (code) => {
+            console.log(`Worker ${sessionId} exited with code ${code}`);
+            deleteSession(sessionId);
+        });
+
+        // Send the start command
+        worker.postMessage({
+            command: 'start',
+            agentConfig: {
+                sessionId,
+                apiKey: getApiKeyForAgent(sessionId),
+                goalValue: goal,
+                agentConfigs: serializableConfigs
+            }
+        });
     });
-}
+};
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Welcome to QA-Agent! Go to https://www.qa-agent.site/ for more info.');
@@ -238,21 +245,6 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
     }
 
     try {
-        const sessionEventBus = eventBusManager.getOrCreateBus(sessionId);
-
-        const stopHandler = async (evt: any) => {
-            const sessionId = evt.sessionId;
-            const session = getSession(evt.sessionId);
-            deleteSession(sessionId);
-            // Remove this specific listener
-            sessionEventBus.off('stop', stopHandler);
-            session?.worker?.postMessage({ command: 'stop' });
-        };
-
-        sessionEventBus.on('stop', stopHandler);
-
-        const websocketport = createValidators(sessionId);
-
         const agents = await getAgents(goal);
         const serializableConfigs: MiniAgentConfig[] = Array.from(agents).map(config => ({
             name: config.name,
@@ -265,7 +257,7 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
             workerData: { sessionId, url }
         });
 
-        setUpWorkerEvents(worker, sessionId, goal, serializableConfigs);
+        const websocketPort = await setUpWorkerEvents(worker, sessionId, goal, serializableConfigs);
 
         setSession(sessionId, {
             worker,
@@ -277,7 +269,7 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
         res.json({
             message: `Session ${sessionId} started successfully!`,
             sessionId: sessionId,
-            websocketport: websocketport
+            websocketport: websocketPort
         });
     } catch (error) {
         console.error('Error starting session:', error);
@@ -332,9 +324,7 @@ app.get('/stop', async (req: Request, res: Response) => {
         }
 
         clearSessions();
-        eventBusManager.clear();
         clearSessionApiKeys();
-        logManagers.clear();
         LogManager.deleteAllLogFiles();
 
         console.log('All sessions stopped successfully.');
@@ -370,24 +360,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
             return;
         }
 
-        const sessionEventBus = eventBusManager.getOrCreateBus(sessionId);
-        const logManager = logManagers.getOrCreateManager(sessionId);
-
-        const stopHandler = async (evt: any) => {
-            const sessionId = evt.sessionId;
-            const session = getSession(evt.sessionId);
-            deleteSession(sessionId);
-            sessionEventBus.off('stop', stopHandler);
-            session?.worker?.postMessage({ command: 'stop' });
-            // Remove this specific listener
-        };
-
-        sessionEventBus.on('stop', stopHandler);
-
-        const websocketport = createValidators(sessionId);
-
         if (!goal) {
-            logManager.error('USER_GOAL is not set. Please set the USER_GOAL environment variable.', State.ERROR, true);
             res.status(500).send('USER_GOAL is not set. Please set the USER_GOAL environment variable.');
             return;
         }
@@ -404,7 +377,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
             workerData: { sessionId, url }
         });
 
-        setUpWorkerEvents(worker, sessionId, goal, serializableConfigs);
+        const websocketPort = await setUpWorkerEvents(worker, sessionId, goal, serializableConfigs);
 
         setSession(sessionId, {
             worker,
@@ -416,7 +389,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
         res.json({
             message: `Test Session started successfully!`,
             sessionId: sessionId,
-            websocketport: websocketport
+            websocketport: websocketPort
         });
     } catch (error) {
         console.error('Error starting session:', error);

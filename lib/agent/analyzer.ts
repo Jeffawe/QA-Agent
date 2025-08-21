@@ -1,6 +1,6 @@
 import { setTimeout } from "node:timers/promises";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { LinkInfo, State, ImageData, Action, ActionResult,  } from "../types.js";
+import { LinkInfo, State, ImageData, Action, ActionResult, } from "../types.js";
 import { processScreenshot } from "../services/imageProcessor.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { fileExists } from "../utility/functions.js";
@@ -51,6 +51,10 @@ export default class Analyzer extends Agent {
 
     /** One FSM transition */
     public async tick(): Promise<void> {
+        if (this.paused) {
+            return;
+        }
+
         if (!this.playwrightSession.page) return
         if (!this.bus) return
 
@@ -64,6 +68,7 @@ export default class Analyzer extends Agent {
                     }
                     this.goal = "Crawl the given page";
                     this.step = 0;
+                    this.noErrors = false;
                     this.logManager.log(`Start testing ${this.queue.length} links`, this.buildState(), true);
                     if (this.queue.length === 0) {
                         this.setState(State.DONE);
@@ -75,7 +80,7 @@ export default class Analyzer extends Agent {
                 case State.OBSERVE: {
                     await this.playwrightSession.clearAllClickPoints();
                     this.currentUrl = this.playwrightSession.page?.url();
-                    const filename = `screenshot_${this.step}.png`;
+                    const filename = `screenshot_${this.step}_${this.sessionId.substring(0, 10)}.png`;
                     (this as any).finalFilename = `images/annotated_${filename}`;
 
                     const elements = await getInteractiveElements(this.playwrightSession.page!)
@@ -124,6 +129,8 @@ export default class Analyzer extends Agent {
                         break;
                     }
 
+                    this.noErrors = command.noErrors ?? false;
+
                     if (command.analysis) {
                         PageMemory.addAnalysis(this.currentUrl, command.analysis, this.sessionId);
                     }
@@ -153,6 +160,7 @@ export default class Analyzer extends Agent {
                         this.nextLink = null;
                         const endTime = performance.now();
                         this.timeTaken = endTime - (this as any).startTime;
+                        this.noErrors = true;
 
                         this.logManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
                         break;
@@ -213,6 +221,7 @@ export default class Analyzer extends Agent {
                     break;
                 }
 
+                case State.PAUSE:
                 case State.WAIT:
                 case State.DONE:
                 case State.ERROR:
@@ -234,6 +243,7 @@ export default class Analyzer extends Agent {
         this.state = State.WAIT;
         this.lastAction = "";
         this.visitedPage = false;
+        this.noErrors = false;
         this.response = "";
     }
 

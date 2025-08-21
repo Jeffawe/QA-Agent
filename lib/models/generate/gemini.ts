@@ -3,7 +3,7 @@ import { LLM } from "../../utility/abstract.js";
 import { Action, ThinkResult, Namespaces, State } from "../../types.js";
 import fs from 'fs';
 import path from 'path';
-import { getSystemPrompt, getSystemSchema, STOP_LEVEL_ERRORS } from "./prompts.js";
+import { getSystemPrompt, getSystemSchema, STOP_LEVEL_ERRORS, testSchema } from "./prompts.js";
 import { generateContent } from "../../externalCall.js";
 import { getApiKeyForAgent } from "../../services/memory/apiMemory.js";
 
@@ -26,7 +26,7 @@ export class GeminiLLm extends LLM {
     private logManager: LogManager;
 
     constructor(sessionId: string) {
-        super();
+        super("gemini");
         this.sessionId = sessionId;
         const key = getApiKeyForAgent(sessionId);
 
@@ -63,6 +63,53 @@ export class GeminiLLm extends LLM {
 
                 this.genAI = null;
             }
+        }
+    }
+
+    async testModel(): Promise<boolean> {
+        if (this.genAI === null) return false;
+
+        let response = null;
+        const prompt = "Test if the Gemini model is working";
+        const systemInstruction = "You are a helpful assistant. Please respond with a simple confirmation message.";
+
+        const projectRoot = process.cwd();
+        const imagePath = path.join(projectRoot, 'assets', 'test.png');
+
+        try {
+            if (this.apiKey?.startsWith('TEST')) {
+                response = await generateContent({
+                    prompt,
+                    systemInstruction,
+                    imagePath
+                });
+                return response ? true : false;
+            } else {
+                const image_url = this.imageToDataUrl(imagePath);
+                const humanMessage = new HumanMessage({
+                    content: [
+                        { type: "text", text: prompt },
+                        { type: "image_url", image_url: { url: image_url } },
+                    ],
+                });
+
+                const messages = [
+                    new SystemMessage(systemInstruction),
+                    humanMessage,
+                ];
+
+                const structuredLlm = (this.model as any)?.withStructuredOutput(testSchema);
+
+                response = await structuredLlm?.invoke(messages);
+
+                if (!response) {
+                    return false;
+                } else {
+                    return true;
+                }
+            }
+        } catch (error) {
+            return false;
         }
     }
 
@@ -309,7 +356,8 @@ export class GeminiLLm extends LLM {
                     step: "no_op",
                     reason: "LLM produced invalid JSON",
                     args: [],
-                }
+                },
+                noErrors: false
             } satisfies ThinkResult;
         }
     }
@@ -322,7 +370,7 @@ export class GeminiLLm extends LLM {
                 step: "no_op",
                 args: [],
                 reason: "LLM produced invalid JSON"
-            }
+            },
         };
 
         try {

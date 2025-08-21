@@ -11,7 +11,7 @@ import Analyzer from "./analyzer.js";
 export class Crawler extends Agent {
     private isCurrentPageVisited = false;
     private analyzer: Analyzer;
-    private manualTester: ManualAnalyzer;
+    private manualAnalyzer: ManualAnalyzer;
 
     private playwrightSession: playwrightSession;
 
@@ -20,7 +20,7 @@ export class Crawler extends Agent {
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
         this.analyzer = this.requireAgent<Analyzer>("analyzer");
-        this.manualTester = this.requireAgent<ManualAnalyzer>("manualanalyzer");
+        this.manualAnalyzer = this.requireAgent<ManualAnalyzer>("manualanalyzer");
 
         this.playwrightSession = this.session as playwrightSession;
     }
@@ -36,6 +36,10 @@ export class Crawler extends Agent {
     }
 
     async tick(): Promise<void> {
+        if (this.paused) {
+            return;
+        }
+
         const page = this.playwrightSession.page;
         if (!page) {
             this.logManager.error("Page not initialized", this.buildState());
@@ -105,7 +109,7 @@ export class Crawler extends Agent {
                     }
 
                     if (isVisited) {
-                        this.manualTester.enqueue(unvisited, isVisited);
+                        this.manualAnalyzer.enqueue(unvisited, isVisited);
                     } else {
                         this.analyzer.enqueue(unvisited, isVisited);
                     }
@@ -119,7 +123,7 @@ export class Crawler extends Agent {
                     this.logManager.log("Waiting for tester to finish", this.buildState(), false);
 
                     if (this.isCurrentPageVisited) {
-                        if (this.manualTester.isDone()) {
+                        if (this.manualAnalyzer.isDone()) {
                             this.logManager.log("Manual tester finished", this.buildState(), false);
                             this.setState(State.ACT);
                         }
@@ -135,7 +139,13 @@ export class Crawler extends Agent {
 
                 /*────────── 4. ACT → (START | DONE) ─*/
                 case State.ACT: {
-                    const next = this.isCurrentPageVisited ? this.manualTester.nextLink : this.analyzer.nextLink;
+                    if (!this.isCurrentPageVisited && !this.analyzer.noErrors) {
+                        this.logManager.error("Analyzer did not see the page", this.buildState());
+                        this.setState(State.START);
+                        break;
+                    }
+
+                    const next = this.isCurrentPageVisited ? this.manualAnalyzer.nextLink : this.analyzer.nextLink;
                     if (next) {
                         PageMemory.markLinkVisited(this.currentUrl, next.text || next.href);
                         const finalUrl = page.url();
@@ -166,6 +176,7 @@ export class Crawler extends Agent {
                     break;
                 }
 
+                case State.PAUSE:
                 case State.DONE:   /* fallthrough */
                 case State.ERROR:  /* fallthrough */
                 default:

@@ -56,6 +56,10 @@ export class GoalAgent extends Agent {
     }
 
     async tick(): Promise<void> {
+        if (this.paused) {
+            return;
+        }
+
         const page = this.stageHandSession.page;
         if (!page || this.isDone()) return;
 
@@ -83,7 +87,7 @@ export class GoalAgent extends Agent {
                 }
 
                 case State.OBSERVE: {
-                    const filename = `goalagent_${Date.now()}.png`;
+                    const filename = `screenshot_${Date.now()}_${this.sessionId.substring(0, 10)}.png`;
                     const finalPath = `images/${filename}`;
                     (this as any).screenshot = finalPath;
 
@@ -127,6 +131,8 @@ export class GoalAgent extends Agent {
                         break;
                     }
 
+                    this.noErrors = command.noErrors ?? false;
+
                     if (command.analysis) {
                         PageMemory.addAnalysis(this.currentUrl, command.analysis, this.sessionId);
                     }
@@ -155,6 +161,7 @@ export class GoalAgent extends Agent {
                         this.logManager.log("Waiting for a while before next action", this.state);
                         await setTimeout(this.actionResponse?.args[0] || 5000);
                         this.setState(State.DONE);
+                        this.noErrors = true;
                         break;
                     }
 
@@ -181,6 +188,7 @@ export class GoalAgent extends Agent {
                     break;
                 }
 
+                case State.PAUSE:
                 case State.WAIT:
                 case State.VALIDATE:
                 case State.ERROR:
@@ -199,5 +207,8 @@ export class GoalAgent extends Agent {
         this.progressDescription = "";
         this.goal = "";
         this.state = State.WAIT;
+        this.lastAction = "";
+        this.noErrors = false;
+        this.actionResponse = null;
     }
 }

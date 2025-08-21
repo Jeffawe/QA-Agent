@@ -2,7 +2,7 @@ import ActionService from './services/actions/actionService.js';
 import { AgentRegistry, BaseAgentDependencies, Session, Thinker } from "./utility/abstract.js";
 import { LogManager } from "./utility/logManager.js";
 import { EventBus } from "./services/events/event.js";
-import { AgentConfig, State } from "./types.js";
+import { AgentConfig, Namespaces, State } from "./types.js";
 import { CombinedThinker } from "./services/thinkers/combinedThinker.js";
 
 import NavigationTree from "./utility/navigationTree.js";
@@ -14,7 +14,6 @@ import PlaywrightSession from './browserAuto/playWrightSession.js';
 import { clearAllImages } from './services/imageProcessor.js';
 import { eventBusManager } from './services/events/eventBus.js';
 import { logManagers } from './services/memory/logMemory.js';
-import { deleteSessionApiKey } from './services/memory/apiMemory.js';
 
 export interface AgentDependencies {
   sessionId: string;
@@ -66,7 +65,7 @@ export default class BossAgent {
     goalValue: string;
     agentConfigs: Set<AgentConfig>;
   }) {
-    this.sessionId = sessionId ?? "1";
+    this.sessionId = sessionId;
     this.logManager = logManagers.getOrCreateManager(sessionId);
     try {
       this.thinker = thinker ?? new CombinedThinker(sessionId);
@@ -166,6 +165,28 @@ export default class BossAgent {
       this.logManager.log(`Agent stopped because of ${evt.message}`, State.ERROR, true);
     });
 
+    this.bus.on('pause_all', () => {
+      this.pauseAllAgents();
+    });
+
+    this.bus.on('resume_all', () => {
+      this.resumeAllAgents();
+    });
+
+    this.bus.on('pause_agent', (data: { agentName: Namespaces }) => {
+      const agent = this.getAgent(data.agentName);
+      if (agent) {
+        agent.pauseAgent();
+      }
+    });
+
+    this.bus.on('resume_agent', (data: { agentName: Namespaces }) => {
+      const agent = this.getAgent(data.agentName);
+      if (agent) {
+        agent.resumeAgent();
+      }
+    });
+
     // Set base URL for all action services
     for (const actionService of this.actionServices.values()) {
       actionService.setBaseUrl(url);
@@ -189,6 +210,11 @@ export default class BossAgent {
     }
 
     while (agents.some(a => !a.isDone()) && !this.stopLoop) {
+      if (agents.every(a => a.isPaused())) {
+        await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to avoid busy waiting
+        continue; // Skip this iteration if all agents are paused
+      }
+
       for (const agent of agents) {
         if (!agent.isDone()) {
           await agent.tick();
@@ -229,7 +255,6 @@ export default class BossAgent {
     this.agentRegistry.clear();
     clearAllImages();
     this.sessions.clear();
-    deleteSessionApiKey(this.sessionId);
     eventBusManager.removeBus(this.sessionId);
     //this.logManager.deleteLogFile();
     logManagers.removeManager(this.sessionId);
@@ -238,5 +263,21 @@ export default class BossAgent {
   // Public API to get agents (useful for external orchestration)
   public getAgent<T extends Agent>(name: string): T | null {
     return this.agentRegistry.getAgent<T>(name);
+  }
+
+  public pauseAllAgents(): void {
+    const agents = this.agentRegistry.getAllAgents();
+    for (const agent of agents) {
+      agent.pauseAgent();
+    }
+    this.logManager.log("All agents paused", State.PAUSE, true);
+  }
+
+  public resumeAllAgents(): void {
+    const agents = this.agentRegistry.getAllAgents();
+    for (const agent of agents) {
+      agent.resumeAgent();
+    }
+    this.logManager.log("All agents resumed", State.RESUME, true);
   }
 }

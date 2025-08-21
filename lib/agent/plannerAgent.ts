@@ -72,6 +72,10 @@ export default class PlannerAgent extends Agent {
     }
 
     async tick(): Promise<void> {
+        if (this.paused) {
+            return;
+        }
+
         try {
             switch (this.state) {
                 case State.START:
@@ -92,7 +96,12 @@ export default class PlannerAgent extends Agent {
                 case State.WAIT:
                     this.logManager.log(`PlannerAgent waiting for Goal Agent`, this.buildState(), true);
                     if (this.goalAgent.isDone()) {
-                        this.setState(State.VALIDATE);
+                        if (!this.goalAgent.noErrors) {
+                            this.logManager.error("Goal Agent did not see the page, cannot proceed", this.buildState(), true);
+                            this.setState(State.PLAN);
+                        } else {
+                            this.setState(State.VALIDATE);
+                        }
                     }
                     break;
 
@@ -104,6 +113,7 @@ export default class PlannerAgent extends Agent {
                     this.setState(State.PLAN);
                     break;
 
+                case State.PAUSE:
                 case State.ERROR:
                 case State.DONE:
                 default:
@@ -269,7 +279,7 @@ export default class PlannerAgent extends Agent {
         if (metrics.progressSimilarity < this.PROGRESS_THRESHOLD) {
             issues.push("progress towards goal is insufficient");
         }
-        
+
         if (metrics.intentClassification < this.INTENT_THRESHOLD) {
             issues.push("goal completion intent is not clearly achieved");
         }

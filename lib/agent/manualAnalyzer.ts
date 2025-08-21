@@ -48,6 +48,10 @@ export default class ManualAnalyzer extends Agent {
 
     /** One FSM transition */
     public async tick(): Promise<void> {
+        if (this.paused) {
+            return;
+        }
+        
         if (!this.playwrightSession.page) return
         if (!this.bus) return
 
@@ -125,6 +129,7 @@ export default class ManualAnalyzer extends Agent {
                     break;
                 }
 
+                case State.PAUSE:
                 case State.WAIT:
                 case State.DONE:
                 case State.ERROR:

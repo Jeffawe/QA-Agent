@@ -204,10 +204,11 @@ function drawElementTypeIndicator(
 export async function createAnnotationReport(
     imagePath: string,
     elements: InteractiveElement[],
-    outputDir: string
+    outputDir: string,
+    fileName: string
 ): Promise<void> {
     // Create annotated image
-    const annotatedImagePath = path.join(outputDir, 'annotated_screenshot.png');
+    const annotatedImagePath = path.join(outputDir, fileName);
     await annotateImage(imagePath, elements, annotatedImagePath);
 
     // Create JSON report
