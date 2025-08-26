@@ -11,3 +11,5 @@ logs/
 checkSimilarity.js
 dist/webCode.js
 dist/webCode.js.map
+.dockerignore
+DockerFile
