@@ -107,8 +107,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // General rate limiting
 const generalLimiter = rateLimit({
-    windowMs: 30 * 60 * 1000, // 15 minutes
-    max: 50, // limit each IP to 10 requests per windowMs
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 300, // limit each IP to 100 requests per windowMs
     message: {
         error: 'Too many requests from this IP, please try again later.',
         retryAfter: '15 minutes'
@@ -117,16 +117,6 @@ const generalLimiter = rateLimit({
     legacyHeaders: false,
     // Skip successful requests for static files
     skip: (req) => req.url.startsWith('/static') || req.url.startsWith('/public')
-});
-
-// API rate limiting
-const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 1000, // Higher limit for API endpoints
-    message: {
-        error: 'API rate limit exceeded, please try again later.',
-        retryAfter: '15 minutes'
-    }
 });
 
 // Slow down repeated requests (progressive delay)
@@ -140,9 +130,6 @@ const speedLimiter = slowDown({
 // Apply rate limiting
 app.use(generalLimiter);
 app.use(speedLimiter);
-
-// Apply API rate limiting to API routes
-app.use(apiLimiter);
 
 // Trust proxy (important for Render/Heroku/etc)
 app.set('trust proxy', 1);
