@@ -67,6 +67,7 @@
     "multer": "^2.0.2",
     "onnxruntime-node": "^1.22.0-rev",
     "openai": "^5.8.2",
+    "playwright": "^1.55.0",
     "uuid": "^11.1.0",
     "ws": "^8.18.3"
   },
