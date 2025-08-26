@@ -12,8 +12,7 @@
     "start": "node dist/server.js",
     "dev": "nodemon",
     "build": "tsc --build --force && npx playwright install chromium",
-    "prepublishOnly": "npm run build",
-    "postinstall": "playwright install chromium"
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "qa",

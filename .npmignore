@@ -9,3 +9,5 @@ logs/
 .env
 .gitignore
 checkSimilarity.js
+dist/webCode.js
+dist/webCode.js.map
