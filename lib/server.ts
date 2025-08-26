@@ -119,6 +119,7 @@ const generalLimiter = rateLimit({
     skip: (req) => req.url.startsWith('/static') || req.url.startsWith('/public')
 });
 
+
 // Slow down repeated requests (progressive delay)
 const speedLimiter = slowDown({
     windowMs: 15 * 60 * 1000, // 15 minutes
