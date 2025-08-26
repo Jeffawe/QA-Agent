@@ -82,6 +82,7 @@ export const checkUserKey = async (sessionId: string, userKey: string, returnApi
             })
         });
 
+        console.log('checkUserKey response status:', response.status);
         if (response.status === 429) {
             if (retries > 0) {
                 // Wait before retrying (exponential backoff)
@@ -89,6 +90,7 @@ export const checkUserKey = async (sessionId: string, userKey: string, returnApi
                 await new Promise(resolve => setTimeout(resolve, delay));
                 return checkUserKey(sessionId, userKey, returnApiKey, retries - 1);
             }
+            
             throw new Error('Too many requests. Please try again later.');
         }
 
