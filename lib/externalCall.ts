@@ -73,6 +73,7 @@ export const checkUserKey = async (sessionId: string, userKey: string, returnApi
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-Client-Domain': process.env.CLIENT_DOMIAN || ''
             },
             body: JSON.stringify({
                 userKey,
