@@ -44,6 +44,7 @@ export const generateContent = async (options: GeminiCallOptions) => {
                 headers: {
                     ...formData.getHeaders(),
                     'Content-Length': formData.getLengthSync(),
+                    'X-Client-Domain': process.env.CLIENT_DOMIAN || ''
                 },
                 maxContentLength: Infinity,
                 maxBodyLength: Infinity,
