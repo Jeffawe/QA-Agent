@@ -94,6 +94,13 @@ export class WebSocketEventBridge {
             });
         });
 
+        this.eventBus.on('issue', (evt) => {
+            this.broadcastToAll('ISSUE', {
+                message: evt.message,
+                timestamp: evt.ts
+            });
+        });
+
         this.eventBus.on('stop', async (evt) => {
             this.broadcastToAll('STOP_WARNING', {
                 message: evt.message,

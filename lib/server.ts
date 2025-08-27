@@ -315,7 +315,7 @@ app.get('/stop/:sessionId', async (req: Request, res: Response) => {
 
         if (!session) {
             console.log(`❌ Session ${sessionId} not found.`);
-            res.status(404).send('Session not found.');
+            res.send('Session not found.');
             return;
         }
 

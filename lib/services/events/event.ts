@@ -19,7 +19,9 @@ export type Event =
     | { ts: number; type: 'resume_all' }
     | { ts: number; type: 'pause_agent'; agentName: Namespaces }
     | { ts: number; type: 'resume_agent'; agentName: Namespaces }
+    | { ts: number; type: 'done'; message: string; sessionId: string }
     | { ts: number; type: 'thinker_call'; message: string; model: string; level: "error" | "info" | "debug" | "warn" | "LLM_error" }
+    | { ts: number; type: 'issue'; message: string; };
 
 /** Interface the Agent depends on */
 export interface EventBus {

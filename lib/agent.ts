@@ -162,6 +162,7 @@ export default class BossAgent {
 
     this.bus.on('stop', async (evt) => {
       this.stopLoop = true;
+      this.bus.emit({ ts: Date.now(), type: 'issue', message: `Agent stopped because of ${evt.message}`});
       this.logManager.log(`Agent stopped because of ${evt.message}`, State.ERROR, true);
     });
 
@@ -258,6 +259,7 @@ export default class BossAgent {
     eventBusManager.removeBus(this.sessionId);
     //this.logManager.deleteLogFile();
     logManagers.removeManager(this.sessionId);
+    this.bus.emit({ ts: Date.now(), type: "done", message: "Agent cleanup completed", sessionId: this.sessionId });
   }
 
   // Public API to get agents (useful for external orchestration)

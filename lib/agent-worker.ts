@@ -76,6 +76,7 @@ if (parentPort) {
 
                 const stopHandler = async (evt: any) => {
                     const sessionId = evt.sessionId;
+                    console.log(`🔄 Attempting to stop session: ${sessionId} because of ${evt.message}`);
 
                     try {
                         await cleanup();
@@ -108,6 +109,7 @@ if (parentPort) {
                 };
 
                 workerEventBus.on('stop', stopHandler);
+                workerEventBus.on('done', stopHandler);
 
                 // Convert serializable configs back to full AgentConfigs
                 const fullAgentConfigs: Set<AgentConfig> = new Set(
