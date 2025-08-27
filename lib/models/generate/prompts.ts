@@ -1,90 +1,283 @@
 import { Namespaces } from "../../types.js";
 import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 
-const argSchema = z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null()
-]);
+export const systemPromptJsonSchema = {
+    type: "object",
+    properties: {
+        analysis: {
+            type: "object",
+            properties: {
+                bugs: {
+                    type: "array",
+                    description: "Array of bugs found on the page",
+                    items: {
+                        type: "object",
+                        properties: {
+                            description: {
+                                type: "string",
+                                description: "Description of the bug found"
+                            },
+                            selector: {
+                                type: "string",
+                                description: "CSS selector identifying the problematic element"
+                            },
+                            severity: {
+                                type: "string",
+                                enum: ["low", "medium", "high"],
+                                description: "Severity level of the bug"
+                            }
+                        },
+                        required: ["description", "selector", "severity"],
+                        additionalProperties: false
+                    }
+                },
+                ui_issues: {
+                    type: "array",
+                    description: "Array of UI issues found on the page",
+                    items: {
+                        type: "object",
+                        properties: {
+                            description: {
+                                type: "string",
+                                description: "Description of the UI issue"
+                            },
+                            selector: {
+                                type: "string",
+                                description: "CSS selector identifying the UI element with issues"
+                            },
+                            severity: {
+                                type: "string",
+                                enum: ["low", "medium", "high"],
+                                description: "Severity level of the UI issue"
+                            }
+                        },
+                        required: ["description", "selector", "severity"],
+                        additionalProperties: false
+                    }
+                },
+                notes: {
+                    type: "string",
+                    description: "Any extra observations about this page"
+                }
+            },
+            required: ["bugs", "ui_issues", "notes"],
+            additionalProperties: false,
+            description: "Analysis of the current page"
+        },
+        action: {
+            type: "object",
+            properties: {
+                step: {
+                    type: "string",
+                    description: "The command name to execute"
+                },
+                args: {
+                    type: "array",
+                    description: "Arguments for the command",
+                    items: {
+                        oneOf: [
+                            { type: "string" },
+                            { type: "number" },
+                            { type: "boolean" },
+                            { type: "null" }
+                        ]
+                    }
+                },
+                reason: {
+                    type: "string",
+                    description: "Why this command keeps the crawl progressing (Make it short)"
+                },
+                newGoal: {
+                    type: "string",
+                    description: "New mission goal for the next step"
+                },
+                nextLink: {
+                    type: "string",
+                    description: "The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)"
+                }
+            },
+            required: ["step", "args", "reason", "newGoal"],
+            additionalProperties: false,
+            description: "Action to take next"
+        },
+        pageDetails: {
+            type: "object",
+            properties: {
+                pageName: {
+                    type: "string",
+                    description: "Name of the page you are currently on"
+                },
+                description: {
+                    type: "string",
+                    description: "Short description of the page you are currently on"
+                }
+            },
+            required: ["pageName", "description"],
+            additionalProperties: false,
+            description: "Details about the current page"
+        }
+    },
+    required: ["analysis", "action", "pageDetails"],
+    additionalProperties: false
+};
 
-export const systemPromptSchema = z.object({
-    analysis: z.object({
-        bugs: z.array(
-            z.object({
-                description: z.string().describe("Description of the bug found"),
-                selector: z.string().describe("CSS selector identifying the problematic element"),
-                severity: z.enum(["low", "medium", "high"]).describe("Severity level of the bug")
-            })
-        ).describe("Array of bugs found on the page"),
+export const actionJsonSchema = {
+    type: "object",
+    properties: {
+        step: {
+            type: "string",
+            description: "The command name to execute"
+        },
+        args: {
+            type: "array",
+            description: "Arguments for the command",
+            items: {
+                oneOf: [
+                    { type: "string" },
+                    { type: "number" },
+                    { type: "boolean" },
+                    { type: "null" }
+                ]
+            }
+        },
+        reason: {
+            type: "string",
+            description: "Why this command keeps the crawl progressing (Make it short)"
+        },
+        newGoal: {
+            type: "string",
+            description: "New mission goal for the next step"
+        },
+        nextLink: {
+            type: "string",
+            description: "The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)"
+        }
+    },
+    required: ["step", "args", "reason", "newGoal"],
+    additionalProperties: false
+};
 
-        ui_issues: z.array(
-            z.object({
-                description: z.string().describe("Description of the UI issue"),
-                selector: z.string().describe("CSS selector identifying the UI element with issues"),
-                severity: z.enum(["low", "medium", "high"]).describe("Severity level of the UI issue")
-            })
-        ).describe("Array of UI issues found on the page"),
+export const testJsonSchema = {
+    type: "object",
+    properties: {
+        confirmation: {
+            type: "string",
+            description: "Confirmation of the action taken (e.g. 'Login successful', 'Page loaded')"
+        }
+    },
+    required: ["confirmation"],
+    additionalProperties: false
+};
 
-        notes: z.string().describe("Any extra observations about this page")
-    }).describe("Analysis of the current page"),
+export const goalJsonSchema = {
+    type: "object",
+    properties: {
+        analysis: {
+            type: "object",
+            properties: {
+                bugs: {
+                    type: "array",
+                    description: "Array of bugs found on the page",
+                    items: {
+                        type: "object",
+                        properties: {
+                            description: {
+                                type: "string",
+                                description: "Description of the bug found (e.g. 'Login button unresponsive')"
+                            },
+                            selector: {
+                                type: "string",
+                                description: "CSS selector identifying the problematic element (e.g. '#btn-login')"
+                            },
+                            severity: {
+                                type: "string",
+                                enum: ["low", "medium", "high"],
+                                description: "Severity level of the bug"
+                            }
+                        },
+                        required: ["description", "selector", "severity"],
+                        additionalProperties: false
+                    }
+                },
+                ui_issues: {
+                    type: "array",
+                    description: "Array of UI issues found on the page",
+                    items: {
+                        type: "object",
+                        properties: {
+                            description: {
+                                type: "string",
+                                description: "Description of the UI issue (e.g. 'Text too small on mobile')"
+                            },
+                            selector: {
+                                type: "string",
+                                description: "CSS selector identifying the UI element with issues (e.g. '.footer-note')"
+                            },
+                            severity: {
+                                type: "string",
+                                enum: ["low", "medium", "high"],
+                                description: "Severity level of the UI issue"
+                            }
+                        },
+                        required: ["description", "selector", "severity"],
+                        additionalProperties: false
+                    }
+                },
+                notes: {
+                    type: "string",
+                    description: "Any extra observations about this page (e.g. 'This page appears to be a login form using React. No errors in console.')"
+                }
+            },
+            required: ["bugs", "ui_issues", "notes"],
+            additionalProperties: false,
+            description: "Analysis of the current page"
+        },
+        action: {
+            type: "object",
+            properties: {
+                step: {
+                    type: "string",
+                    description: "Action to perform - must match one of the given possibleLabels exactly (if you wish the system to wait for a period of time, just put 'wait' here)"
+                },
+                args: {
+                    type: "array",
+                    description: "Arguments for the action, e.g. time to wait in milliseconds [5000]",
+                    items: {
+                        oneOf: [
+                            { type: "string" },
+                            { type: "number" },
+                            { type: "boolean" },
+                            { type: "null" }
+                        ]
+                    }
+                },
+                reason: {
+                    type: "string",
+                    description: "The reason for this action"
+                },
+                progressDescription: {
+                    type: "string",
+                    description: "Description of current progress (e.g. 'Filled login form and submitting credentials')"
+                },
+                newGoal: {
+                    type: "string",
+                    description: "New mission goal for the next step (e.g. 'Wait for dashboard to load after login')"
+                },
+                hasAchievedGoal: {
+                    type: "boolean",
+                    description: "Whether the current goal has been achieved"
+                }
+            },
+            required: ["step", "args", "reason", "progressDescription", "newGoal", "hasAchievedGoal"],
+            additionalProperties: false,
+            description: "Action to take next"
+        }
+    },
+    required: ["analysis", "action"],
+    additionalProperties: false
+};
 
-    action: z.object({
-        step: z.string().describe("The command name to execute"),
-        args: z.array(argSchema).describe("Arguments for the command"),
-        reason: z.string().describe("Why this command keeps the crawl progressing (Make it short)"),
-        newGoal: z.string().describe("New mission goal for the next step"),
-        nextLink: z.string().optional().describe("The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)")
-    }).describe("Action to take next"),
-
-    pageDetails: z.object({
-        pageName: z.string().describe("Name of the page you are currently on"),
-        description: z.string().describe("Short description of the page you are currently on")
-    }).describe("Details about the current page")
-});
-
-export const actionSchema = z.object({
-    step: z.string().describe("The command name to execute"),
-    args: z.array(argSchema).describe("Arguments for the command"),
-    reason: z.string().describe("Why this command keeps the crawl progressing (Make it short)"),
-    newGoal: z.string().describe("New mission goal for the next step"),
-    nextLink: z.string().optional().describe("The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)")
-});
-
-export const testSchema = z.object({
-    confirmation: z.string().describe("Confirmation of the action taken (e.g. 'Login successful', 'Page loaded')")
-});
-
-const goalSchema = z.object({
-    analysis: z.object({
-        bugs: z.array(
-            z.object({
-                description: z.string().describe("Description of the bug found (e.g. 'Login button unresponsive')"),
-                selector: z.string().describe("CSS selector identifying the problematic element (e.g. '#btn-login')"),
-                severity: z.enum(["low", "medium", "high"]).describe("Severity level of the bug")
-            })
-        ).describe("Array of bugs found on the page"),
-
-        ui_issues: z.array(
-            z.object({
-                description: z.string().describe("Description of the UI issue (e.g. 'Text too small on mobile')"),
-                selector: z.string().describe("CSS selector identifying the UI element with issues (e.g. '.footer-note')"),
-                severity: z.enum(["low", "medium", "high"]).describe("Severity level of the UI issue")
-            })
-        ).describe("Array of UI issues found on the page"),
-
-        notes: z.string().describe("Any extra observations about this page (e.g. 'This page appears to be a login form using React. No errors in console.')")
-    }).describe("Analysis of the current page"),
-
-    action: z.object({
-        step: z.string().describe("Action to perform - must match one of the given possibleLabels exactly (if you wish the system to wait for a period of time, just put 'wait' here)"),
-        args: z.array(argSchema).describe("Arguments for the action, e.g. time to wait in milliseconds [5000]"),
-        reason: z.string().describe("The reason for this action"),
-        progressDescription: z.string().describe("Description of current progress (e.g. 'Filled login form and submitting credentials')"),
-        newGoal: z.string().describe("New mission goal for the next step (e.g. 'Wait for dashboard to load after login')"),
-        hasAchievedGoal: z.boolean().describe("Whether the current goal has been achieved")
-    }).describe("Action to take next")
-});
 
 const systemPrompt = String.raw`
             You are a website-auditing autonomous agent.
@@ -191,13 +384,14 @@ export const getSystemPrompt = (agentName: Namespaces, recurrent: boolean): stri
     }
 }
 
+// Updated schema getter function
 export const getSystemSchema = (agentName: Namespaces, recurrent: boolean) => {
     if (agentName === "analyzer") {
-        return recurrent ? actionSchema : systemPromptSchema;
+        return recurrent ? actionJsonSchema : systemPromptJsonSchema;
     } else {
-        return goalSchema;
+        return goalJsonSchema;
     }
-}
+};
 
 export const STOP_LEVEL_ERRORS = [
     'Invalid Gemini API key',

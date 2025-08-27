@@ -8,3 +8,4 @@ README.md
 .nyc_output
 coverage
 .nyc_output
+agentConfig.json

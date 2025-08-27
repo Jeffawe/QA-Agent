@@ -9,7 +9,7 @@ import { getApiKeyForAgent } from "../services/memory/apiMemory.js";
 export default class StagehandSession extends Session<Page> {
     public stagehand: Stagehand | null;
     private apiKey: string;
-    
+
     constructor(sessionId: string) {
         super(sessionId);
 
@@ -134,6 +134,14 @@ export default class StagehandSession extends Session<Page> {
 
             const filename = path.join(folderName, basicFilename);
             if (!this.page) throw new Error("Page not initialized");
+
+            try {
+                // Wait for network to be mostly idle (but not too long)
+                await this.page.waitForLoadState('networkidle', { timeout: 5000 });
+            } catch {
+                // If networkidle times out, continue anyway
+                console.log('Network idle timeout, proceeding with screenshot');
+            }
 
             // 🔑 One-liner: full-page screenshot
             await this.page.screenshot({

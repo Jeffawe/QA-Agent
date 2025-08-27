@@ -71,7 +71,7 @@ export class CombinedThinker extends Thinker {
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logManager.error(`Error generating next action: ${errorMessage}`, State.DECIDE, false);
-            this.eventBus?.emit({
+            this.eventBus.emit({
                 ts: Date.now(),
                 type: "thinker_call",
                 level: "LLM_error",
@@ -130,7 +130,16 @@ export class CombinedThinker extends Thinker {
             this.logManager.log(`LLM response: ${JSON.stringify(result)}`, thinkerState, false);
             return result;
         } catch (error) {
-            this.logManager.error(`Error generating next action: ${error}`, State.DECIDE, false);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logManager.error(`Error generating next goal: ${errorMessage}`, State.DECIDE, false);
+            this.eventBus?.emit({
+                ts: Date.now(),
+                type: "thinker_call",
+                level: "LLM_error",
+                model: this.modelClient.name,
+                message: `Failed to generate multimodal action: ${errorMessage}`,
+            });
+
             return {
                 analysis: {
                     bugs: [],

@@ -9,6 +9,7 @@ import { ActionSpamValidator } from './services/validators/actionValidator.js';
 import { ErrorValidator } from './services/validators/errorValidator.js';
 import { LLMUsageValidator } from './services/validators/llmValidator.js';
 import { logManagers } from './services/memory/logMemory.js';
+import { ThinkerValidator } from './services/validators/thinkerValidator.js';
 
 let agent: BossAgent | null = null;
 
@@ -46,6 +47,7 @@ const createValidators = (sessionId: string): number => {
         new ActionSpamValidator(eventBus);
         new ErrorValidator(eventBus, sessionId);
         new LLMUsageValidator(eventBus, sessionId);
+        new ThinkerValidator(eventBus, sessionId);
 
         let WebSocket_PORT = parseInt(process.env.WEBSOCKET_PORT || '3002');;
         if (process.env.NODE_ENV === 'production') {

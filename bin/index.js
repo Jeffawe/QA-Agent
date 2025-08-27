@@ -9,6 +9,8 @@ import path from 'path';
 function checkPort(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
+    
+    console.log(`🔍 Trying to bind to port ${port}...`);
 
     server.listen(port, () => {
       server.once('close', () => {
@@ -17,7 +19,7 @@ function checkPort(port) {
       server.close();
     });
 
-    server.on('error', () => {
+    server.on('error', (err) => {
       resolve(false); // Port is in use
     });
   });
@@ -84,18 +86,21 @@ async function makeRequest(url, endpoint, options = {}) {
 }
 
 // Function to wait for server to be ready
-async function waitForServer(port, maxAttempts = 30) {
+async function waitForServer(port, maxAttempts = 20) {
   for (let i = 0; i < maxAttempts; i++) {
     try {
       const available = await checkPort(port);
       if (!available) {
         return true; // Server is running (port is in use)
       }
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error) {
-      // Continue trying
+      console.log(`❌ Error checking port: ${error.message}`);
+      return false;
     }
   }
+
+  console.log(`❌ Gave up after ${maxAttempts} attempts`);
   return false;
 }
 
@@ -339,9 +344,9 @@ if (daemonMode) {
 if (autoStart) {
   console.log('⏳ Waiting for server to be ready...');
 
-  const serverReady = await waitForServer(port);
+  await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds for server to initialize
 
-  if (serverReady) {
+  try {
     console.log('🚀 Server is ready, auto-starting agent...');
 
     const sessionId = sessionid ?? '1';
@@ -356,7 +361,7 @@ if (autoStart) {
     const headers = { 'Content-Type': 'application/json' };
 
     await makeRequest(baseUrl, endpoint, { body, headers });
-  } else {
+  } catch (error) {
     console.error('❌ Server failed to start within expected time.');
     process.exit(1);
   }

@@ -226,7 +226,7 @@ export default class BossAgent {
     this.logManager.log("Done", State.DONE, true);
     await this.stop();
     const doneMessage = `Agent is done with task. Used ${this.logManager.getTokens()} tokens`;
-    this.bus.emit({ ts: Date.now(), type: "done", message: doneMessage });
+    this.bus.emit({ ts: Date.now(), type: "done", message: doneMessage, sessionId: this.sessionId });
   }
 
   public async stop(): Promise<boolean> {
@@ -259,7 +259,6 @@ export default class BossAgent {
     eventBusManager.removeBus(this.sessionId);
     //this.logManager.deleteLogFile();
     logManagers.removeManager(this.sessionId);
-    this.bus.emit({ ts: Date.now(), type: "done", message: "Agent cleanup completed", sessionId: this.sessionId });
   }
 
   // Public API to get agents (useful for external orchestration)

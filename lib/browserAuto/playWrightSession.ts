@@ -34,6 +34,14 @@ export default class PlaywrightSession extends Session<Page> {
 
       if (!this.page) throw new Error("Page not initialized");
 
+      try {
+        // Wait for network to be mostly idle (but not too long)
+        await this.page.waitForLoadState('networkidle', { timeout: 5000 });
+      } catch {
+        // If networkidle times out, continue anyway
+        console.log('Network idle timeout, proceeding with screenshot');
+      }
+
       await this.page.screenshot({ path: filename, fullPage: true });
 
       console.log(`Screenshot saved as ${filename}`);

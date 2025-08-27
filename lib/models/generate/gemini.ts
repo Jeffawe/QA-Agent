@@ -3,7 +3,7 @@ import { LLM } from "../../utility/abstract.js";
 import { Action, ThinkResult, Namespaces, State } from "../../types.js";
 import fs from 'fs';
 import path from 'path';
-import { getSystemPrompt, getSystemSchema, STOP_LEVEL_ERRORS, testSchema } from "./prompts.js";
+import { getSystemPrompt, getSystemSchema, STOP_LEVEL_ERRORS } from "./prompts.js";
 import { generateContent } from "../../externalCall.js";
 import { getApiKeyForAgent } from "../../services/memory/apiMemory.js";
 
@@ -67,48 +67,55 @@ export class GeminiLLm extends LLM {
     }
 
     async testModel(): Promise<boolean> {
-        if (this.genAI === null) return false;
+        if (this.genAI === null) {
+            this.logManager.error("genAI is null, returning false");
+            return false;
+        }
 
-        let response = null;
-        const prompt = "Test if the Gemini model is working";
-        const systemInstruction = "You are a helpful assistant. Please respond with a simple confirmation message.";
-
-        const projectRoot = process.cwd();
-        const imagePath = path.join(projectRoot, 'assets', 'test.png');
+        const startTime = Date.now();
+        const testPrompt = "Please respond with exactly: 'Model is working correctly'";
+        const expectedResponse = "Model is working correctly";
 
         try {
-            if (this.apiKey?.startsWith('TEST')) {
-                response = await generateContent({
-                    prompt,
-                    systemInstruction,
-                    imagePath
-                });
-                return response ? true : false;
-            } else {
-                const image_url = this.imageToDataUrl(imagePath);
-                const humanMessage = new HumanMessage({
-                    content: [
-                        { type: "text", text: prompt },
-                        { type: "image_url", image_url: { url: image_url } },
-                    ],
-                });
+            let response: string | null = null;
 
+            if (this.apiKey?.startsWith('TEST')) {
+                console.log("Using generateContent path");
+                const result = await generateContent({
+                    prompt: testPrompt,
+                    systemInstruction: "You are a helpful assistant. Follow instructions exactly."
+                });
+                response = result?.toString() || null;
+                console.log("generateContent result:", result);
+            } else {
                 const messages = [
-                    new SystemMessage(systemInstruction),
-                    humanMessage,
+                    new SystemMessage("You are a helpful assistant. Follow instructions exactly."),
+                    new HumanMessage(testPrompt)
                 ];
 
-                const structuredLlm = (this.model as any)?.withStructuredOutput(testSchema);
-
-                response = await structuredLlm?.invoke(messages);
-
-                if (!response) {
-                    return false;
-                } else {
-                    return true;
-                }
+                const result = await this.model?.invoke(messages);
+                response = result?.content?.toString() || null;
+                console.log("model.invoke result:", result);
             }
+
+            const responseTime = Date.now() - startTime;
+
+            // Try both console.log AND your log manager
+            this.logManager.log(`Gemini response is: ${response}, took ${responseTime}ms`, State.INFO, true);
+
+            if (!response) {
+                this.logManager.log("Testing Model failed. Got no response, returning false");
+                return false;
+            }
+
+            // More detailed validation logging
+            const lowerResponse = response.toLowerCase();
+            const isValidResponse = lowerResponse.includes("model is working");
+
+            return isValidResponse;
+
         } catch (error) {
+            console.error("Error in testModel:", error);
             return false;
         }
     }
@@ -305,10 +312,13 @@ export class GeminiLLm extends LLM {
                 });
             }
 
-            console.log(response)
-            return recurrent ? this.parseActionFromResponse(response) : this.parseDecisionFromResponse(response);
-        }
-        catch (error) {
+            const finalContent = response?.content || response;
+            const logContent = typeof finalContent === 'string'
+                ? finalContent
+                : JSON.stringify(finalContent, null, 2);
+            this.logManager.log(logContent, State.INFO, true);
+            return recurrent ? this.parseActionFromResponse(finalContent) : this.parseDecisionFromResponse(finalContent);
+        }catch (error) {
             const err = error as Error;
 
             const isStopLevel = STOP_LEVEL_ERRORS.some(stopError =>
@@ -334,10 +344,26 @@ export class GeminiLLm extends LLM {
      * @param raw The raw response from the LLM.
      * @returns An ThinkResult object containing the analysis and action.
      */
-    private parseDecisionFromResponse(content: string): ThinkResult {
+    private parseDecisionFromResponse(response: any): ThinkResult {
         try {
-            if (!content) throw new Error("No candidates returned");
-            const responseText: string | undefined = content.trim();
+            // If it's already a structured object, return it
+            if (typeof response === 'object' && response !== null &&
+                response.analysis && response.action) {
+                return response as ThinkResult;
+            }
+
+            // If it's a string, parse it
+            let content: string;
+            if (typeof response === 'string') {
+                content = response;
+            } else {
+                // Shouldn't happen with proper LangChain handling above, but just in case
+                throw new Error("Unexpected response format");
+            }
+
+            if (!content) throw new Error("No content in response");
+
+            const responseText: string = content.trim();
             if (!responseText) throw new Error("Empty response text");
 
             const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -346,52 +372,53 @@ export class GeminiLLm extends LLM {
             return JSON.parse(jsonMatch[0]) as ThinkResult;
         } catch (err) {
             console.error("Failed to parse LLM response:", err);
-            return {
-                analysis: {
-                    bugs: [],
-                    ui_issues: [],
-                    notes: "LLM produced invalid JSON"
-                },
-                action: {
-                    step: "no_op",
-                    reason: "LLM produced invalid JSON",
-                    args: [],
-                },
-                noErrors: false
-            } satisfies ThinkResult;
+            throw err;
         }
     }
 
-    private parseActionFromResponse(content: string): ThinkResult {
-        // --- defaults -------------------------------------------------------------
+    private parseActionFromResponse(response: any): ThinkResult {
         const defaultResponse: ThinkResult = {
             analysis: { bugs: [], ui_issues: [], notes: "" },
             action: {
                 step: "no_op",
                 args: [],
-                reason: "LLM produced invalid JSON"
+                reason: "LLM produced invalid response format"
             },
         };
 
         try {
-            const text: string | undefined =
-                content.trim();
+            // If it's already a structured object, extract the action
+            if (typeof response === 'object' && response !== null) {
+                if (response.step && response.args && response.reason) {
+                    // Response IS the action
+                    return { ...defaultResponse, action: response };
+                } else if (response.action) {
+                    // Response has an action property
+                    return { ...defaultResponse, action: response.action };
+                }
+            }
+
+            // If it's a string, parse it
+            let content: string;
+            if (typeof response === 'string') {
+                content = response;
+            } else {
+                throw new Error("Unexpected response format");
+            }
+
+            const text: string = content.trim();
             if (!text) throw new Error("Empty response text");
 
-            // grab the first JSON object that appears in the text
             const jsonMatch = text.match(/\{[\s\S]*\}/);
             if (!jsonMatch) throw new Error("No JSON object found in response");
 
             const parsed = JSON.parse(jsonMatch[0]);
-
-            // The model might return either the full ThinkResult
-            // or just the Action object; handle both cases gracefully.
             const action: Action = parsed.action ?? parsed;
 
             return { ...defaultResponse, action };
         } catch (err) {
             console.error("Failed to parse LLM response:", err);
-            return defaultResponse; // fall back to the no-op action
+            throw err;
         }
     }
 

@@ -111,11 +111,17 @@ export abstract class Agent {
 
     public resumeAgent(): void {
         if (this.paused) {
-            this.setState(State.RESUME);
+            this.setState(this.pausedState);
             this.logManager.log(`Resuming agent ${this.name} from state ${this.pausedState}`, this.buildState(), true);
             this.pausedState = State.START; // Reset paused state
             this.paused = false;
         }
+    }
+
+    protected stopSystem(reason: string): void {
+        this.logManager.log(`${this.name} Agent stopped because of ${reason}`, State.ERROR, true);
+        this.bus.emit({ ts: Date.now(), type: "stop", message: reason, sessionId: this.sessionId });
+        this.setState(State.ERROR);
     }
 
     public isPaused(): boolean {

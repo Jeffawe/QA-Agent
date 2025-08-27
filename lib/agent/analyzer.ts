@@ -89,6 +89,7 @@ export default class Analyzer extends Agent {
                         if (!success) {
                             this.logManager.error("Screenshot failed", this.state);
                             this.setState(State.DONE);
+                            this.stopSystem("Screenshot failed");
                             break;
                         }
 

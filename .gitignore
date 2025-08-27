@@ -8,6 +8,7 @@ yarn-error.log*
 pnpm-debug.log*
 package-lock.json
 .pnpm-debug.log
+agentConfig.json
 
 # ----------------------------------------
 # Environment Variables

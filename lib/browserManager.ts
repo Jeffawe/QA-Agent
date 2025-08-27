@@ -9,7 +9,10 @@ export async function getBrowser() {
       headless: isProduction ? true : false,
       args: [
         '--no-sandbox',
-        '--disable-setuid-sandbox'
+        '--disable-setuid-sandbox',
+        '--font-render-hinting=none',
+        '--disable-web-security',
+        '--disable-font-subpixel-positioning'
       ]
     });
   }
