@@ -173,6 +173,7 @@ const testMode = args['test-mode'] || config['test-mode'] || false;
 const autoStart = args['auto-start'] || config['auto-start'] || true;
 const daemonMode = args.daemon || args.d || false;
 const sessionid = args.sessionid || config.sessionid || null;
+const headless = args.headless || config.headless || false;
 
 if (args.help || args.h) {
   console.log(`
@@ -190,6 +191,7 @@ if (args.help || args.h) {
       --help, -h       Show this help message
       --daemon, -d     Run in daemon mode
       --sessionId      Session ID
+      --headless       Run browser in headless mode (default: false)
 
     Logs:
       agent-run logs            Show main agent log
@@ -302,6 +304,7 @@ process.env.PORT = String(port);
 process.env.API_KEY = key;
 process.env.WEBSOCKET_PORT = String(websocket);
 process.env.NODE_ENV = 'development';
+process.env.HEADLESS = String(headless);
 
 console.log('🚀 Starting server...');
 console.log(`✅ Agent server running on http://localhost:${port}`);
@@ -320,7 +323,7 @@ if (!autoStart) {
   console.log(`➡️  Run: curl http://localhost:${port}/start/1 to start the agent.`);
   console.log(`➡️  Run: curl http://localhost:${port}/stop to stop the agent.`);
   if (testMode) {
-    console.log(`➡️  Run: curl http://localhost:${port}/test to run in test mode.`);
+    console.log(`➡️  Run: curl http://localhost:${port}/test/{test-key} to run in test mode.`);
   }
 }
 

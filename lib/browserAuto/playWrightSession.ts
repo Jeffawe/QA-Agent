@@ -34,15 +34,26 @@ export default class PlaywrightSession extends Session<Page> {
 
       if (!this.page) throw new Error("Page not initialized");
 
+      // Try waiting for fonts but fallback after 2s
       try {
-        // Wait for network to be mostly idle (but not too long)
-        await this.page.waitForLoadState('networkidle', { timeout: 5000 });
+        await this.page.evaluate(async () => {
+          await Promise.race([
+            document.fonts.ready,
+            new Promise((resolve) => setTimeout(resolve, 2000)) // max wait 2s
+          ]);
+        });
       } catch {
-        // If networkidle times out, continue anyway
-        console.log('Network idle timeout, proceeding with screenshot');
+        console.log("Font wait skipped (timeout)");
       }
 
-      await this.page.screenshot({ path: filename, fullPage: true });
+      // Small buffer wait to let rendering stabilize
+      await this.page.waitForTimeout(500);
+
+      await this.page.screenshot({
+        path: filename,
+        fullPage: true,
+        timeout: 0 // disable Playwright's 30s font timeout
+      });
 
       console.log(`Screenshot saved as ${filename}`);
       return true;

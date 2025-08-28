@@ -88,7 +88,7 @@ export default class Analyzer extends Agent {
                         const success = await this.playwrightSession.takeScreenshot("images", filename);
                         if (!success) {
                             this.logManager.error("Screenshot failed", this.state);
-                            this.setState(State.DONE);
+                            this.setState(State.ERROR);
                             this.stopSystem("Screenshot failed");
                             break;
                         }

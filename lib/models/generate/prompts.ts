@@ -1,6 +1,4 @@
 import { Namespaces } from "../../types.js";
-import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 
 export const systemPromptJsonSchema = {
     type: "object",

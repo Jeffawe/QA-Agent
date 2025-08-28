@@ -95,6 +95,7 @@ export class GoalAgent extends Agent {
                     if (!success) {
                         this.logManager.error("Screenshot failed", this.state);
                         this.setState(State.ERROR);
+                        this.stopSystem("Screenshot failed");
                         break;
                     }
 
