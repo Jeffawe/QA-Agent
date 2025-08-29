@@ -52,7 +52,7 @@ export default class PlaywrightSession extends Session<Page> {
       await this.page.screenshot({
         path: filename,
         fullPage: true,
-        timeout: 0 // disable Playwright's 30s font timeout
+        timeout: 30000
       });
 
       console.log(`Screenshot saved as ${filename}`);

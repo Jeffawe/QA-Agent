@@ -108,6 +108,7 @@ export enum State {
     PLAN = "PLAN",
     PAUSE = "PAUSE",
     RESUME = "RESUME",
+    WARN = "WARN"
 }
 
 type StateValue = `${State}`;
@@ -157,7 +158,7 @@ export interface AgentConfig<T extends BaseAgentDependencies = BaseAgentDependen
   sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
   dependent?: boolean; // If true, agent won't start until another agent triggers it
   dependencies?: Partial<T>; // Additional/override dependencies
-  agentDependencies?: string[]; // Names of other agents this agent depends on
+  agentDependencies?: Namespaces[]; // Names of other agents this agent depends on
 }
 
 export interface MiniAgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
@@ -165,5 +166,5 @@ export interface MiniAgentConfig<T extends BaseAgentDependencies = BaseAgentDepe
   sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
   dependent?: boolean; // If true, agent won't start until another agent triggers it
   dependencies?: Partial<T>; // Additional/override dependencies
-  agentDependencies?: string[]; // Names of other agents this agent depends on
+  agentDependencies?: Namespaces[]; // Names of other agents this agent depends on
 }

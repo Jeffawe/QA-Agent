@@ -24,6 +24,7 @@ export default class Analyzer extends Agent {
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
         this.playwrightSession = this.session as playwrightSession;
+        this.validatorWarningState = State.OBSERVE;
     }
 
     /* ───────── external API ───────── */
@@ -144,6 +145,8 @@ export default class Analyzer extends Agent {
 
                 case State.ACT: {
                     const action: Action = (this as any).pendingAction;
+                    const t0 = Date.now();
+                    this.bus.emit({ ts: t0, type: "action_started", action });
 
                     if (action.step === "click" && !this.checkifLabelValid(action.args[0])) {
                         this.logManager.error("Label is not valid", State.ERROR, false);
@@ -169,8 +172,6 @@ export default class Analyzer extends Agent {
 
                     this.lastAction = `Action ${action.step} with args (${action.args.join(",")}) was last taken because of ${action.reason}`;
 
-                    const t0 = Date.now();
-                    this.bus.emit({ ts: t0, type: "action_started", action });
                     let result: ActionResult | null = null
 
                     try {

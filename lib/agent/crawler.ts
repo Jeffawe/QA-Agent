@@ -10,6 +10,7 @@ import Analyzer from "./analyzer.js";
 
 export class Crawler extends Agent {
     private isCurrentPageVisited = false;
+
     private analyzer: Analyzer;
     private manualAnalyzer: ManualAnalyzer;
 
@@ -88,7 +89,7 @@ export class Crawler extends Agent {
                 case State.EVALUATE: {
                     if (PageMemory.isFullyExplored(this.currentUrl)) {
                         const back = PageMemory.popFromStack();
-                        if (back) await page.goto(back, { waitUntil: "networkidle" });
+                        if (back) await page.goto(back, { waitUntil: "networkidle", timeout: 30000 });
                         else this.setState(State.DONE);
                     } else {
                         this.setState(State.VISIT);
@@ -177,7 +178,14 @@ export class Crawler extends Agent {
                 }
 
                 case State.PAUSE:
-                case State.DONE:   /* fallthrough */
+                case State.DONE:
+                    for (const agent of this.requiredAgents) {
+                        if (!agent.isDone()) {
+                            this.logManager.log(`Waiting for required agent ${agent.name} to finish`, this.buildState(), false);
+                            return;
+                        }
+                    }
+                case State.RESUME:
                 case State.ERROR:  /* fallthrough */
                 default:
                     break;

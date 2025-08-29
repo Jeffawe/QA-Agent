@@ -304,7 +304,7 @@ process.env.PORT = String(port);
 process.env.API_KEY = key;
 process.env.WEBSOCKET_PORT = String(websocket);
 process.env.NODE_ENV = 'development';
-process.env.HEADLESS = String(headless);
+process.env.HEADLESS = String(headless).toLowerCase();
 
 console.log('🚀 Starting server...');
 console.log(`✅ Agent server running on http://localhost:${port}`);

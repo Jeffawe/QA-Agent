@@ -210,7 +210,12 @@ export default class BossAgent {
       agent.setBaseValues(url, this.goal);
     }
 
-    while (agents.some(a => !a.isDone()) && !this.stopLoop) {
+    while (agents.some(a => !a.isDone())) {
+      if (this.stopLoop) {
+        this.logManager.log("Stopping main loop as requested", State.INFO, true);
+        break;
+      }
+      
       if (agents.every(a => a.isPaused())) {
         await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to avoid busy waiting
         continue; // Skip this iteration if all agents are paused

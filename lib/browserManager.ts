@@ -11,8 +11,9 @@ export async function getBrowser() {
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
+        '--disable-renderer-backgrounding',
+        '--disable-backgrounding-occluded-windows', // prevent throttling for hidden windows
+        '--disable-features=CalculateNativeWinOcclusion' // ensures Chromium thinks the window is visible
       ]
     });
   }

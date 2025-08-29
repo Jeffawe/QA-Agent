@@ -44,7 +44,7 @@ const createValidators = (sessionId: string): number => {
     try {
         const eventBus = eventBusManager.getOrCreateBus(sessionId);
 
-        new ActionSpamValidator(eventBus);
+        new ActionSpamValidator(eventBus, sessionId);
         new ErrorValidator(eventBus, sessionId);
         new LLMUsageValidator(eventBus, sessionId);
         new ThinkerValidator(eventBus, sessionId);

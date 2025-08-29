@@ -62,6 +62,8 @@ export abstract class Agent {
     protected response: string = "";
     protected paused: boolean = false;
 
+    protected requiredAgents: Agent[] = [];
+
     // Default state to go to after a validator warning
     // This is set to START by default, meaning it will reset the agent to the initial state
     protected validatorWarningState: State = State.START;
@@ -84,6 +86,7 @@ export abstract class Agent {
 
         this.bus.on("validator_warning", (evt) => {
             this.response = evt.message;
+            this.logManager.log(`Validator warning in agent ${this.name}: ${evt.message}`, State.WARN, true);
             this.setState(this.validatorWarningState);
         });
 
@@ -142,6 +145,10 @@ export abstract class Agent {
             this.logManager.error(`Required agent '${name}' not found`, this.buildState());
             this.setState(State.ERROR);
             throw new Error(`Required agent '${name}' not found`);
+        }
+
+        if (!this.requiredAgents.includes(agent)) {
+            this.requiredAgents.push(agent);
         }
         return agent;
     }
