@@ -7,7 +7,7 @@ export class ActionSpamValidator {
   private lastSpamKey: string | null = null;
   private extraSpamCount = 0;
 
-  constructor(private bus: EventBus, private windowSize: number = 3, private extraSpamLimit: number = 2) {
+  constructor(private bus: EventBus, private sessionId: string, private windowSize: number = 3, private extraSpamLimit: number = 2) {
     bus.on("action_started", evt => this.onAction(evt.action));
   }
 
@@ -24,10 +24,9 @@ export class ActionSpamValidator {
         if (this.extraSpamCount >= this.extraSpamLimit) {
           this.bus.emit({
             ts: Date.now(),
-            type: "validator_stop",
-            message: `Validator stops because Action "${action.step}" with args "${JSON.stringify(
-              action.args
-            )}" was spammed ${this.windowSize + this.extraSpamCount}× consecutively.`
+            type: "stop",
+            message: `Validator stops because Action "${action.step}" was spammed ${this.windowSize + this.extraSpamCount}× consecutively.`,
+            sessionId: this.sessionId
           });
 
           // reset tracking
