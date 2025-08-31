@@ -83,7 +83,7 @@ export class AutoCrawler extends Agent {
                     // Record the page in memory if we haven’t seen it before
                     if (!PageMemory.pageExists(this.currentUrl)) {
                         const links: StageHandObserveResult[] = await this.stagehandSession.observe()
-                        const externalLinks = getExternalLinks(links, this.currentUrl);
+                        const externalLinks = await getExternalLinks(links, this.currentUrl, page);
                         this.logManager.log(`Links detected: ${links.length} are: ${JSON.stringify(links)}`, this.buildState(), false);
                         const pageDetails = {
                             title: this.currentUrl,
@@ -110,6 +110,7 @@ export class AutoCrawler extends Agent {
                 /*────────── 2. EVALUATE → VISIT ─────────*/
                 case State.EVALUATE: {
                     if (PageMemory.isFullyExplored(this.currentUrl)) {
+                        this.logManager.log(`All links visited on page ${this.currentUrl}`, this.buildState(), false);
                         const back = PageMemory.popFromStack();
                         if (back) await page.goto(back, { waitUntil: "networkidle", timeout: 30000 });
                         else this.setState(State.DONE);
@@ -206,9 +207,9 @@ export class AutoCrawler extends Agent {
                     for (const agent of this.requiredAgents) {
                         if (!agent.isDone()) {
                             this.logManager.log(`Waiting for required agent ${agent.name} to finish`, this.buildState(), false);
-                            return;
                         }
                     }
+                    break;
                 case State.RESUME:
                 case State.ERROR:  /* fallthrough */
                 default:

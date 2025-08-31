@@ -170,6 +170,20 @@ export default class AutoAnalyzer extends Agent {
                         break;
                     }
 
+                    if (action.step === 'all_done') {
+                        this.setState(State.DONE);
+                        this.queue = [];
+                        this.logManager.log("All links have been tested", this.buildState(), true);
+                        this.nextLink = null;
+                        PageMemory.setAllLinksVisited(this.currentUrl);
+                        const endTime = performance.now();
+                        this.timeTaken = endTime - (this as any).startTime;
+                        this.noErrors = true;
+
+                        this.logManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
+                        break;
+                    }
+
                     this.lastAction = `Action ${action.step} with args (${action.args.join(",")}) was last taken because of ${action.reason}`;
 
                     let result: ActionResult | null = null

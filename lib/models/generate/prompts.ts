@@ -368,6 +368,7 @@ const systemAutoPrompt = String.raw`
         ▸ ALLOWED COMMANDS  
         - Action: one string from possibleLabels (or 'wait' to pause)  
         - Done: set step to "done" when the entire site has been audited and the mission achieved  
+        - All Done: set step to "all_done" when you are completely finished and all possibleLabels given to you don't lead anywhere new
 
         ▸ RESPONSE FORMAT  
         Return **exactly one JSON object**:
@@ -393,6 +394,7 @@ const systemActionAutoPrompt = String.raw`
         ▸ ALLOWED COMMANDS  
         - Action: one string from possibleLabels (or 'wait' to pause)  
         - Done: set step to "done" when the mission is complete  
+        - All Done: set step to "all_done" when you are completely finished and all possibleLabels given to you don't lead anywhere new
 
         ▸ RESPONSE FORMAT  
         Return **exactly one JSON object** 

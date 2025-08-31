@@ -40,18 +40,23 @@ export class CrawlMap {
     this.write();        // create / clear file
   }
 
-  static getPages() : PageDetails[] { return Array.from(this.pages.values()); }
+  static getPages(): PageDetails[] { return Array.from(this.pages.values()); }
 
   /** Register page details (call as soon as PageDetails is ready) */
   static recordPage(page: PageDetails, sessionId: string) {
-    if (!this.initialised) this.init();
-    const eventBus = eventBusManager.getOrCreateBus(sessionId);
-    eventBus.emit({ ts: Date.now(), type: "crawl_map_updated", page });
-    if (!this.pages.has(page.url ?? page.uniqueID)) {
-      this.navOrder.push(page.url ?? page.uniqueID);
+    try {
+      if (!this.initialised) this.init();
+      const eventBus = eventBusManager.getOrCreateBus(sessionId);
+      eventBus.emit({ ts: Date.now(), type: "crawl_map_updated", page });
+      if (!this.pages.has(page.url ?? page.uniqueID)) {
+        this.navOrder.push(page.url ?? page.uniqueID);
+      }
+      this.pages.set(page.url ?? page.uniqueID, page);
+      this.write();
+    } catch (e) {
+      console.error("CrawlMap.recordPage error:", e);
+      throw e;
     }
-    this.pages.set(page.url ?? page.uniqueID, page);
-    this.write();
   }
 
   /** Optional: keep edge list if you still need it elsewhere */

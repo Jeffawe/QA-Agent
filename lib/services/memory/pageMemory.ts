@@ -97,6 +97,12 @@ export class PageMemory {
     return page.links.filter(link => !link.visited);
   }
 
+  static setAllLinksVisited(url: string) {
+    const page = this.pages[url];
+    if (!page) return;
+    page.links.forEach(link => link.visited = true);
+  }
+
   static pushToStack(url: string) {
     this.navStack.push(url);
   }
