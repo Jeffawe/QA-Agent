@@ -1,10 +1,9 @@
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
-import { InteractiveElement, LinkInfo, StageHandObserveResult, State } from "../types.js";
+import { LinkInfo, StageHandObserveResult, State } from "../types.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
 import ManualAnalyzer from "./manualAnalyzer.js";
-import playwrightSession from "../browserAuto/playWrightSession.js";
 import Analyzer from "./analyzer.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/stagehandActionService.js";
@@ -261,6 +260,10 @@ export class AutoCrawler extends Agent {
 
     async cleanup(): Promise<void> {
         this.state = State.START;
+        this.currentUrl = "";
+        this.isCurrentPageVisited = false;
+        this.timeTaken = 0;
+        this.response = "";    
     }
 }
 

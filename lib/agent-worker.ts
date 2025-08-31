@@ -141,35 +141,40 @@ if (parentPort) {
                     type: 'error',
                     error: errorMessage
                 });
+                await stopWorker();
             }
         }
 
         if (data.command === 'stop') {
-            try {
-                await cleanup();
-
-                parentPort?.postMessage({
-                    type: 'session_cleanup',
-                    sessionId: workerData.sessionId,
-                    message: 'Worker completed cleanup, requesting parent cleanup'
-                });
-
-                await new Promise(resolve => setTimeout(resolve, 100));
-                console.log(`✅ Agent stopped, terminating worker...`);
-            } catch (error) {
-                console.error('Error during cleanup:', error);
-
-                parentPort?.postMessage({
-                    type: 'session_cleanup',
-                    sessionId: workerData.sessionId,
-                    error: error instanceof Error ? error.message : String(error)
-                });
-            } finally {
-                console.log(`✅ Agent stopped, terminating worker...`);
-                process.exit(0);
-            }
+            await stopWorker();
         }
     });
+
+    const stopWorker = async () => {
+        try {
+            await cleanup();
+
+            parentPort?.postMessage({
+                type: 'session_cleanup',
+                sessionId: workerData.sessionId,
+                message: 'Worker completed cleanup, requesting parent cleanup'
+            });
+
+            await new Promise(resolve => setTimeout(resolve, 100));
+            console.log(`✅ Agent stopped, terminating worker...`);
+        } catch (error) {
+            console.error('Error during cleanup:', error);
+
+            parentPort?.postMessage({
+                type: 'session_cleanup',
+                sessionId: workerData.sessionId,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        } finally {
+            console.log(`✅ Agent stopped, terminating worker...`);
+            process.exit(0);
+        }
+    };
 }
 
 const cleanup = async () => {

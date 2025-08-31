@@ -49,6 +49,7 @@ export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
     {
         name: "manualanalyzer",
         sessionType: "playwright",
+        actionServiceType: "manual",
         dependent: true,
         agentDependencies: [],
         description: "Perform manual testing and detailed analysis of specific components",

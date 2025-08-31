@@ -29,6 +29,8 @@ export default class StagehandSession extends Session<Page> {
                 throw new Error(errorMessage);
             }
 
+            const isProduction = process.env.NODE_ENV === 'production';
+            const headless = isProduction ? true : String(process.env.HEADLESS).toLowerCase() === 'true';
             this.apiKey = key;
             this.stagehand = new Stagehand({
                 env: "LOCAL",
@@ -37,7 +39,7 @@ export default class StagehandSession extends Session<Page> {
                     apiKey: this.apiKey,
                 },
                 localBrowserLaunchOptions: {
-                    headless: false
+                    headless: headless
                 }
             });
         } catch (error) {

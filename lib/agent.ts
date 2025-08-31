@@ -74,20 +74,29 @@ export default class BossAgent {
 
       for (const config of agentConfigs) {
         try {
-          if (!this.sessions.has(sessionId)) {
+          if (!this.sessions.has(config.sessionType)) {
             const session = SessionFactory.createSession(config.sessionType, sessionId);
-            this.sessions.set(sessionId, session);
+            this.sessions.set(config.sessionType, session);
           }
 
           // Retrieve existing or newly created session
-          const session = this.sessions.get(sessionId)!;
+          const session = this.sessions.get(config.sessionType)!;
 
           if (config.sessionType === 'stagehand') {
             config.actionServiceType = 'auto';
           }
 
-          const actionService = ActionServiceFactory.createActionService(config.actionServiceType || 'manual', session);
-          this.actionServices.set(config.name, actionService);
+          if(!config.actionServiceType) {
+            config.actionServiceType = 'manual';
+          }
+
+          if (!this.actionServices.has(config.actionServiceType)) {
+            const actionService = ActionServiceFactory.createActionService(config.actionServiceType, session);
+            this.actionServices.set(config.actionServiceType, actionService);
+          }
+
+          // Retrieve existing or newly created action service
+          const actionService = this.actionServices.get(config.actionServiceType)!;
 
           const baseDependencies: BaseAgentDependencies = {
             session,

@@ -174,6 +174,7 @@ export interface AgentConfig<T extends BaseAgentDependencies = BaseAgentDependen
 export interface MiniAgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
     name: Namespaces;
     sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
+    actionServiceType?: 'manual' | 'auto';
     dependent?: boolean; // If true, agent won't start until another agent triggers it
     dependencies?: Partial<T>; // Additional/override dependencies
     agentDependencies?: Namespaces[]; // Names of other agents this agent depends on
