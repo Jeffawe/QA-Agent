@@ -6,6 +6,7 @@ import { PageMemory } from "../services/memory/pageMemory.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/stagehandActionService.js";
+import path from "node:path";
 
 export default class AutoAnalyzer extends Agent {
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
@@ -92,16 +93,19 @@ export default class AutoAnalyzer extends Agent {
                 case State.OBSERVE: {
                     this.currentUrl = this.stagehandSession.page?.url();
                     const filename = `screenshot_${this.step}_${this.sessionId.substring(0, 10)}.png`;
-                    (this as any).finalFilename = `images/${filename}`;
+                    const expectedPath = path.resolve("images", filename); // Use absolute path
 
-                    if (!this.visitedPage || !(await fileExists((this as any).finalFilename))) {
-                        const success = await this.stagehandSession.takeScreenshot("images", filename);
-                        if (!success) {
+                    if (!this.visitedPage || !(await fileExists(expectedPath))) {
+                        const actualPath = await this.stagehandSession.takeScreenshot("images", filename);
+                        if (!actualPath) {
                             this.logManager.error("Screenshot failed", this.state);
                             this.setState(State.ERROR);
                             this.stopSystem("Screenshot failed");
                             break;
                         }
+                        (this as any).finalFilename = actualPath; // Use the actual returned path
+                    } else {
+                        (this as any).finalFilename = expectedPath; // Use the expected path if file exists
                     }
 
                     this.bus.emit({ ts: Date.now(), type: "screenshot_taken", filename: (this as any).finalFilename, elapsedMs: 0 });
@@ -172,7 +176,7 @@ export default class AutoAnalyzer extends Agent {
 
                     try {
                         const specificLink = this.queue.find(l => l.description === action.step);
-                        if(!specificLink) {
+                        if (!specificLink) {
                             this.response = `${action.step} is not a valid link. It does not exist in the labels given.`;
                             this.logManager.error(`${action.step} is not a valid link. It does not exist in the labels given..`, this.state, false);
                             this.setState(State.OBSERVE);

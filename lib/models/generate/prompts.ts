@@ -365,6 +365,7 @@ const systemAutoPrompt = String.raw`
 
              ▸ ALLOWED COMMANDS (one per response)
             - In the step of Action - it must be a string that matches one of the given possibleLabels exactly (if you wish the system to wait for a period of time, just put 'wait' here), 
+            - Set step to 'done' - it means the entire site has been audited and goal has been achieved for this.
 
             Arguments for each command should be in the args array.
 
@@ -390,6 +391,7 @@ const systemActionAutoPrompt = String.raw`
 
             ▸ ALLOWED COMMANDS (one per response)
             - In the step of Action - it must be a string that matches one of the given possibleLabels exactly (if you wish the system to wait for a period of time, just put 'wait' here), 
+            - Set step to 'done' - it means the entire site has been audited and goal has been achieved for this.
 
             Arguments for each command should be in the args array.
 
@@ -432,7 +434,7 @@ export const getSystemPrompt = (agentName: Namespaces, recurrent: boolean): stri
     if (agentName === "analyzer") {
         return recurrent ? systemActionPrompt : systemPrompt;
     } else if (agentName === "autoanalyzer") {
-        return recurrent ? systemActionAutoPrompt : systemGoalPrompt;
+        return recurrent ? systemActionAutoPrompt : systemAutoPrompt;
     } else {
         return systemGoalPrompt;
     }

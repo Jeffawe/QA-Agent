@@ -128,13 +128,16 @@ export default class StagehandSession extends Session<Page> {
     async takeScreenshot(
         folderName: string,
         basicFilename: string,
-    ): Promise<boolean> {
+    ): Promise<string | null> { // Return the actual path instead of boolean
         try {
-            if (!fs.existsSync(folderName)) {
-                fs.mkdirSync(folderName, { recursive: true });
+            // Convert to absolute path
+            const absoluteFolderPath = path.resolve(folderName);
+
+            if (!fs.existsSync(absoluteFolderPath)) {
+                fs.mkdirSync(absoluteFolderPath, { recursive: true });
             }
 
-            const filename = path.join(folderName, basicFilename);
+            const filename = path.join(absoluteFolderPath, basicFilename);
             if (!this.page) throw new Error("Page not initialized");
 
             try {
@@ -153,10 +156,16 @@ export default class StagehandSession extends Session<Page> {
             });
 
             console.log(`Screenshot saved as ${filename}`);
-            return true;
+
+            // Verify the file was actually created
+            if (!fs.existsSync(filename)) {
+                throw new Error(`Screenshot file was not created: ${filename}`);
+            }
+
+            return filename; // Return the absolute path
         } catch (error) {
             console.error("Error taking screenshot:", error);
-            return false;
+            return null;
         }
     }
 
