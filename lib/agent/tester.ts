@@ -46,9 +46,9 @@ export default class Tester extends Agent {
 
     protected validateActionService(): void {
         if (!(this.actionService instanceof AutoActionService)) {
-            this.logManager.error(`Analyzer requires an appropriate action service`);
+            this.logManager.error(`Tester requires an appropriate action service`);
             this.setState(State.ERROR);
-            throw new Error(`Analyzer requires an appropriate action service`);
+            throw new Error(`Tester requires an appropriate action service`);
         }
 
         this.localactionService = this.actionService as AutoActionService;

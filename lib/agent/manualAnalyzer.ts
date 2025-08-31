@@ -37,9 +37,9 @@ export default class ManualAnalyzer extends Agent {
 
     protected validateActionService(): void {
         if (!(this.actionService instanceof ManualActionService)) {
-            this.logManager.error(`Analyzer requires an appropriate action service`);
+            this.logManager.error(`ManualAnalyzer requires an appropriate action service`);
             this.setState(State.ERROR);
-            throw new Error(`Analyzer requires an appropriate action service`);
+            throw new Error(`ManualAnalyzer requires an appropriate action service`);
         }
 
         this.localactionService = this.actionService as ManualActionService;
@@ -55,7 +55,7 @@ export default class ManualAnalyzer extends Agent {
         if (this.state === State.DONE || this.state === State.WAIT) {
             this.setState(State.START);
         } else {
-            this.logManager.log("Tester is already running or cannot start up", this.buildState(), true);
+            this.logManager.log("ManualAnalyzer is already running or cannot start up", this.buildState(), true);
         }
     }
 

@@ -32,9 +32,9 @@ export class AutoCrawler extends Agent {
 
     protected validateSessionType(): void {
         if (!(this.session instanceof StagehandSession)) {
-            this.logManager.error(`Crawler requires playwrightSession, got ${this.session.constructor.name}`);
+            this.logManager.error(`AutoCrawler requires stagehandSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
-            throw new Error(`PuppeteerCrawler requires playwrightSession, got ${this.session.constructor.name}`);
+            throw new Error(`AutoCrawler requires stagehandSession, got ${this.session.constructor.name}`);
         }
 
         this.stagehandSession = this.session as StagehandSession;
@@ -42,9 +42,9 @@ export class AutoCrawler extends Agent {
 
     protected validateActionService(): void {
         if (!(this.actionService instanceof AutoActionService)) {
-            this.logManager.error(`Analyzer requires an appropriate action service`);
+            this.logManager.error(`AutoCrawler requires an appropriate action service`);
             this.setState(State.ERROR);
-            throw new Error(`Analyzer requires an appropriate action service`);
+            throw new Error(`AutoCrawler requires an appropriate action service`);
         }
 
         this.localactionService = this.actionService as AutoActionService;

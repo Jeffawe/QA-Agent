@@ -38,15 +38,15 @@ export default class AutoAnalyzer extends Agent {
         if (this.state === State.DONE || this.state === State.WAIT) {
             this.setState(State.START);
         } else {
-            this.logManager.log("Analyzer is already running or cannot start up", this.buildState(), true);
+            this.logManager.log("AutoAnalyzer is already running or cannot start up", this.buildState(), true);
         }
     }
 
     protected validateSessionType(): void {
         if (!(this.session instanceof StagehandSession)) {
-            this.logManager.error(`Analyzer requires stagehandSession, got ${this.session.constructor.name}`);
+            this.logManager.error(`AutoAnalyzer requires stagehandSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
-            throw new Error(`Analyzer requires stagehandSession, got ${this.session.constructor.name}`);
+            throw new Error(`AutoAnalyzer requires stagehandSession, got ${this.session.constructor.name}`);
         }
 
         this.stagehandSession = this.session as StagehandSession;
@@ -54,9 +54,9 @@ export default class AutoAnalyzer extends Agent {
 
     protected validateActionService(): void {
         if (!(this.actionService instanceof AutoActionService)) {
-            this.logManager.error(`Analyzer requires an appropriate action service`);
+            this.logManager.error(`AutoAnalyzer requires an appropriate action service`);
             this.setState(State.ERROR);
-            throw new Error(`Analyzer requires an appropriate action service`);
+            throw new Error(`AutoAnalyzer requires an appropriate action service`);
         }
 
         this.localactionService = this.actionService as AutoActionService;

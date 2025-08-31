@@ -45,9 +45,9 @@ export class GoalAgent extends Agent {
 
     protected validateActionService(): void {
         if (!(this.actionService instanceof AutoActionService)) {
-            this.logManager.error(`Analyzer requires an appropriate action service`);
+            this.logManager.error(`GoalAgent requires an appropriate action service`);
             this.setState(State.ERROR);
-            throw new Error(`Analyzer requires an appropriate action service`);
+            throw new Error(`GoalAgent requires an appropriate action service`);
         }
 
         this.localactionService = this.actionService as AutoActionService;
