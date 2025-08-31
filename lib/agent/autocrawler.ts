@@ -4,14 +4,15 @@ import { LinkInfo, StageHandObserveResult, State } from "../types.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
 import ManualAnalyzer from "./manualAnalyzer.js";
-import Analyzer from "./analyzer.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/stagehandActionService.js";
+import { getExternalLinks } from "../utility/functions.js";
+import AutoAnalyzer from "./autoanalyzer.js";
 
 export class AutoCrawler extends Agent {
     private isCurrentPageVisited = false;
 
-    private analyzer: Analyzer;
+    private analyzer: AutoAnalyzer;
     private manualAnalyzer: ManualAnalyzer;
 
     private stagehandSession: StagehandSession;
@@ -22,7 +23,7 @@ export class AutoCrawler extends Agent {
         super("autocrawler", dependencies);
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
-        this.analyzer = this.requireAgent<Analyzer>("autoanalyzer");
+        this.analyzer = this.requireAgent<AutoAnalyzer>("autoanalyzer");
         this.manualAnalyzer = this.requireAgent<ManualAnalyzer>("manualanalyzer");
 
         this.stagehandSession = this.session as StagehandSession;
@@ -82,6 +83,7 @@ export class AutoCrawler extends Agent {
                     // Record the page in memory if we haven’t seen it before
                     if (!PageMemory.pageExists(this.currentUrl)) {
                         const links: StageHandObserveResult[] = await this.stagehandSession.observe()
+                        const externalLinks = getExternalLinks(links, this.currentUrl);
                         this.logManager.log(`Links detected: ${links.length} are: ${JSON.stringify(links)}`, this.buildState(), false);
                         const pageDetails = {
                             title: this.currentUrl,
@@ -91,13 +93,15 @@ export class AutoCrawler extends Agent {
                             visited: false,
                             screenshot: '',
                         };
-                        const linksConverted = this.convertElementsToLinks(links);
+                        const linksConverted = this.convertElementsToLinks(externalLinks);
                         const linkWithoutVisited = linksConverted.map(link => {
                             const { visited, ...rest } = link;
                             return rest;
                         });
                         PageMemory.addPage2(pageDetails, linkWithoutVisited);
                         CrawlMap.recordPage({ ...pageDetails, links: linksConverted }, this.sessionId);
+                    }else{
+                        this.logManager.log(`Links detected: ${PageMemory.getAllUnvisitedLinks(this.currentUrl).length}`, this.buildState(), false);
                     }
                     this.setState(State.EVALUATE);
                     break;

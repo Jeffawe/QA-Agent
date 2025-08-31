@@ -1,6 +1,5 @@
 import { LinkInfo, PageDetails } from '../../types.js';
 import { CrawlMap } from '../../utility/crawlMap.js';
-import { LogManager } from '../../utility/logManager.js';
 
 export class PageMemory {
   public static pages: Record<string, PageDetails> = {};

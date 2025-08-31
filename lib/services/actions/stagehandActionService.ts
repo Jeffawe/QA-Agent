@@ -14,7 +14,7 @@ export default class AutoActionService extends ActionService {
     }
 
     async executeAction(action: Action, data: LinkInfo, state: State | NamespacedState = State.ACT, offset: Rect = defaultOffset): Promise<ActionResult> {
-        this.intOrext = "internal";
+        this.intOrext = "external";
         try {
             if (action.step === "wait") {
                 this.logManager.log("Waiting for a while before next action", state);
@@ -23,8 +23,7 @@ export default class AutoActionService extends ActionService {
                 this.localsession.act(action.step);
                 this.logManager.log(`Executing action: ${action.step}`, state);
             }
-
-            this.intOrext = await this.isExternalByLink(data, this.baseUrl) ? "external" : "internal";
+            
             this.logManager.log(`Action result: ${this.intOrext}`, state);
 
             return { success: true, message: this.intOrext };
