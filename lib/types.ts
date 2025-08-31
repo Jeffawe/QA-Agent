@@ -112,7 +112,7 @@ export enum State {
 }
 
 type StateValue = `${State}`;
-export type Namespaces = "crawler" | "tester" | "analyzer" | "goalagent" | "planneragent" | "manualanalyzer"; // add more if needed
+export type Namespaces = "crawler" | "autocrawler" | "tester" | "autoanalyzer" | "analyzer" | "goalagent" | "planneragent" | "manualanalyzer"; // add more if needed
 
 export type NamespacedState = `${Namespaces}.${StateValue}`;
 
@@ -146,25 +146,35 @@ export interface PageDetails {
 }
 
 export interface LinkInfo {
-    text: string;
+    description: string;
     selector: string;
-    href: string;
+    method: string;
+    href?: string;
+    arguments?: any[];
     visited: boolean;
 }
 
+export interface StageHandObserveResult {
+    description: string;
+    method?: string;
+    arguments?: string[];
+    selector: string;
+}
+
 export interface AgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
-  name: Namespaces;
-  agentClass: new (dependencies: T) => Agent;
-  sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
-  dependent?: boolean; // If true, agent won't start until another agent triggers it
-  dependencies?: Partial<T>; // Additional/override dependencies
-  agentDependencies?: Namespaces[]; // Names of other agents this agent depends on
+    name: Namespaces;
+    agentClass: new (dependencies: T) => Agent;
+    sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
+    actionServiceType?: 'manual' | 'auto';
+    dependent?: boolean; // If true, agent won't start until another agent triggers it
+    dependencies?: Partial<T>; // Additional/override dependencies
+    agentDependencies?: Namespaces[]; // Names of other agents this agent depends on
 }
 
 export interface MiniAgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
-  name: Namespaces;
-  sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
-  dependent?: boolean; // If true, agent won't start until another agent triggers it
-  dependencies?: Partial<T>; // Additional/override dependencies
-  agentDependencies?: Namespaces[]; // Names of other agents this agent depends on
+    name: Namespaces;
+    sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
+    dependent?: boolean; // If true, agent won't start until another agent triggers it
+    dependencies?: Partial<T>; // Additional/override dependencies
+    agentDependencies?: Namespaces[]; // Names of other agents this agent depends on
 }

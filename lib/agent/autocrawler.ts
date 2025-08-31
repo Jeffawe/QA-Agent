@@ -1,52 +1,53 @@
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
-import { getInteractiveElements } from "../services/UIElementDetector.js";
-import { InteractiveElement, LinkInfo, State } from "../types.js";
+import { InteractiveElement, LinkInfo, StageHandObserveResult, State } from "../types.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
 import ManualAnalyzer from "./manualAnalyzer.js";
 import playwrightSession from "../browserAuto/playWrightSession.js";
 import Analyzer from "./analyzer.js";
-import ManualActionService from "../services/actions/actionService.js";
+import StagehandSession from "../browserAuto/stagehandSession.js";
+import AutoActionService from "../services/actions/stagehandActionService.js";
 
-export class Crawler extends Agent {
+export class AutoCrawler extends Agent {
     private isCurrentPageVisited = false;
 
     private analyzer: Analyzer;
     private manualAnalyzer: ManualAnalyzer;
 
-    private playwrightSession: playwrightSession;
-    private localactionService: ManualActionService;
+    private stagehandSession: StagehandSession;
+
+    private localactionService: AutoActionService;
 
     constructor(dependencies: BaseAgentDependencies) {
-        super("crawler", dependencies);
+        super("autocrawler", dependencies);
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
-        this.analyzer = this.requireAgent<Analyzer>("analyzer");
+        this.analyzer = this.requireAgent<Analyzer>("autoanalyzer");
         this.manualAnalyzer = this.requireAgent<ManualAnalyzer>("manualanalyzer");
 
-        this.playwrightSession = this.session as playwrightSession;
-        this.localactionService = this.actionService as ManualActionService;
+        this.stagehandSession = this.session as StagehandSession;
+        this.localactionService = this.actionService as AutoActionService;
     }
 
     protected validateSessionType(): void {
-        if (!(this.session instanceof playwrightSession)) {
+        if (!(this.session instanceof StagehandSession)) {
             this.logManager.error(`Crawler requires playwrightSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
             throw new Error(`PuppeteerCrawler requires playwrightSession, got ${this.session.constructor.name}`);
         }
 
-        this.playwrightSession = this.session as playwrightSession;
+        this.stagehandSession = this.session as StagehandSession;
     }
 
     protected validateActionService(): void {
-        if (!(this.actionService instanceof ManualActionService)) {
+        if (!(this.actionService instanceof AutoActionService)) {
             this.logManager.error(`Analyzer requires an appropriate action service`);
             this.setState(State.ERROR);
             throw new Error(`Analyzer requires an appropriate action service`);
         }
 
-        this.localactionService = this.actionService as ManualActionService;
+        this.localactionService = this.actionService as AutoActionService;
     }
 
     async tick(): Promise<void> {
@@ -54,7 +55,7 @@ export class Crawler extends Agent {
             return;
         }
 
-        const page = this.playwrightSession.page;
+        const page = this.stagehandSession.page;
         if (!page) {
             this.logManager.error("Page not initialized", this.buildState());
             this.setState(State.ERROR);
@@ -79,9 +80,9 @@ export class Crawler extends Agent {
                 case State.START: {
                     (this as any).startTime = performance.now();
                     this.currentUrl = page.url();
+                    // Record the page in memory if we haven’t seen it before
                     if (!PageMemory.pageExists(this.currentUrl)) {
-                        const elements = await getInteractiveElements(this.playwrightSession.page!);
-                        const links = this.convertInteractiveElementsToLinks(elements, this.baseUrl!, this.currentUrl);
+                        const links: StageHandObserveResult[] = await this.stagehandSession.observe()
                         this.logManager.log(`Links detected: ${links.length} are: ${JSON.stringify(links)}`, this.buildState(), false);
                         const pageDetails = {
                             title: this.currentUrl,
@@ -91,8 +92,13 @@ export class Crawler extends Agent {
                             visited: false,
                             screenshot: '',
                         };
-                        PageMemory.addPage2(pageDetails, links);
-                        CrawlMap.recordPage({ ...pageDetails, links }, this.sessionId);
+                        const linksConverted = this.convertElementsToLinks(links);
+                        const linkWithoutVisited = linksConverted.map(link => {
+                            const { visited, ...rest } = link;
+                            return rest;
+                        });
+                        PageMemory.addPage2(pageDetails, linkWithoutVisited);
+                        CrawlMap.recordPage({ ...pageDetails, links: linksConverted }, this.sessionId);
                     }
                     this.setState(State.EVALUATE);
                     break;
@@ -116,7 +122,9 @@ export class Crawler extends Agent {
                     const unvisited = PageMemory.getAllUnvisitedLinks(this.currentUrl);
                     this.logManager.log(`Visiting ${unvisited.length} unvisited linkson page ${this.currentUrl}: ${JSON.stringify(unvisited)}`, this.buildState(), false);
                     if (!PageMemory.isPageVisited(this.currentUrl)) {
-                        for (const l of unvisited) CrawlMap.addEdge(this.currentUrl!, l.href!);
+                        for (const l of unvisited) {
+                            if (l.href) CrawlMap.addEdge(this.currentUrl!, l.href);
+                        }
                         PageMemory.markPageVisited(this.currentUrl);
                         isVisited = false;
                         CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
@@ -161,11 +169,11 @@ export class Crawler extends Agent {
 
                     const next = this.isCurrentPageVisited ? this.manualAnalyzer.nextLink : this.analyzer.nextLink;
                     if (next) {
-                        PageMemory.markLinkVisited(this.currentUrl, next.description || next.href!);
+                        PageMemory.markLinkVisited(this.currentUrl, next.description);
                         const finalUrl = page.url();
                         CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
                         PageMemory.pushToStack(this.currentUrl);
-                        CrawlMap.addEdge(this.currentUrl!, next.href!);
+                        if (next.href) CrawlMap.addEdge(this.currentUrl!, next.href);
 
                         this.currentUrl = finalUrl;
                         this.setState(State.START);
@@ -215,60 +223,25 @@ export class Crawler extends Agent {
      * – Deduplicates by absolute URL (ignoring #hash)
      * – Drops links that point to the current page
      */
-    convertInteractiveElementsToLinks(
-        elements: InteractiveElement[],
-        baseURL: string,       // e.g. "https://example.com"
-        currentURL: string     // e.g. "https://example.com/foo/bar"
+    convertElementsToLinks(
+        links: StageHandObserveResult[]     // e.g. "https://example.com/foo/bar"
     ): LinkInfo[] {
-        const links: LinkInfo[] = [];
-        const seen = new Set<string>();          // absolute URLs we’ve already emitted
-        const current = this.normalise(currentURL, baseURL); // for self-link check
+        const out: LinkInfo[] = [];
 
-        for (const el of elements) {
-            const rawHref = el.attributes.href?.trim();
-            if (!rawHref) continue;                // no href → nothing to follow
-
-            // Internal / external check stays exactly as before
-            const isInternal =
-                rawHref.startsWith(baseURL) ||
-                rawHref.startsWith("/") ||
-                (!rawHref.startsWith("http") && !rawHref.startsWith("https"));
-
-            if (!isInternal) continue;
-
-            if (rawHref.startsWith("mailto:") ||
-                rawHref.startsWith("tel:") ||
-                rawHref.startsWith("javascript:") ||
-                rawHref.startsWith("#") ||                        // internal page jump
-                rawHref.includes("logout") ||                     // avoid logouts
-                new URL(rawHref, baseURL).host !== new URL(baseURL).host  // cross-domain
-            ) continue;
-
-            // Resolve to an absolute URL and normalise for comparisons
-            const absHref = this.normalise(rawHref, baseURL);
-
-            // Skip if it’s the page we’re already on
-            if (absHref === current) continue;
-
-            // Skip duplicates (buttons/links that hit the same endpoint)
-            if (seen.has(absHref)) continue;
-            seen.add(absHref);
-
-            // Emit the first one we encounter
-            links.push({
-                description:
-                    el.label ||
-                    el.attributes["aria-label"] ||
-                    el.attributes["data-testid"] ||
-                    "",
+        for (const el of links) {
+            const newLink: LinkInfo = {
+                description: el.description || "",
                 selector: el.selector,
-                method: "click",
-                href: absHref,
-                visited: false
-            });
+                method: el.method || "click",
+                href: this.normalise(el.selector, this.currentUrl),
+                arguments: el.arguments,
+                visited: false,
+            };
+
+            out.push(newLink);
         }
 
-        return links;
+        return out;
     }
 
     /** Normalise a URL: resolve relative → absolute, strip hash, trim trailing “/” */

@@ -1,6 +1,7 @@
 import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import playwrightSession from "../browserAuto/playWrightSession.js";
+import AutoActionService from "../services/actions/stagehandActionService.js";
+import StagehandSession from "../browserAuto/stagehandSession.js";
 
 export default class Tester extends Agent {
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
@@ -11,13 +12,15 @@ export default class Tester extends Agent {
     private visitedPage: boolean = false;
     private lastAction: string = "";
 
-    private playwrightSession: playwrightSession;
+    private stagehandSession: StagehandSession;
+    private localactionService: AutoActionService;
 
     constructor(dependencies: BaseAgentDependencies) {
         super("tester", dependencies);
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
-        this.playwrightSession = this.session as playwrightSession;
+        this.stagehandSession = this.session as StagehandSession;
+        this.localactionService = this.actionService as AutoActionService;
     }
 
     public enqueue(links: LinkInfo[], visitedPage: boolean = false) {
@@ -32,13 +35,23 @@ export default class Tester extends Agent {
     }
 
     protected validateSessionType(): void {
-        if (!(this.session instanceof playwrightSession)) {
-            this.logManager.error(`Tester requires playwrightSession, got ${this.session.constructor.name}`);
+        if (!(this.session instanceof StagehandSession)) {
+            this.logManager.error(`Tester requires stagehandSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
-            throw new Error(`Tester requires playwrightSession, got ${this.session.constructor.name}`);
+            throw new Error(`Tester requires stagehandSession, got ${this.session.constructor.name}`);
         }
 
-        this.playwrightSession = this.session as playwrightSession;
+        this.stagehandSession = this.session as StagehandSession;
+    }
+
+    protected validateActionService(): void {
+        if (!(this.actionService instanceof AutoActionService)) {
+            this.logManager.error(`Analyzer requires an appropriate action service`);
+            this.setState(State.ERROR);
+            throw new Error(`Analyzer requires an appropriate action service`);
+        }
+
+        this.localactionService = this.actionService as AutoActionService;
     }
 
     public tick(): Promise<void> {

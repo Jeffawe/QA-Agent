@@ -1,8 +1,8 @@
 import { GetNextActionContext, ThinkResult, ImageData, Action, NamespacedState, State, Namespaces } from "../types.js";
 import { EventBus } from "../services/events/event.js";
-import ActionService from "../services/actions/actionService.js";
 import { LogManager } from "./logManager.js";
 import { logManagers } from "../services/memory/logMemory.js";
+import StagehandSession from "../browserAuto/stagehandSession.js";
 
 export abstract class Thinker {
     protected modelClient: LLM | null = null;
@@ -96,6 +96,7 @@ export abstract class Agent {
         });
 
         this.validateSessionType();
+        this.validateActionService();
 
     }
 
@@ -132,6 +133,8 @@ export abstract class Agent {
     }
 
     protected abstract validateSessionType(): void;
+
+    protected abstract validateActionService(): void;
 
     // Helper method to get other agents safely
     protected getAgent<T extends Agent>(name: Namespaces): T | null {
@@ -216,5 +219,22 @@ export abstract class Session<TPage = any> {
 
     public getSessionId(): string {
         return this.sessionId;
+    }
+}
+
+
+export abstract class ActionService {
+    protected session: Session;
+    protected logManager: LogManager;
+    protected intOrext: string = '';
+    protected baseUrl: string = '';
+
+    constructor(session: Session) {
+        this.session = session;
+        this.logManager = logManagers.getOrCreateManager(session.getSessionId());
+    }
+
+    public setBaseUrl(url: string) {
+        this.baseUrl = url;
     }
 }

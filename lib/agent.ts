@@ -1,5 +1,4 @@
-import ActionService from './services/actions/actionService.js';
-import { AgentRegistry, BaseAgentDependencies, Session, Thinker } from "./utility/abstract.js";
+import { ActionService, AgentRegistry, BaseAgentDependencies, Session, Thinker } from "./utility/abstract.js";
 import { LogManager } from "./utility/logManager.js";
 import { EventBus } from "./services/events/event.js";
 import { AgentConfig, Namespaces, State } from "./types.js";
@@ -9,11 +8,10 @@ import NavigationTree from "./utility/navigationTree.js";
 
 import { Agent } from "./utility/abstract.js";
 import { CrawlMap } from './utility/crawlMap.js';
-import StagehandSession from './browserAuto/stagehandSession.js';
-import PlaywrightSession from './browserAuto/playWrightSession.js';
 import { clearAllImages } from './services/imageProcessor.js';
 import { eventBusManager } from './services/events/eventBus.js';
 import { logManagers } from './services/memory/logMemory.js';
+import { ActionServiceFactory, SessionFactory } from "./agentFactory.js";
 
 export interface AgentDependencies {
   sessionId: string;
@@ -25,19 +23,7 @@ export interface AgentDependencies {
   agentConfigs: Set<AgentConfig>;
 }
 
-// Session factory to create different types of sessions
-class SessionFactory {
-  static createSession(type: string, sessionId: string): Session {
-    switch (type) {
-      case 'playwright':
-        return new PlaywrightSession(sessionId);
-      case 'stagehand':
-        return new StagehandSession(sessionId);
-      default:
-        throw new Error(`Unknown session type: ${type}`);
-    }
-  }
-}
+
 
 export default class BossAgent {
   private readonly thinker: Thinker;
@@ -96,7 +82,11 @@ export default class BossAgent {
           // Retrieve existing or newly created session
           const session = this.sessions.get(sessionId)!;
 
-          const actionService = new ActionService(session as PlaywrightSession);
+          if (config.sessionType === 'stagehand') {
+            config.actionServiceType = 'auto';
+          }
+
+          const actionService = ActionServiceFactory.createActionService(config.actionServiceType || 'manual', session);
           this.actionServices.set(config.name, actionService);
 
           const baseDependencies: BaseAgentDependencies = {
@@ -162,7 +152,7 @@ export default class BossAgent {
 
     this.bus.on('stop', async (evt) => {
       this.stopLoop = true;
-      this.bus.emit({ ts: Date.now(), type: 'issue', message: `Agent stopped because of ${evt.message}`});
+      this.bus.emit({ ts: Date.now(), type: 'issue', message: `Agent stopped because of ${evt.message}` });
       this.logManager.log(`Agent stopped because of ${evt.message}`, State.ERROR, true);
     });
 
@@ -215,7 +205,7 @@ export default class BossAgent {
         this.logManager.log("Stopping main loop as requested", State.INFO, true);
         break;
       }
-      
+
       if (agents.every(a => a.isPaused())) {
         await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to avoid busy waiting
         continue; // Skip this iteration if all agents are paused

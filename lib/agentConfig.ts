@@ -33,8 +33,8 @@ export const goalConfigWithDesc: AgentConfigWithDescription[] = [
 
 export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
     {
-        name: "analyzer",
-        sessionType: "playwright",
+        name: "autoanalyzer",
+        sessionType: "stagehand",
         dependent: true,
         description: "Analyze and process extracted content for insights and patterns",
         keywords: ["analyze", "process", "insights", "patterns", "evaluate", "examine", "study"]
@@ -55,10 +55,10 @@ export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
         keywords: ["manual", "test", "detailed", "analysis", "specific", "components", "examine"]
     },
     {
-        name: "crawler",
-        sessionType: "playwright",
+        name: "autocrawler",
+        sessionType: "stagehand",
         dependent: false,
-        agentDependencies: ["manualanalyzer", "analyzer"],
+        agentDependencies: ["manualanalyzer", "autoanalyzer"],
         description: "Crawl and navigate through entire websites to extract comprehensive data",
         keywords: ["crawl", "scrape", "navigate", "website", "data", "extract", "comprehensive", "entire", "all pages"]
     }

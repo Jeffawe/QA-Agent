@@ -1,10 +1,12 @@
 import playwrightSession from "../browserAuto/playWrightSession.js";
+import ManualActionService from "../services/actions/actionService.js";
 import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 
 export default class ManualAnalyzer extends Agent {
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
     private playwrightSession: playwrightSession;
+    private localactionService: ManualActionService;
 
     private queue: LinkInfo[] = [];
     private goal: string = "";
@@ -15,11 +17,12 @@ export default class ManualAnalyzer extends Agent {
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
         this.playwrightSession = this.session as playwrightSession;
+        this.localactionService = this.actionService as ManualActionService;
     }
 
     public setBaseValues(url: string, mainGoal?: string): void {
         this.baseUrl = url;
-        this.actionService.setBaseUrl(url);
+        this.localactionService.setBaseUrl(url);
     }
 
     protected validateSessionType(): void {
@@ -30,6 +33,16 @@ export default class ManualAnalyzer extends Agent {
         }
 
         this.playwrightSession = this.session as playwrightSession;
+    }
+
+    protected validateActionService(): void {
+        if (!(this.actionService instanceof ManualActionService)) {
+            this.logManager.error(`Analyzer requires an appropriate action service`);
+            this.setState(State.ERROR);
+            throw new Error(`Analyzer requires an appropriate action service`);
+        }
+
+        this.localactionService = this.actionService as ManualActionService;
     }
 
     /* ───────── external API ───────── */
@@ -51,7 +64,7 @@ export default class ManualAnalyzer extends Agent {
         if (this.paused) {
             return;
         }
-        
+
         if (!this.playwrightSession.page) return
         if (!this.bus) return
 
@@ -87,7 +100,7 @@ export default class ManualAnalyzer extends Agent {
                         if (!this.nextLink) {
                             throw new Error("nextLink is null");
                         }
-                        await this.actionService.clickSelector(this.nextLink.selector);
+                        await this.localactionService.clickSelector(this.nextLink.selector);
                     } catch (error) {
                         this.logManager.error(String(error), this.state, false);
                         this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
@@ -156,7 +169,7 @@ export default class ManualAnalyzer extends Agent {
         targetText: string
     ): Omit<LinkInfo, "visited"> | null {
         if (!targetText) return null;
-        const found = links.find(link => link.text === targetText);
+        const found = links.find(link => link.description === targetText);
         if (!found) return null;
 
         // Return a copy without 'visited'

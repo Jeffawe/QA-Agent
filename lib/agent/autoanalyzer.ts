@@ -1,15 +1,13 @@
 import { setTimeout } from "node:timers/promises";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { LinkInfo, State, ImageData, Action, ActionResult, } from "../types.js";
-import { processScreenshot } from "../services/imageProcessor.js";
-import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { fileExists } from "../utility/functions.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { CrawlMap } from "../utility/crawlMap.js";
-import playwrightSession from "../browserAuto/playWrightSession.js";
-import ManualActionService from "../services/actions/actionService.js";
+import StagehandSession from "../browserAuto/stagehandSession.js";
+import AutoActionService from "../services/actions/stagehandActionService.js";
 
-export default class Analyzer extends Agent {
+export default class AutoAnalyzer extends Agent {
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
 
     private step = 0;
@@ -18,15 +16,15 @@ export default class Analyzer extends Agent {
     private visitedPage: boolean = false;
     private lastAction: string = "";
 
-    private playwrightSession: playwrightSession;
-    private localactionService: ManualActionService;
+    private stagehandSession: StagehandSession;
+    private localactionService: AutoActionService;
 
     constructor(dependencies: BaseAgentDependencies) {
-        super("analyzer", dependencies);
+        super("autoanalyzer", dependencies);
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
-        this.playwrightSession = this.session as playwrightSession;
-        this.localactionService = this.actionService as ManualActionService;
+        this.stagehandSession = this.session as StagehandSession;
+        this.localactionService = this.actionService as AutoActionService;
         this.validatorWarningState = State.OBSERVE;
     }
 
@@ -44,23 +42,23 @@ export default class Analyzer extends Agent {
     }
 
     protected validateSessionType(): void {
-        if (!(this.session instanceof playwrightSession)) {
-            this.logManager.error(`Analyzer requires playwrightSession, got ${this.session.constructor.name}`);
+        if (!(this.session instanceof StagehandSession)) {
+            this.logManager.error(`Analyzer requires stagehandSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
-            throw new Error(`Analyzer requires playwrightSession, got ${this.session.constructor.name}`);
+            throw new Error(`Analyzer requires stagehandSession, got ${this.session.constructor.name}`);
         }
 
-        this.playwrightSession = this.session as playwrightSession;
+        this.stagehandSession = this.session as StagehandSession;
     }
 
     protected validateActionService(): void {
-        if (!(this.actionService instanceof ManualActionService)) {
+        if (!(this.actionService instanceof AutoActionService)) {
             this.logManager.error(`Analyzer requires an appropriate action service`);
             this.setState(State.ERROR);
             throw new Error(`Analyzer requires an appropriate action service`);
         }
 
-        this.localactionService = this.actionService as ManualActionService;
+        this.localactionService = this.actionService as AutoActionService;
     }
 
     /** One FSM transition */
@@ -69,7 +67,7 @@ export default class Analyzer extends Agent {
             return;
         }
 
-        if (!this.playwrightSession.page) return
+        if (!this.stagehandSession.page) return
         if (!this.bus) return
 
         try {
@@ -92,25 +90,19 @@ export default class Analyzer extends Agent {
                     break;
 
                 case State.OBSERVE: {
-                    await this.playwrightSession.clearAllClickPoints();
-                    this.currentUrl = this.playwrightSession.page?.url();
+                    this.currentUrl = this.stagehandSession.page?.url();
                     const filename = `screenshot_${this.step}_${this.sessionId.substring(0, 10)}.png`;
                     (this as any).finalFilename = `images/annotated_${filename}`;
 
-                    const elements = await getInteractiveElements(this.playwrightSession.page!)
                     if (!this.visitedPage || !(await fileExists((this as any).finalFilename))) {
-                        const success = await this.playwrightSession.takeScreenshot("images", filename);
+                        const success = await this.stagehandSession.takeScreenshot("images", filename);
                         if (!success) {
                             this.logManager.error("Screenshot failed", this.state);
                             this.setState(State.ERROR);
                             this.stopSystem("Screenshot failed");
                             break;
                         }
-
-                        await processScreenshot(`./images/${filename}`, elements);
                     }
-
-                    (this as any).clickableElements = elements;
 
                     // this.logManager.log(`Elements detected: ${elements.length} are: ${JSON.stringify(elements)}`, this.buildState(), false);
 
@@ -161,17 +153,10 @@ export default class Analyzer extends Agent {
                     const t0 = Date.now();
                     this.bus.emit({ ts: t0, type: "action_started", action });
 
-                    if (action.step === "click" && !this.checkifLabelValid(action.args[0])) {
-                        this.logManager.error("Label is not valid", State.ERROR, false);
-                        this.response = "Validator warns that Label provided is not among the valid list. Return done step if there is nothing other to do"
-                        this.setState(State.OBSERVE);
-                        break;
-                    }
-
                     if (action.step === 'done') {
                         this.setState(State.DONE);
                         const leftovers = PageMemory.getAllUnvisitedLinks(this.currentUrl);
-                        leftovers.forEach(l => PageMemory.markLinkVisited(this.currentUrl, l.description || l.href!));
+                        leftovers.forEach(l => PageMemory.markLinkVisited(this.currentUrl, l.description));
                         CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
                         this.logManager.log("All links have been tested", this.buildState(), true);
                         this.nextLink = null;
@@ -188,7 +173,15 @@ export default class Analyzer extends Agent {
                     let result: ActionResult | null = null
 
                     try {
-                        result = await this.localactionService.executeAction(action, (this as any).clickableElements, this.buildState());
+                        const specificLink = this.queue.find(l => l.description === action.step);
+                        if(!specificLink) {
+                            this.response = `${action.step} is not a valid link. It does not exist in the labels given.`;
+                            this.logManager.error(`${action.step} is not a valid link. It does not exist in the labels given..`, this.state, false);
+                            this.setState(State.OBSERVE);
+                            break;
+                        }
+
+                        result = await this.localactionService.executeAction(action, specificLink, this.buildState());
                     } catch (error) {
                         this.logManager.error(String(error), this.state, false);
                         this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
@@ -197,7 +190,7 @@ export default class Analyzer extends Agent {
                     }
 
                     if (this.currentUrl && result.message == "external") {
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.playwrightSession.page.url(), page: this.playwrightSession.page });
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.stagehandSession.page.url(), page: this.stagehandSession.page });
                     }
 
                     this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });

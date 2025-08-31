@@ -38,7 +38,7 @@ export class PageMemory {
     const page = this.pages[url];
     if (!page) return false;
     const link = page.links.find(
-      l => l.text === identifier || l.href === identifier
+      l => l.description === identifier || l.href === identifier
     );
     if (!link) return false;
     return link.visited;
@@ -69,7 +69,7 @@ export class PageMemory {
     const page = this.pages[url];
     if (!page) return;
     const link = page.links.find(
-      l => l.text === identifier || l.href === identifier
+      l => l.description === identifier || l.href === identifier
     );
     if (link) {
       link.visited = true;

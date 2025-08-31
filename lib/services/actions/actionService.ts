@@ -1,26 +1,17 @@
 import { setTimeout } from 'node:timers/promises';
 import { Action, ActionResult, ClicKType, InteractiveElement, NamespacedState, Rect, State } from '../../types.js';
-import Session from '../../browserAuto/playWrightSession.js';
-import { LogManager } from '../../utility/logManager.js';
-import { logManagers } from '../memory/logMemory.js';
+import playwrightSession from '../../browserAuto/playWrightSession.js';
+import { ActionService } from '../../utility/abstract.js';
 
 const defaultOffset: Rect = { x: 0, y: 0, width: 0, height: 0 };
 
-export default class ActionService {
-  private session: Session;
-  private logManager: LogManager;
+export default class ManualActionService extends ActionService {
+  private PlaywrightSession: playwrightSession;
 
-  //If the new page that will be clicked is an internal page or external page
-  private intOrext: string = '';
-  private baseUrl: string = '';
+  constructor(session: playwrightSession) {
+    super(session);
 
-  constructor(session: Session) {
-    this.session = session;
-    this.logManager = logManagers.getOrCreateManager(session.getSessionId());
-  }
-
-  public setBaseUrl(url: string) {
-    this.baseUrl = url;
+    this.PlaywrightSession = session as playwrightSession;
   }
 
   async executeAction(action: Action, elementData: InteractiveElement[], state: State | NamespacedState = State.ACT, offset: Rect = defaultOffset): Promise<ActionResult> {
@@ -29,8 +20,8 @@ export default class ActionService {
       switch (action.step) {
         case 'move_mouse_to':
           if (typeof action.args[0] === 'number' && typeof action.args[1] === 'number') {
-            await this.session.moveMouseTo(action.args[0] + offset.x, action.args[1] + offset.y);
-            await this.session.showClickPoint(action.args[0] + offset.x, action.args[1] + offset.y, ClicKType.FRAME);
+            await this.PlaywrightSession.moveMouseTo(action.args[0] + offset.x, action.args[1] + offset.y);
+            await this.PlaywrightSession.showClickPoint(action.args[0] + offset.x, action.args[1] + offset.y, ClicKType.FRAME);
           } else {
             console.error('Invalid arguments for move_mouse_to:', action.args);
           }
@@ -46,10 +37,10 @@ export default class ActionService {
             if (!selector) {
               throw new Error(`Selector not found for label: ${action.args[0]}`);
             }
-            await this.session.pressSelector(selector);
+            await this.PlaywrightSession.pressSelector(selector);
           } else if (typeof action.args[0] === 'number' && typeof action.args[1] === 'number') {
-            await this.session.click(action.args[0] + offset.x, action.args[1] + offset.y);
-            await this.session.showClickPoint(action.args[0] + offset.x, action.args[1] + offset.y, ClicKType.FRAME);
+            await this.PlaywrightSession.click(action.args[0] + offset.x, action.args[1] + offset.y);
+            await this.PlaywrightSession.showClickPoint(action.args[0] + offset.x, action.args[1] + offset.y, ClicKType.FRAME);
           } else {
             console.error('Invalid arguments for click:', action.args);
           }
@@ -58,7 +49,7 @@ export default class ActionService {
 
         case 'press_key':
           if (typeof action.args[0] === 'string') {
-            await this.session.pressKey(action.args[0]);
+            await this.PlaywrightSession.pressKey(action.args[0]);
           } else {
             console.error('Invalid arguments for press_key:', action.args);
           }
@@ -99,7 +90,7 @@ export default class ActionService {
   }
 
   public async clickSelector(selector: string): Promise<void> {
-    await this.session.pressSelector(selector);
+    await this.PlaywrightSession.pressSelector(selector);
   }
 
   getSelectorByLabel = (

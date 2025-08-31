@@ -17,6 +17,7 @@ import { getAgents } from './agentConfig.js';
 import { clearSessions, deleteSession, getSession, getSessions, getSessionSize, hasSession, setSession } from './services/memory/sessionMemory.js';
 import { clearSessionApiKeys, deleteSessionApiKey, getApiKeyForAgent, storeSessionApiKey } from './services/memory/apiMemory.js';
 import { LogManager } from './utility/logManager.js';
+import StagehandSession from './browserAuto/stagehandSession.js';
 
 dotenv.config();
 
@@ -420,6 +421,24 @@ app.post('/test/:key', async (req: Request, res: Response) => {
             websocketport: websocketPort
         });
     } catch (error) {
+        console.error('Error starting session:', error);
+        res.status(500).send('Failed to start session.');
+    }
+});
+
+app.get('/test', async (req: Request, res: Response) => {
+    try{
+        const session = new StagehandSession('test_session');
+        const started = await session.start('https://www.jeffawe.com/');
+        if(!started){
+            res.status(500).send('Failed to start session.');
+            return;
+        }
+        const observations = await session.observe();
+        console.log(observations);
+        await session.close();
+        res.send('Test completed successfully!');
+    }catch(error){
         console.error('Error starting session:', error);
         res.status(500).send('Failed to start session.');
     }

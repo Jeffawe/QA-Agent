@@ -94,7 +94,7 @@ export class CrawlMap {
       } else {
         for (const l of page.links) {
           const box = l.visited ? "[x]" : "[ ]";
-          const label = l.text || l.href;
+          const label = l.description || l.href;
           md += `- ${box} **${label}** → \`${l.href}\`\n`;
         }
         md += "\n";

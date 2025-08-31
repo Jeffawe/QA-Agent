@@ -3,6 +3,7 @@ import { Action, ImageData, State } from "../types.js";
 import { setTimeout } from "node:timers/promises";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
+import AutoActionService from "../services/actions/stagehandActionService.js";
 
 export class GoalAgent extends Agent {
     public goal: string;
@@ -15,6 +16,7 @@ export class GoalAgent extends Agent {
 
     private actionResponse: Action | null = null;
     private stageHandSession: StagehandSession;
+    private localactionService: AutoActionService;
 
     constructor(dependencies: BaseAgentDependencies) {
         super("goalagent", dependencies);
@@ -22,6 +24,7 @@ export class GoalAgent extends Agent {
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
         this.stageHandSession = this.session as StagehandSession;
+        this.localactionService = this.actionService as AutoActionService;
     }
 
     public setBaseValues(url: string, mainGoal?: string): void {
@@ -38,6 +41,16 @@ export class GoalAgent extends Agent {
         }
 
         this.stageHandSession = this.session as StagehandSession;
+    }
+
+    protected validateActionService(): void {
+        if (!(this.actionService instanceof AutoActionService)) {
+            this.logManager.error(`Analyzer requires an appropriate action service`);
+            this.setState(State.ERROR);
+            throw new Error(`Analyzer requires an appropriate action service`);
+        }
+
+        this.localactionService = this.actionService as AutoActionService;
     }
 
     public run(goal: string, extraWarnings?: string): void {

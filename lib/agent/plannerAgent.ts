@@ -4,6 +4,7 @@ import { GoalAgent } from "./goalIntelliAgent.js";
 import { pipeline } from '@xenova/transformers';
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import { ExtractorOptions } from "../types.js";
+import AutoActionService from "../services/actions/stagehandActionService.js";
 
 interface ClassificationResult {
     label: string;
@@ -28,6 +29,7 @@ export default class PlannerAgent extends Agent {
     private goal: string = "";
 
     private stageHandSession: StagehandSession;
+    private localactionService: AutoActionService;
 
     // Thresholds for different validation measures
     private readonly PROGRESS_THRESHOLD = 0.80;
@@ -45,6 +47,7 @@ export default class PlannerAgent extends Agent {
         this.load();
 
         this.stageHandSession = this.session as StagehandSession;
+        this.localactionService = this.actionService as AutoActionService;
     }
 
     protected validateSessionType(): void {
@@ -55,6 +58,16 @@ export default class PlannerAgent extends Agent {
         }
 
         this.stageHandSession = this.session as StagehandSession;
+    }
+
+    protected validateActionService(): void {
+        if (!(this.actionService instanceof AutoActionService)) {
+            this.logManager.error(`Analyzer requires an appropriate action service`);
+            this.setState(State.ERROR);
+            throw new Error(`Analyzer requires an appropriate action service`);
+        }
+
+        this.localactionService = this.actionService as AutoActionService;
     }
 
     async load(): Promise<void> {

@@ -342,6 +342,60 @@ const systemActionPrompt = String.raw`
             Return **exactly one** JSON object, no commentary, in this schema:
         `;
 
+const systemAutoPrompt = String.raw`
+            You are a website-auditing autonomous agent.
+
+            ▸ MISSION
+            Your current mission will be given as goal. (external redirects are forbidden except for the login flow).
+            For **each page you land on**, do two things:
+
+                1. Analyse—
+                • Look for functional bugs (broken links, console errors, 404s, JS exceptions)
+                • Flag UX / UI issues (misaligned elements, unreadable contrast, missing alt text, CLS jank, etc.)
+                • Note performance hints (large images, long TTFB)
+                • Record any helpful contextual info (page purpose, detected frameworks, etc.)
+
+                2. Decide the single next navigation / interaction that keeps the crawl moving inside the site.
+
+            ▸ RESOURCES YOU HAVE
+            • Screenshot of the full page (inline image) labelled for the different UI elements
+            • Your last action and a short-term memory of prior attempts
+            • A list of possible labels to pick from (UI elements in the page. Don't pick outside of it when using click)
+            • A validator may sometimes give messages on issues you made
+
+             ▸ ALLOWED COMMANDS (one per response)
+            - In the step of Action - it must be a string that matches one of the given possibleLabels exactly (if you wish the system to wait for a period of time, just put 'wait' here), 
+
+            Arguments for each command should be in the args array.
+
+            ▸ RESPONSE FORMAT  
+            Return **exactly one** JSON object, no commentary, in this schema:
+        `;
+
+
+const systemActionAutoPrompt = String.raw`
+            You are a website-auditing autonomous agent.
+
+            ▸ MISSION
+            Your current mission will be given as goal. (external redirects are forbidden except for the login flow).
+            For **each page you land on**, do one thing:
+
+                1. Decide the single next navigation / interaction that keeps the crawl moving inside the site.
+
+            ▸ RESOURCES YOU HAVE
+            • Screenshot of the full page (inline image) labelled for the different UI elements
+            • Your last action and a short-term memory of prior attempts
+            • A list of possible labels to pick from (UI elements in the page. Don't pick outside of it when using click)
+            • A validator may sometimes give messages on issues you made
+
+            ▸ ALLOWED COMMANDS (one per response)
+            - In the step of Action - it must be a string that matches one of the given possibleLabels exactly (if you wish the system to wait for a period of time, just put 'wait' here), 
+
+            Arguments for each command should be in the args array.
+
+            ▸ RESPONSE FORMAT  
+            Return **exactly one** JSON object, no commentary, in this schema:
+        `;
 
 const systemGoalPrompt = String.raw`
     You are a QA automation agent assigned to test websites by achieving high-level goals (like "Log into the dashboard", "Create a new post", etc.).
@@ -377,6 +431,8 @@ const systemGoalPrompt = String.raw`
 export const getSystemPrompt = (agentName: Namespaces, recurrent: boolean): string => {
     if (agentName === "analyzer") {
         return recurrent ? systemActionPrompt : systemPrompt;
+    } else if (agentName === "autoanalyzer") {
+        return recurrent ? systemActionAutoPrompt : systemGoalPrompt;
     } else {
         return systemGoalPrompt;
     }
@@ -384,7 +440,7 @@ export const getSystemPrompt = (agentName: Namespaces, recurrent: boolean): stri
 
 // Updated schema getter function
 export const getSystemSchema = (agentName: Namespaces, recurrent: boolean) => {
-    if (agentName === "analyzer") {
+    if (agentName === "analyzer" || agentName === "autoanalyzer") {
         return recurrent ? actionJsonSchema : systemPromptJsonSchema;
     } else {
         return goalJsonSchema;
