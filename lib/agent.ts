@@ -258,7 +258,7 @@ export default class BossAgent {
 
   cleanup() {
     this.agentRegistry.clear();
-    clearAllImages();
+    //clearAllImages();
     this.sessions.clear();
     eventBusManager.removeBus(this.sessionId);
     //this.logManager.deleteLogFile();

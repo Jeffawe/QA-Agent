@@ -92,7 +92,7 @@ export default class AutoAnalyzer extends Agent {
                 case State.OBSERVE: {
                     this.currentUrl = this.stagehandSession.page?.url();
                     const filename = `screenshot_${this.step}_${this.sessionId.substring(0, 10)}.png`;
-                    (this as any).finalFilename = `images/annotated_${filename}`;
+                    (this as any).finalFilename = `images/${filename}`;
 
                     if (!this.visitedPage || !(await fileExists((this as any).finalFilename))) {
                         const success = await this.stagehandSession.takeScreenshot("images", filename);
@@ -103,8 +103,6 @@ export default class AutoAnalyzer extends Agent {
                             break;
                         }
                     }
-
-                    // this.logManager.log(`Elements detected: ${elements.length} are: ${JSON.stringify(elements)}`, this.buildState(), false);
 
                     this.bus.emit({ ts: Date.now(), type: "screenshot_taken", filename: (this as any).finalFilename, elapsedMs: 0 });
 
