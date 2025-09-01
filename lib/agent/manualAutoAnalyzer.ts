@@ -1,49 +1,50 @@
-import playwrightSession from "../browserAuto/playWrightSession.js";
-import ManualActionService from "../services/actions/actionService.js";
+import StagehandSession from "../browserAuto/stagehandSession.js";
+import AutoActionService from "../services/actions/autoActionService.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 
-export default class ManualAnalyzer extends Agent {
+export default class ManualAutoAnalyzer extends Agent {
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
-    private playwrightSession: playwrightSession;
-    private localactionService: ManualActionService;
+    private stageHandSession: StagehandSession;
+    private localactionService: AutoActionService;
 
     private queue: LinkInfo[] = [];
     private goal: string = "";
 
     constructor(dependencies: BaseAgentDependencies) {
-        super("manualanalyzer", dependencies);
+        super("manualAutoanalyzer", dependencies);
         this.goal = "";
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
-        this.playwrightSession = this.session as playwrightSession;
-        this.localactionService = this.actionService as ManualActionService;
+        this.stageHandSession = this.session as StagehandSession;
+        this.localactionService = this.actionService as AutoActionService;
     }
 
     public setBaseValues(url: string, mainGoal?: string): void {
         this.baseUrl = url;
         this.localactionService.setBaseUrl(url);
+        this.goal = mainGoal || "";
     }
 
     protected validateSessionType(): void {
-        if (!(this.session instanceof playwrightSession)) {
-            this.logManager.error(`ManualAnalyzer requires playwrightSession, got ${this.session.constructor.name}`);
+        if (!(this.session instanceof StagehandSession)) {
+            this.logManager.error(`ManualAutoAnalyzer requires stagehandSession, got ${this.session.constructor.name}`);
             this.setState(State.ERROR);
-            throw new Error(`ManualAnalyzer requires playwrightSession, got ${this.session.constructor.name}`);
+            throw new Error(`ManualAutoAnalyzer requires stagehandSession, got ${this.session.constructor.name}`);
         }
 
-        this.playwrightSession = this.session as playwrightSession;
+        this.stageHandSession = this.session as StagehandSession;
     }
 
     protected validateActionService(): void {
-        if (!(this.actionService instanceof ManualActionService)) {
+        if (!(this.actionService instanceof AutoActionService)) {
             this.logManager.error(`ManualAnalyzer requires an appropriate action service`);
             this.setState(State.ERROR);
             throw new Error(`ManualAnalyzer requires an appropriate action service`);
         }
 
-        this.localactionService = this.actionService as ManualActionService;
+        this.localactionService = this.actionService as AutoActionService;
     }
 
     /* ───────── external API ───────── */
@@ -56,7 +57,7 @@ export default class ManualAnalyzer extends Agent {
         if (this.state === State.DONE || this.state === State.WAIT) {
             this.setState(State.START);
         } else {
-            this.logManager.log("ManualAnalyzer is already running or cannot start up", this.buildState(), true);
+            this.logManager.log("ManualAutoAnalyzer is already running or cannot start up", this.buildState(), true);
         }
     }
 
@@ -66,7 +67,7 @@ export default class ManualAnalyzer extends Agent {
             return;
         }
 
-        if (!this.playwrightSession.page) return
+        if (!this.stageHandSession.page) return
         if (!this.bus) return
 
         try {
@@ -74,7 +75,7 @@ export default class ManualAnalyzer extends Agent {
                 /*────────── READY → RUN ──────────*/
                 case State.START:
                     (this as any).startTime = performance.now();
-                    this.currentUrl = this.playwrightSession.page!.url();
+                    this.currentUrl = this.stageHandSession.page!.url();
                     this.goal = "Find the next best link to click";
                     this.logManager.log(`Start testing ${this.queue.length} links`, this.buildState(), true);
                     if (this.queue.length === 0) {
@@ -96,10 +97,10 @@ export default class ManualAnalyzer extends Agent {
 
                 case State.ACT: {
                     try {
-                        if (!this.nextLink) {
+                        if (!this.nextLink || !this.nextLink.selector) {
                             throw new Error("nextLink is null");
                         }
-                        await this.localactionService.clickSelector(this.nextLink.selector);
+                        await this.stageHandSession.act(this.nextLink.selector);
                     } catch (error) {
                         this.logManager.error(String(error), this.state, false);
                         this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
@@ -113,7 +114,7 @@ export default class ManualAnalyzer extends Agent {
 
                 case State.VALIDATE: {
                     const oldUrl = new URL(this.currentUrl);
-                    const newUrl = new URL(this.playwrightSession.page.url());
+                    const newUrl = new URL(this.stageHandSession.page.url());
 
                     const isSameOrigin =
                         oldUrl.protocol === newUrl.protocol &&
@@ -122,8 +123,8 @@ export default class ManualAnalyzer extends Agent {
                     if (!isSameOrigin) {
                         // Optional: ensure page is defined before going back
                         try {
-                            await this.playwrightSession.page?.goBack({ waitUntil: "networkidle" });
-                            if (!this.nextLink) throw new Error("nextLink is null after external navigation");
+                            await this.stageHandSession.page?.goBack({ waitUntil: "networkidle" });
+                            if(!this.nextLink) throw new Error("nextLink is null after external navigation");
                             PageMemory.removeLink(this.currentUrl, this.nextLink.description);
                             this.queue = PageMemory.getAllUnvisitedLinks(this.currentUrl);
                             this.setState(State.START);
@@ -139,7 +140,7 @@ export default class ManualAnalyzer extends Agent {
                         }
                     } else {
                         this.setState(State.DONE);
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.playwrightSession.page.url(), page: this.playwrightSession.page });
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.stageHandSession.page.url(), page: this.stageHandSession.page });
                     }
                     break;
                 }

@@ -2,7 +2,6 @@ import { GetNextActionContext, ThinkResult, ImageData, Action, NamespacedState, 
 import { EventBus } from "../services/events/event.js";
 import { LogManager } from "./logManager.js";
 import { logManagers } from "../services/memory/logMemory.js";
-import StagehandSession from "../browserAuto/stagehandSession.js";
 
 export abstract class Thinker {
     protected modelClient: LLM | null = null;

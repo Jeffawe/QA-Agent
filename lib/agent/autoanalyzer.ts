@@ -217,7 +217,7 @@ export default class AutoAnalyzer extends Agent {
                     }
 
                     if (this.currentUrl && result.message == "external") {
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.stagehandSession.page.url(), page: this.stagehandSession.page });
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.stagehandSession.page.url(), page: this.stagehandSession.page, linkIdentifier: result.actionTaken || action.step });
                     }
 
                     this.lastAction = `Action ${result.actionTaken || 'no_op'} with args (${action.args.join(",")}) was last taken because of ${action.reason}`;

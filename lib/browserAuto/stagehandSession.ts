@@ -169,16 +169,6 @@ export default class StagehandSession extends Session<Page> {
         }
     }
 
-    async click(x: number, y: number): Promise<void> {
-        try {
-            if (!this.page) throw new Error('Page not initialized');
-            await this.page.mouse.click(x, y);
-            console.log(`Clicked at (${x}, ${y})`);
-        } catch (error) {
-            console.error('Error clicking:', error);
-        }
-    }
-
     public async runTestScript(): Promise<void> {
         try {
             if (!this.page) throw new Error('Page not initialized');

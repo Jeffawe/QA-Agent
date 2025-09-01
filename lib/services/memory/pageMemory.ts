@@ -91,6 +91,12 @@ export class PageMemory {
     return page.links.every(link => link.visited);
   }
 
+  static removeLink(url: string, identifier: string) {
+    const page = this.pages[url];
+    if (!page) return;
+    page.links = page.links.filter(link => link.description !== identifier);
+  }
+
   static getAllUnvisitedLinks(url: string): LinkInfo[] {
     const page = this.pages[url];
     if (!page) return [];

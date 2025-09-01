@@ -12,7 +12,7 @@ export type Event =
     | { ts: number; type: 'validator_warning'; message: string }
     | { ts: number; type: 'crawl_map_updated'; page: PageDetails }
     | { ts: number; type: 'new_log'; message: string }
-    | { ts: number; type: 'new_page_visited'; oldPage: string; newPage: string; page: Page }
+    | { ts: number; type: 'new_page_visited'; oldPage: string; newPage: string; page: Page; linkIdentifier?: string; }
     | { ts: number; type: 'stop'; message: string; sessionId: string }
     | { ts: number; type: 'pause_all' }
     | { ts: number; type: 'resume_all' }

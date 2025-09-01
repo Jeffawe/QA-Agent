@@ -47,8 +47,8 @@ export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
     //     keywords: ["test", "validate", "verify", "check", "functionality", "behavior", "automatic"]
     // },
     {
-        name: "manualanalyzer",
-        sessionType: "playwright",
+        name: "manualAutoanalyzer",
+        sessionType: "stagehand",
         actionServiceType: "manual",
         dependent: true,
         agentDependencies: [],
@@ -59,7 +59,7 @@ export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
         name: "autocrawler",
         sessionType: "stagehand",
         dependent: false,
-        agentDependencies: ["manualanalyzer", "autoanalyzer"],
+        agentDependencies: ["manualAutoanalyzer", "autoanalyzer"],
         description: "Crawl and navigate through entire websites to extract comprehensive data",
         keywords: ["crawl", "scrape", "navigate", "website", "data", "extract", "comprehensive", "entire", "all pages"]
     }

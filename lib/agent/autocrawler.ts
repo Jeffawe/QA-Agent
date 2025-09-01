@@ -24,7 +24,7 @@ export class AutoCrawler extends Agent {
         this.state = dependencies.dependent ? State.WAIT : State.START;
 
         this.analyzer = this.requireAgent<AutoAnalyzer>("autoanalyzer");
-        this.manualAnalyzer = this.requireAgent<ManualAnalyzer>("manualanalyzer");
+        this.manualAnalyzer = this.requireAgent<ManualAnalyzer>("manualAutoanalyzer");
 
         this.stagehandSession = this.session as StagehandSession;
         this.localactionService = this.actionService as AutoActionService;
@@ -112,8 +112,14 @@ export class AutoCrawler extends Agent {
                     if (PageMemory.isFullyExplored(this.currentUrl)) {
                         this.logManager.log(`All links visited on page ${this.currentUrl}`, this.buildState(), false);
                         const back = PageMemory.popFromStack();
-                        if (back) await page.goto(back, { waitUntil: "networkidle", timeout: 30000 });
-                        else this.setState(State.DONE);
+                        if (back) {
+                            this.logManager.log(`Backtracking to ${back}`, this.buildState(), false);
+                            await page.goto(back, { waitUntil: "networkidle" });
+                            this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: back, page: page });
+                            this.setState(State.START);
+                        } else {
+                            this.setState(State.DONE);
+                        }
                     } else {
                         this.setState(State.VISIT);
                     }
@@ -146,7 +152,7 @@ export class AutoCrawler extends Agent {
                 }
 
                 case State.WAIT: {
-                    this.logManager.log("Waiting for tester to finish", this.buildState(), false);
+                    this.logManager.log("Waiting for analyzer to finish", this.buildState(), false);
 
                     if (this.isCurrentPageVisited) {
                         if (this.manualAnalyzer.isDone()) {
@@ -171,6 +177,7 @@ export class AutoCrawler extends Agent {
                         break;
                     }
 
+                    // This assumes that the link has already been moved to by another agent
                     const next = this.isCurrentPageVisited ? this.manualAnalyzer.nextLink : this.analyzer.nextLink;
                     if (next) {
                         PageMemory.markLinkVisited(this.currentUrl, next.description);

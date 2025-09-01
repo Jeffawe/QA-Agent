@@ -4,6 +4,7 @@ import { AutoCrawler } from './agent/autocrawler.js';
 import { Crawler } from './agent/crawler.js';
 import { GoalAgent } from './agent/goalIntelliAgent.js';
 import ManualAnalyzer from './agent/manualAnalyzer.js';
+import ManualAutoAnalyzer from './agent/manualAutoAnalyzer.js';
 import PlannerAgent from './agent/plannerAgent.js';
 import Tester from './agent/tester.js';
 import PlaywrightSession from './browserAuto/playWrightSession.js';
@@ -26,6 +27,7 @@ export class AgentFactory {
         this.agentClasses.set('crawler', Crawler);
         this.agentClasses.set('autocrawler', AutoCrawler);
         this.agentClasses.set('autoanalyzer', AutoAnalyzer);
+        this.agentClasses.set('manualAutoanalyzer', ManualAutoAnalyzer);
     }
 
     static getAgentClass(name: Namespaces): new (dependencies: BaseAgentDependencies) => Agent {

@@ -102,8 +102,14 @@ export class Crawler extends Agent {
                 case State.EVALUATE: {
                     if (PageMemory.isFullyExplored(this.currentUrl)) {
                         const back = PageMemory.popFromStack();
-                        if (back) await page.goto(back, { waitUntil: "networkidle", timeout: 30000 });
-                        else this.setState(State.DONE);
+                        if (back) {
+                            this.logManager.log(`Backtracking to ${back}`, this.buildState(), false);
+                            await page.goto(back, { waitUntil: "networkidle" });
+                            this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: back, page: page });
+                            this.setState(State.START);
+                        } else {
+                            this.setState(State.DONE);
+                        }
                     } else {
                         this.setState(State.VISIT);
                     }
