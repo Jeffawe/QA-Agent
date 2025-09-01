@@ -250,6 +250,8 @@ export class GeminiLLm extends LLM {
             const systemInstruction = getSystemPrompt(agentName, recurrent);
             const schema = getSystemSchema(agentName, recurrent);
 
+            this.logManager.log(`agentName: ${String(agentName)}, recurrent: ${recurrent}`, State.INFO, true);
+
             try {
                 if (this.apiKey?.startsWith('TEST')) {
                     response = await generateContent({
@@ -291,8 +293,6 @@ export class GeminiLLm extends LLM {
             if (!response) {
                 throw new Error("No response from Gemini LLM");
             }
-
-            this.logManager.log(response, State.INFO, true);
 
             if (response) {
                 this.eventBus?.emit({

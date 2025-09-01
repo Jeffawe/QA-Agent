@@ -16,12 +16,22 @@ export default class AutoActionService extends ActionService {
     async executeAction(action: Action, data: LinkInfo, state: State | NamespacedState = State.ACT, offset: Rect = defaultOffset): Promise<ActionResult> {
         this.intOrext = "external";
         try {
+            let finalAction : string = action.step;
             if (action.step === "wait") {
                 this.logManager.log("Waiting for a while before next action", state);
                 await this.wait(action.args[0] || 5000);
             }else{
-                this.localsession.act(action.step);
-                this.logManager.log(`Executing action: ${action.step}`, state);
+                const validSteps = ['move_mouse_to', 'click', 'press_key', 'no_op'] as const;
+                if (!validSteps.includes(action.step as any)) {
+                    if(action.args && action.args.length > 0){
+                        finalAction = action.args[0] as string;
+                    }else{
+                        throw new Error(`Invalid action step: ${action.step}`);
+                    }
+                }
+                
+                this.localsession.act(finalAction);
+                this.logManager.log(`Executing action: ${finalAction}`, state);
             }
             
             this.logManager.log(`Action result: ${this.intOrext}`, state);

@@ -68,7 +68,7 @@ export const systemPromptJsonSchema = {
             properties: {
                 step: {
                     type: "string",
-                    description: "The command name to execute"
+                    description: "The command name to execute - follow what was given in prompt"
                 },
                 args: {
                     type: "array",
@@ -125,7 +125,7 @@ export const actionJsonSchema = {
     properties: {
         step: {
             type: "string",
-            description: "The command name to execute"
+            description: "The command name to execute - follow what was given in prompt"
         },
         args: {
             type: "array",
@@ -275,7 +275,6 @@ export const goalJsonSchema = {
     required: ["analysis", "action"],
     additionalProperties: false
 };
-
 
 const systemPrompt = String.raw`
             You are a website-auditing autonomous agent.
