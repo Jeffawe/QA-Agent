@@ -1,6 +1,6 @@
 import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import AutoActionService from "../services/actions/stagehandActionService.js";
+import AutoActionService from "../services/actions/autoActionService.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 
 export default class Tester extends Agent {

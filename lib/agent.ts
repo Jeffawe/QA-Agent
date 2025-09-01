@@ -86,7 +86,7 @@ export default class BossAgent {
             config.actionServiceType = 'auto';
           }
 
-          if(!config.actionServiceType) {
+          if (!config.actionServiceType) {
             config.actionServiceType = 'manual';
           }
 
@@ -148,6 +148,7 @@ export default class BossAgent {
   public async start(url: string): Promise<void> {
     this.logManager.initialize();
     NavigationTree.initialize();
+    const startTime = performance.now();
     CrawlMap.init(`logs/crawl_map_${this.sessionId}.md`);
 
     // Start all sessions
@@ -227,10 +228,13 @@ export default class BossAgent {
       }
     }
 
-    this.logManager.log("Done", State.DONE, true);
     await this.stop();
     const doneMessage = `Agent is done with task. Used ${this.logManager.getTokens()} tokens`;
     this.bus.emit({ ts: Date.now(), type: "done", message: doneMessage, sessionId: this.sessionId });
+    const endTime = performance.now();
+    const timeTaken = endTime - startTime;
+    this.logManager.log("Done", State.DONE, true);
+    this.logManager.log(`All Agents finished in: ${timeTaken.toFixed(2)} ms`, State.DONE, true);
   }
 
   public async stop(): Promise<boolean> {

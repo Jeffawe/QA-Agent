@@ -3,7 +3,7 @@ import { Action, ImageData, State } from "../types.js";
 import { setTimeout } from "node:timers/promises";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
-import AutoActionService from "../services/actions/stagehandActionService.js";
+import AutoActionService from "../services/actions/autoActionService.js";
 
 export class GoalAgent extends Agent {
     public goal: string;

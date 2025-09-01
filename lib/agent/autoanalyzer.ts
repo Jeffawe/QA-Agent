@@ -5,7 +5,7 @@ import { fileExists } from "../utility/functions.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
-import AutoActionService from "../services/actions/stagehandActionService.js";
+import AutoActionService from "../services/actions/autoActionService.js";
 import path from "node:path";
 
 export default class AutoAnalyzer extends Agent {
@@ -184,17 +184,20 @@ export default class AutoAnalyzer extends Agent {
                         break;
                     }
 
-                    this.lastAction = `Action ${action.step} with args (${action.args.join(",")}) was last taken because of ${action.reason}`;
-
                     let result: ActionResult | null = null
 
                     try {
-                        const specificLink = this.queue.find(l => l.description === action.step);
+                        const searchTerm = action.step || action.args?.[0];
+                        if (!searchTerm) {
+                            throw new Error("No search term found in action.step or action.args[0]");
+                        }
+
+                        const specificLink = this.queue.find(link =>
+                            link.description === searchTerm
+                        );
+
                         if (!specificLink) {
-                            this.response = `${action.step} is not a valid link. It does not exist in the labels given.`;
-                            this.logManager.error(`${action.step} is not a valid link. It does not exist in the labels given..`, this.state, false);
-                            this.setState(State.OBSERVE);
-                            break;
+                            throw new Error(`No link found with description: ${searchTerm}`);
                         }
 
                         result = await this.localactionService.executeAction(action, specificLink, this.buildState());
@@ -208,6 +211,9 @@ export default class AutoAnalyzer extends Agent {
                     if (this.currentUrl && result.message == "external") {
                         this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.stagehandSession.page.url(), page: this.stagehandSession.page });
                     }
+
+                    this.lastAction = `Action ${this.lastPerformedAction} with args (${action.args.join(",")}) was last taken because of ${action.reason}`;
+
 
                     this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });
                     const newGoal = action.newGoal ?? "Crawl the given page";

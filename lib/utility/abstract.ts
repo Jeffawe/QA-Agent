@@ -174,6 +174,37 @@ export abstract class Agent {
         const prev = this.state;
         this.state = next;
         this.bus.emit({ ts: Date.now(), type: "state_transition", from: prev, to: this.state });
+
+        if (next === State.DONE) {
+            this.onDone?.();
+        }
+    }
+
+    public areDependenciesDone(): boolean {
+        for (const agent of this.requiredAgents) {
+            if (!agent.isDone()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public setDependenciesDone() {
+        for (const agent of this.requiredAgents) {
+            agent.setState(State.DONE);
+        }
+    }
+
+    // Optional hook for when the agent reaches DONE state
+    public onDone?(): void {
+        if(this.requiredAgents.length === 0 ) return;
+        for (const agent of this.requiredAgents) {
+            if (!agent.isDone()) {
+                this.logManager.log(`Waiting for required agent ${agent.name} to finish`, this.buildState(), false);
+            }
+        }
+
+        this.setDependenciesDone();
     }
 
     public abstract cleanup(): Promise<void>;

@@ -9,7 +9,7 @@ import Tester from './agent/tester.js';
 import PlaywrightSession from './browserAuto/playWrightSession.js';
 import StagehandSession from './browserAuto/stagehandSession.js';
 import ManualActionService from './services/actions/actionService.js';
-import AutoActionService from './services/actions/stagehandActionService.js';
+import AutoActionService from './services/actions/autoActionService.js';
 import { Namespaces } from './types.js';
 import { ActionService, Agent, BaseAgentDependencies, Session } from './utility/abstract.js';
 

@@ -5,7 +5,7 @@ import { CrawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
 import ManualAnalyzer from "./manualAnalyzer.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
-import AutoActionService from "../services/actions/stagehandActionService.js";
+import AutoActionService from "../services/actions/autoActionService.js";
 import { getExternalLinks } from "../utility/functions.js";
 import AutoAnalyzer from "./autoanalyzer.js";
 
@@ -100,7 +100,7 @@ export class AutoCrawler extends Agent {
                         });
                         PageMemory.addPage2(pageDetails, linkWithoutVisited);
                         CrawlMap.recordPage({ ...pageDetails, links: linksConverted }, this.sessionId);
-                    }else{
+                    } else {
                         this.logManager.log(`Links detected: ${PageMemory.getAllUnvisitedLinks(this.currentUrl).length}`, this.buildState(), false);
                     }
                     this.setState(State.EVALUATE);
@@ -204,12 +204,6 @@ export class AutoCrawler extends Agent {
 
                 case State.PAUSE:
                 case State.DONE:
-                    for (const agent of this.requiredAgents) {
-                        if (!agent.isDone()) {
-                            this.logManager.log(`Waiting for required agent ${agent.name} to finish`, this.buildState(), false);
-                        }
-                    }
-                    break;
                 case State.RESUME:
                 case State.ERROR:  /* fallthrough */
                 default:
@@ -268,7 +262,7 @@ export class AutoCrawler extends Agent {
         this.currentUrl = "";
         this.isCurrentPageVisited = false;
         this.timeTaken = 0;
-        this.response = "";    
+        this.response = "";
     }
 }
 

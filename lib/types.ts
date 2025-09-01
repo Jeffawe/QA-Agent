@@ -31,6 +31,7 @@ export interface TestResult {
 export interface ActionResult {
     success: boolean;
     message: string;
+    actionTaken: string;
 }
 
 export interface ThinkResult {

@@ -4,7 +4,7 @@ import { GoalAgent } from "./goalIntelliAgent.js";
 import { pipeline } from '@xenova/transformers';
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import { ExtractorOptions } from "../types.js";
-import AutoActionService from "../services/actions/stagehandActionService.js";
+import AutoActionService from "../services/actions/autoActionService.js";
 
 interface ClassificationResult {
     label: string;

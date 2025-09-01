@@ -3,7 +3,7 @@ import { LogManager } from "../../utility/logManager.js";
 import { GeminiLLm } from "../../models/generate/gemini.js";
 import { GetNextActionContext, State, ThinkResult, ImageData, Namespaces } from "../../types.js";
 import { logManagers } from "../memory/logMemory.js";
-import { EventBus, LocalEventBus } from "../events/event.js";
+import { EventBus } from "../events/event.js";
 import { eventBusManager } from "../events/eventBus.js";
 
 const thinkerState = State.DECIDE
@@ -12,7 +12,7 @@ export class CombinedThinker extends Thinker {
     private logManager: LogManager;
     private eventBus: EventBus;
 
-    constructor(private sessionId: string) {
+    constructor(sessionId: string) {
         super();
         this.modelClient = new GeminiLLm(sessionId);
         this.logManager = logManagers.getOrCreateManager(sessionId);
@@ -46,6 +46,8 @@ export class CombinedThinker extends Thinker {
         if (!this.modelClient) {
             throw new Error("Model client is not loaded. Please load the model first.");
         }
+
+        this.logManager.log(`Generating next action for agent: ${agentName}`, thinkerState, false);
 
         try {
             const userMessage = `
