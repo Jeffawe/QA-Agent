@@ -92,10 +92,10 @@ export const systemPromptJsonSchema = {
                 },
                 nextLink: {
                     type: "string",
-                    description: "The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)"
+                    description: "The next link to click on (Must be picked out of the available labels given to you. Leave as none if not applicable)"
                 }
             },
-            required: ["step", "args", "reason", "newGoal"],
+            required: ["step", "args", "reason", "newGoal", "nextLink"],
             additionalProperties: false,
             description: "Action to take next"
         },
@@ -253,6 +253,10 @@ export const goalJsonSchema = {
                 reason: {
                     type: "string",
                     description: "The reason for this action"
+                },
+                nextLink: {
+                    type: "string",
+                    description: "The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)"
                 },
                 progressDescription: {
                     type: "string",
