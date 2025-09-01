@@ -218,6 +218,14 @@ export default class Analyzer extends Agent {
                     const nextLabel = action.nextLink || "";
 
                     // Check if the link has already been visited
+                    if (nextLabel.toLowerCase() == "none") {
+                        this.nextLink = null;
+                        this.logManager.log(`No next link to test`, this.buildState(), false);
+                        this.setState(State.DONE);
+                        break;
+                    }
+
+                    // Check if the link has already been visited
                     const alreadyVisited = PageMemory.isLinkVisited(this.currentUrl, nextLabel);
                     if (alreadyVisited) {
                         this.setState(State.DONE);
@@ -225,6 +233,8 @@ export default class Analyzer extends Agent {
                     }
 
                     this.nextLink = this.getLinkInfoWithoutVisited(this.queue, action.nextLink || "");
+
+                    this.logManager.log(`Next link to test: ${JSON.stringify(this.nextLink)}`, this.buildState(), false);
 
                     if (result && result.message == "internal") {
                         this.setState(State.OBSERVE);
