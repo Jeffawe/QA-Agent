@@ -59,6 +59,22 @@ export class CrawlMap {
     }
   }
 
+  static addAnalysis(url: string, analysis: any, sessionId: string) {
+    if (!this.pages.has(url)) return;
+    const page = this.pages.get(url);
+    if (!page) return;
+    page.analysis = analysis;
+    this.recordPage(page, sessionId);
+  }
+
+  static updateAnalysis(url: string, analysis: any, sessionId: string) {
+    if (!this.pages.has(url)) return;
+    const page = this.pages.get(url);
+    if (!page) return;
+    page.analysis = { ...page.analysis, ...analysis };
+    this.recordPage(page, sessionId);
+  }
+
   /** Optional: keep edge list if you still need it elsewhere */
   static addEdge(from: string, to: string) {
     if (!this.initialised) this.init();
@@ -100,7 +116,7 @@ export class CrawlMap {
         for (const l of page.links) {
           const box = l.visited ? "[x]" : "[ ]";
           const label = l.description || l.href;
-          md += `- ${box} **${label}** → \`${l.href}\`\n`;
+          md += `- ${box} **${label}** → \`${l.selector}\`\n`;
         }
         md += "\n";
       }

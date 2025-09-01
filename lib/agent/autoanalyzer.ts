@@ -147,7 +147,10 @@ export default class AutoAnalyzer extends Agent {
                     this.noErrors = command.noErrors ?? false;
 
                     if (command.analysis) {
+                        this.logManager.log(`Storing analysis for ${this.currentUrl}`, this.state, false);
                         PageMemory.addAnalysis(this.currentUrl, command.analysis, this.sessionId);
+                    }else{
+                        this.logManager.log(`No analysis returned for ${this.currentUrl}`, this.state, false);
                     }
 
                     (this as any).pendingAction = command.action;
