@@ -79,7 +79,7 @@ export default class ManualActionService extends ActionService {
       this.logManager.log(`Executed action: ${action.step} with args: ${JSON.stringify(action.args)}`, state, true);
       this.logManager.log(`Reason: ${action.reason}`, state, true);
 
-      return { success: true, message: this.intOrext };
+      return { success: true, message: this.intOrext, actionTaken: action.step };
     } catch (error) {
       throw error;
     }

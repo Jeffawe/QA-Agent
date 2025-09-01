@@ -137,7 +137,7 @@ export class GoalAgent extends Agent {
                         imagepath: (this as any).screenshot
                     };
 
-                    const command = await this.thinker.think(context, imageData, this.name, this.response);
+                    const command = await this.thinker.think(context, imageData, this.response, this.name);
 
                     if (!command || !command.action) {
                         this.logManager.error("Thinker returned no action", this.state);

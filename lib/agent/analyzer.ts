@@ -137,7 +137,7 @@ export default class Analyzer extends Agent {
 
                     this.logManager.addMission(nextActionContext.goal);
 
-                    const command = await this.thinker.think(nextActionContext, imageData, this.name, this.response, this.visitedPage);
+                    const command = await this.thinker.think(nextActionContext, imageData, this.response, this.name, this.visitedPage);
                     if (!command?.action) {
                         this.logManager.error("Thinker produced no action", this.state, false);
                         this.setState(State.ERROR);

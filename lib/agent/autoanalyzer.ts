@@ -131,7 +131,13 @@ export default class AutoAnalyzer extends Agent {
 
                     this.logManager.addMission(nextActionContext.goal);
 
-                    const command = await this.thinker.think(nextActionContext, imageData, this.name, this.response, this.visitedPage);
+                    const command = await this.thinker.think(
+                        nextActionContext,
+                        imageData,
+                        this.response,
+                        this.name,
+                        this.visitedPage
+                    );
                     if (!command?.action) {
                         this.logManager.error("Thinker produced no action", this.state, false);
                         this.setState(State.ERROR);
@@ -187,18 +193,20 @@ export default class AutoAnalyzer extends Agent {
                     let result: ActionResult | null = null
 
                     try {
-                        const searchTerm = action.step || action.args?.[0];
-                        if (!searchTerm) {
-                            throw new Error("No search term found in action.step or action.args[0]");
+                        let specificLink = null;
+
+                        if (action.step) {
+                            specificLink = this.queue.find(link => link.description === action.step);
                         }
 
-                        const specificLink = this.queue.find(link =>
-                            link.description === searchTerm
-                        );
+                        if (!specificLink && action.args?.[0]) {
+                            specificLink = this.queue.find(link => link.description === action.args[0]);
+                        }
 
                         if (!specificLink) {
-                            throw new Error(`No link found with description: ${searchTerm}`);
+                            throw new Error(`No link found for: ${action.step || action.args?.[0] || 'no search term'}`);
                         }
+
 
                         result = await this.localactionService.executeAction(action, specificLink, this.buildState());
                     } catch (error) {
@@ -212,7 +220,7 @@ export default class AutoAnalyzer extends Agent {
                         this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.stagehandSession.page.url(), page: this.stagehandSession.page });
                     }
 
-                    this.lastAction = `Action ${this.lastPerformedAction} with args (${action.args.join(",")}) was last taken because of ${action.reason}`;
+                    this.lastAction = `Action ${result.actionTaken || 'no_op'} with args (${action.args.join(",")}) was last taken because of ${action.reason}`;
 
 
                     this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });

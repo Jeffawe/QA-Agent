@@ -11,7 +11,7 @@ export abstract class Thinker {
         this.modelClient = modelClient;
     }
 
-    abstract think(nextActionContext: GetNextActionContext, imageData: ImageData, agentName: Namespaces, extraInfo: string, recurrent?: boolean): Promise<ThinkResult>;
+    abstract think(nextActionContext: GetNextActionContext, imageData: ImageData, extraInfo: string, agentName: Namespaces, recurrent?: boolean): Promise<ThinkResult>;
 }
 
 export abstract class LLM {
