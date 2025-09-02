@@ -1,5 +1,4 @@
 import { Page } from "playwright";
-import Session from "../../browserAuto/playWrightSession.js";
 import { EventBus } from "../events/event.js";
 import { PageMemory } from "../memory/pageMemory.js";
 import { LogManager } from "../../utility/logManager.js";
