@@ -100,6 +100,7 @@ export default class ManualAutoAnalyzer extends Agent {
                         if (!this.nextLink || !this.nextLink.selector) {
                             throw new Error("nextLink is null");
                         }
+                        this.logManager.log(`Acting on ${this.nextLink.description}`, this.buildState(), true);
                         await this.stageHandSession.act(this.nextLink.selector);
                     } catch (error) {
                         this.logManager.error(String(error), this.state, false);

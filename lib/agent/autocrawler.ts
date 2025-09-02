@@ -177,6 +177,12 @@ export class AutoCrawler extends Agent {
                         break;
                     }
 
+                    if (this.isCurrentPageVisited && !this.manualAnalyzer.noErrors) {
+                        this.logManager.error("Manual analyzer did not see the page", this.buildState());
+                        this.setState(State.START);
+                        break;
+                    }
+
                     // This assumes that the link has already been moved to by another agent
                     const next = this.isCurrentPageVisited ? this.manualAnalyzer.nextLink : this.analyzer.nextLink;
                     if (next) {
