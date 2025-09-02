@@ -2,10 +2,16 @@ import { Page } from "playwright";
 import Session from "../../browserAuto/playWrightSession.js";
 import { EventBus } from "../events/event.js";
 import { PageMemory } from "../memory/pageMemory.js";
+import { LogManager } from "../../utility/logManager.js";
+import { logManagers } from "../memory/logMemory.js";
+import { State } from "../../types.js";
 
 export class NewPageValidator {
-    constructor(private bus: EventBus, private session: Session) {
+    private logManager: LogManager | null = null;
+
+    constructor(private bus: EventBus, private sessionId: string) {
         bus.on("new_page_visited", evt => this.onAction(evt.newPage, evt.oldPage, evt.page, evt.linkIdentifier));
+        this.logManager = logManagers.getOrCreateManager(sessionId);
     }
 
     private async onAction(newPage: string, oldPage?: string, page?: Page, linkIdentifier?: string) {
@@ -17,6 +23,8 @@ export class NewPageValidator {
         const isSameOrigin =
             oldUrl.protocol === newUrl.protocol &&
             oldUrl.hostname === newUrl.hostname;
+
+        this.logManager?.log(`NewPageValidator: oldPage="${oldPage}", newPage="${newPage}", isSameOrigin=${isSameOrigin}`, State.INFO, true);
 
         if (!isSameOrigin) {
             this.bus.emit({
