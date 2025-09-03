@@ -125,7 +125,7 @@ export class Crawler extends Agent {
                         for (const l of unvisited) CrawlMap.addEdge(this.currentUrl!, l.href!);
                         PageMemory.markPageVisited(this.currentUrl);
                         isVisited = false;
-                        CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
+                        CrawlMap.recordPage(PageMemory.getPage(this.currentUrl), this.sessionId);
                     }
 
                     if (isVisited) {
@@ -169,7 +169,7 @@ export class Crawler extends Agent {
                     if (active) {
                         PageMemory.markLinkVisited(this.currentUrl, active.description || active.href!);
                         const finalUrl = page.url();
-                        CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
+                        CrawlMap.recordPage(PageMemory.getPage(this.currentUrl), this.sessionId);
                         PageMemory.pushToStack(this.currentUrl);
                         CrawlMap.addEdge(this.currentUrl!, active.href!);
 

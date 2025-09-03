@@ -138,7 +138,8 @@ export class AutoCrawler extends Agent {
                         }
                         PageMemory.markPageVisited(this.currentUrl);
                         isVisited = false;
-                        CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
+                        const currentPage = PageMemory.getPage(this.currentUrl);
+                        CrawlMap.recordPage(currentPage, this.sessionId);
                     }
 
 
@@ -183,7 +184,7 @@ export class AutoCrawler extends Agent {
                     if (active) {
                         PageMemory.markLinkVisited(this.currentUrl, active.description);
                         const finalUrl = page.url();
-                        CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
+                        CrawlMap.recordPage(PageMemory.getPage(this.currentUrl), this.sessionId);
                         PageMemory.pushToStack(this.currentUrl);
                         if (active.href) CrawlMap.addEdge(this.currentUrl!, active.href);
 

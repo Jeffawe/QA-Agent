@@ -166,7 +166,7 @@ export default class AutoAnalyzer extends Agent {
 
                     if (action.step === 'done') {
                         this.setState(State.DONE);
-                        CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
+                        CrawlMap.recordPage(PageMemory.getPage(this.currentUrl), this.sessionId);
                         this.logManager.log("All links have been tested", this.buildState(), true);
                         this.activeLink = null;
                         const endTime = performance.now();

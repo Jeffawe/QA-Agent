@@ -176,7 +176,7 @@ export default class Analyzer extends Agent {
                         this.setState(State.DONE);
                         const leftovers = PageMemory.getAllUnvisitedLinks(this.currentUrl);
                         leftovers.forEach(l => PageMemory.markLinkVisited(this.currentUrl, l.description || l.href!));
-                        CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
+                        CrawlMap.recordPage(PageMemory.getPage(this.currentUrl), this.sessionId);
                         this.logManager.log("All links have been tested", this.buildState(), true);
                         this.activeLink = null;
                         const endTime = performance.now();

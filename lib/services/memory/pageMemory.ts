@@ -2,7 +2,7 @@ import { LinkInfo, PageDetails } from '../../types.js';
 import { CrawlMap } from '../../utility/crawlMap.js';
 
 export class PageMemory {
-  public static pages: Record<string, PageDetails> = {};
+  private static pages: Record<string, PageDetails> = {};
   private static navStack: string[] = [];
 
   static addPage(details: PageDetails) {
@@ -11,6 +11,11 @@ export class PageMemory {
     if (!this.pages[cleanUrl]) {
       this.pages[cleanUrl] = details;
     }
+  }
+
+  static getPage(url: string) {
+    const cleanUrl = PageMemory.cleanUrl(url);
+    return this.pages[cleanUrl];
   }
 
   static cleanUrl(url: string) {
