@@ -140,6 +140,7 @@ export class AutoCrawler extends Agent {
                         CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
                     }
 
+
                     if (isVisited) {
                         this.manualAnalyzer.enqueue(unvisited, isVisited);
                     } else {
@@ -176,21 +177,14 @@ export class AutoCrawler extends Agent {
                         this.setState(State.START);
                         break;
                     }
-
-                    if (this.isCurrentPageVisited && !this.manualAnalyzer.noErrors) {
-                        this.logManager.error("Manual analyzer did not see the page", this.buildState());
-                        this.setState(State.START);
-                        break;
-                    }
-
-                    // This assumes that the link has already been moved to by another agent
-                    const next = this.isCurrentPageVisited ? this.manualAnalyzer.nextLink : this.analyzer.nextLink;
-                    if (next) {
-                        PageMemory.markLinkVisited(this.currentUrl, next.description);
+                    
+                    const active = this.isCurrentPageVisited ? this.manualAnalyzer.activeLink : this.analyzer.activeLink;
+                    if (active) {
+                        PageMemory.markLinkVisited(this.currentUrl, active.description);
                         const finalUrl = page.url();
                         CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
                         PageMemory.pushToStack(this.currentUrl);
-                        if (next.href) CrawlMap.addEdge(this.currentUrl!, next.href);
+                        if (active.href) CrawlMap.addEdge(this.currentUrl!, active.href);
 
                         this.currentUrl = finalUrl;
                         this.setState(State.START);

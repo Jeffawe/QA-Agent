@@ -89,13 +89,9 @@ export const systemPromptJsonSchema = {
                 newGoal: {
                     type: "string",
                     description: "New mission goal for the next step"
-                },
-                nextLink: {
-                    type: "string",
-                    description: "The next link to click on (Must be picked out of the available labels given to you. Leave as none if not applicable)"
                 }
             },
-            required: ["step", "args", "reason", "newGoal", "nextLink"],
+            required: ["step", "args", "reason", "newGoal"],
             additionalProperties: false,
             description: "Action to take next"
         },
@@ -146,10 +142,6 @@ export const actionJsonSchema = {
         newGoal: {
             type: "string",
             description: "New mission goal for the next step"
-        },
-        nextLink: {
-            type: "string",
-            description: "The next link to click on (Must be picked out of the available labels given to you. Leave as blank if not applicable)"
         }
     },
     required: ["step", "args", "reason", "newGoal"],

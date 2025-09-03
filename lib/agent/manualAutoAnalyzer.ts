@@ -5,7 +5,7 @@ import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 
 export default class ManualAutoAnalyzer extends Agent {
-    public nextLink: Omit<LinkInfo, 'visited'> | null = null;
+    public activeLink: Omit<LinkInfo, 'visited'> | null = null;
     private stageHandSession: StagehandSession;
     private localactionService: AutoActionService;
 
@@ -79,6 +79,7 @@ export default class ManualAutoAnalyzer extends Agent {
                     this.goal = "Find the next best link to click";
                     this.logManager.log(`Start testing ${this.queue.length} links`, this.buildState(), true);
                     if (this.queue.length === 0) {
+                        this.logManager.log("No more links to test", this.buildState(), true);
                         this.setState(State.DONE);
                     } else {
                         this.setState(State.DECIDE);
@@ -87,21 +88,23 @@ export default class ManualAutoAnalyzer extends Agent {
 
                 case State.DECIDE: {
                     if (this.queue.length === 0) {
+                        this.logManager.log("No more links to test", this.buildState(), true);
                         this.setState(State.DONE);
                         break;
                     }
-                    this.nextLink = this.queue.shift()!;
+                    this.activeLink = this.queue.shift()!;
                     this.setState(State.ACT);
                     break;
                 }
 
                 case State.ACT: {
                     try {
-                        if (!this.nextLink || !this.nextLink.selector) {
-                            throw new Error("nextLink is null");
+                        if (!this.activeLink || !this.activeLink.selector) {
+                            this.logManager.error("activeLink is null", this.state, false);
+                            throw new Error("activeLink is null");
                         }
-                        this.logManager.log(`Acting on ${this.nextLink.description}`, this.buildState(), true);
-                        await this.stageHandSession.act(this.nextLink.selector);
+                        this.logManager.log(`Acting on ${this.activeLink.description}`, this.buildState(), true);
+                        await this.stageHandSession.act(this.activeLink.selector);
                     } catch (error) {
                         this.logManager.error(String(error), this.state, false);
                         this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
@@ -125,8 +128,8 @@ export default class ManualAutoAnalyzer extends Agent {
                         // Optional: ensure page is defined before going back
                         try {
                             await this.stageHandSession.page?.goBack({ waitUntil: "networkidle" });
-                            if(!this.nextLink) throw new Error("nextLink is null after external navigation");
-                            PageMemory.removeLink(this.currentUrl, this.nextLink.description);
+                            if(!this.activeLink) throw new Error("activeLink is null after external navigation");
+                            PageMemory.removeLink(this.currentUrl, this.activeLink.description);
                             this.queue = PageMemory.getAllUnvisitedLinks(this.currentUrl);
                             this.setState(State.START);
                         } catch (err) {
@@ -161,7 +164,7 @@ export default class ManualAutoAnalyzer extends Agent {
     }
 
     async cleanup(): Promise<void> {
-        this.nextLink = null;
+        this.activeLink = null;
         this.queue = [];
         this.goal = "Crawl the given page";
         this.state = State.WAIT;

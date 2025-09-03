@@ -1,6 +1,6 @@
 import { setTimeout } from "node:timers/promises";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { LinkInfo, State, ImageData, Action, ActionResult, } from "../types.js";
+import { LinkInfo, State, ImageData, Action, ActionResult, InteractiveElement, } from "../types.js";
 import { processScreenshot } from "../services/imageProcessor.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { fileExists } from "../utility/functions.js";
@@ -10,7 +10,7 @@ import playwrightSession from "../browserAuto/playWrightSession.js";
 import ManualActionService from "../services/actions/actionService.js";
 
 export default class Analyzer extends Agent {
-    public nextLink: Omit<LinkInfo, 'visited'> | null = null;
+    public activeLink: Omit<LinkInfo, 'visited'> | null = null;
 
     private step = 0;
     private queue: LinkInfo[] = [];
@@ -174,7 +174,7 @@ export default class Analyzer extends Agent {
                         leftovers.forEach(l => PageMemory.markLinkVisited(this.currentUrl, l.description || l.href!));
                         CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
                         this.logManager.log("All links have been tested", this.buildState(), true);
-                        this.nextLink = null;
+                        this.activeLink = null;
                         const endTime = performance.now();
                         this.timeTaken = endTime - (this as any).startTime;
                         this.noErrors = true;
@@ -214,27 +214,21 @@ export default class Analyzer extends Agent {
 
                     const endTime = performance.now();
                     this.timeTaken = endTime - (this as any).startTime;
+                    
+                    this.activeLink = null;
 
-                    const nextLabel = action.nextLink || "";
-
-                    // Check if the link has already been visited
-                    if (nextLabel.toLowerCase() == "none") {
-                        this.nextLink = null;
-                        this.logManager.log(`No next link to test`, this.buildState(), false);
-                        this.setState(State.DONE);
-                        break;
+                    if (action.args && action.args.length > 0) {
+                        const selector = this.getSelectorByLabel((this as any).clickableElements, action.args[0]);
+                        if (!selector) {
+                            throw new Error(`Selector not found for label: ${action.args[0]}`);
+                        }
+                        const link = this.queue.find((link) => link.selector === selector) || this.queue.find((link) => link.description === action.args[0] || link.href === action.args[0]);
+                        if (link) {
+                            this.activeLink = this.getLinkInfoWithoutVisited(link);
+                        }
                     }
 
-                    // Check if the link has already been visited
-                    const alreadyVisited = PageMemory.isLinkVisited(this.currentUrl, nextLabel);
-                    if (alreadyVisited) {
-                        this.setState(State.DONE);
-                        break;
-                    }
-
-                    this.nextLink = this.getLinkInfoWithoutVisited(this.queue, action.nextLink || "");
-
-                    this.logManager.log(`Next link to test: ${JSON.stringify(this.nextLink)}`, this.buildState(), false);
+                    this.logManager.log(`Next link to test: ${JSON.stringify(this.activeLink)}`, this.buildState(), false);
 
                     if (result && result.message == "internal") {
                         this.setState(State.OBSERVE);
@@ -261,7 +255,7 @@ export default class Analyzer extends Agent {
     }
 
     async cleanup(): Promise<void> {
-        this.nextLink = null;
+        this.activeLink = null;
         this.queue = [];
         this.step = 0;
         this.goal = "Crawl the given page";
@@ -278,16 +272,27 @@ export default class Analyzer extends Agent {
     }
 
     getLinkInfoWithoutVisited(
-        links: LinkInfo[],
-        targetText: string
+        links: LinkInfo,
     ): Omit<LinkInfo, "visited"> | null {
-        if (!targetText) return null;
-        const found = links.find(link => link.description === targetText);
-        if (!found) return null;
-
         // Return a copy without 'visited'
-        const { visited, ...rest } = found;
+        const { visited, ...rest } = links;
         return rest;
     }
+
+    getSelectorByLabel = (
+        clickableElements: InteractiveElement[],
+        label: string
+    ): string | null => {
+        for (const el of clickableElements) {
+            if (
+                el.label === label ||
+                el.attributes["aria-label"] === label ||
+                el.attributes["data-testid"] === label
+            ) {
+                return el.selector;
+            }
+        }
+        return null;
+    };
 }
 

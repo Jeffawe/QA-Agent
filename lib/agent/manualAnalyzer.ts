@@ -5,7 +5,7 @@ import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 
 export default class ManualAnalyzer extends Agent {
-    public nextLink: Omit<LinkInfo, 'visited'> | null = null;
+    public activeLink: Omit<LinkInfo, 'visited'> | null = null;
     private playwrightSession: playwrightSession;
     private localactionService: ManualActionService;
 
@@ -89,17 +89,17 @@ export default class ManualAnalyzer extends Agent {
                         this.setState(State.DONE);
                         break;
                     }
-                    this.nextLink = this.queue.shift()!;
+                    this.activeLink = this.queue.shift()!;
                     this.setState(State.ACT);
                     break;
                 }
 
                 case State.ACT: {
                     try {
-                        if (!this.nextLink) {
+                        if (!this.activeLink) {
                             throw new Error("nextLink is null");
                         }
-                        await this.localactionService.clickSelector(this.nextLink.selector);
+                        await this.localactionService.clickSelector(this.activeLink.selector);
                     } catch (error) {
                         this.logManager.error(String(error), this.state, false);
                         this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
@@ -123,8 +123,8 @@ export default class ManualAnalyzer extends Agent {
                         // Optional: ensure page is defined before going back
                         try {
                             await this.playwrightSession.page?.goBack({ waitUntil: "networkidle" });
-                            if (!this.nextLink) throw new Error("nextLink is null after external navigation");
-                            PageMemory.removeLink(this.currentUrl, this.nextLink.description);
+                            if (!this.activeLink) throw new Error("nextLink is null after external navigation");
+                            PageMemory.removeLink(this.currentUrl, this.activeLink.description);
                             this.queue = PageMemory.getAllUnvisitedLinks(this.currentUrl);
                             this.setState(State.START);
                         } catch (err) {
@@ -159,7 +159,7 @@ export default class ManualAnalyzer extends Agent {
     }
 
     async cleanup(): Promise<void> {
-        this.nextLink = null;
+        this.activeLink = null;
         this.queue = [];
         this.goal = "Crawl the given page";
         this.state = State.WAIT;

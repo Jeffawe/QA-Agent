@@ -9,7 +9,7 @@ import AutoActionService from "../services/actions/autoActionService.js";
 import path from "node:path";
 
 export default class AutoAnalyzer extends Agent {
-    public nextLink: Omit<LinkInfo, 'visited'> | null = null;
+    public activeLink: Omit<LinkInfo, 'visited'> | null = null;
 
     private step = 0;
     private queue: LinkInfo[] = [];
@@ -149,7 +149,7 @@ export default class AutoAnalyzer extends Agent {
                     if (command.analysis) {
                         this.logManager.log(`Storing analysis for ${this.currentUrl}`, this.state, false);
                         PageMemory.addAnalysis(this.currentUrl, command.analysis, this.sessionId);
-                    }else{
+                    } else {
                         this.logManager.log(`No analysis returned for ${this.currentUrl}`, this.state, false);
                     }
 
@@ -166,11 +166,9 @@ export default class AutoAnalyzer extends Agent {
 
                     if (action.step === 'done') {
                         this.setState(State.DONE);
-                        const leftovers = PageMemory.getAllUnvisitedLinks(this.currentUrl);
-                        leftovers.forEach(l => PageMemory.markLinkVisited(this.currentUrl, l.description));
                         CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
                         this.logManager.log("All links have been tested", this.buildState(), true);
-                        this.nextLink = null;
+                        this.activeLink = null;
                         const endTime = performance.now();
                         this.timeTaken = endTime - (this as any).startTime;
                         this.noErrors = true;
@@ -183,7 +181,7 @@ export default class AutoAnalyzer extends Agent {
                         this.setState(State.DONE);
                         this.queue = [];
                         this.logManager.log("All links have been tested", this.buildState(), true);
-                        this.nextLink = null;
+                        this.activeLink = null;
                         PageMemory.setAllLinksVisited(this.currentUrl);
                         const endTime = performance.now();
                         this.timeTaken = endTime - (this as any).startTime;
@@ -194,10 +192,9 @@ export default class AutoAnalyzer extends Agent {
                     }
 
                     let result: ActionResult | null = null
+                    let specificLink = null;
 
                     try {
-                        let specificLink = null;
-
                         if (action.step) {
                             specificLink = this.queue.find(link => link.description === action.step);
                         }
@@ -241,25 +238,9 @@ export default class AutoAnalyzer extends Agent {
                     const endTime = performance.now();
                     this.timeTaken = endTime - (this as any).startTime;
 
-                    const nextLabel = action.nextLink || "";
+                    this.activeLink = this.getLinkInfoWithoutVisited(specificLink);
 
-                    if (nextLabel.toLowerCase() == "none") {
-                        this.nextLink = null;
-                        this.logManager.log(`No next link to test`, this.buildState(), false);
-                        this.setState(State.DONE);
-                        break;
-                    }
-
-                    // Check if the link has already been visited
-                    const alreadyVisited = PageMemory.isLinkVisited(this.currentUrl, nextLabel);
-                    if (alreadyVisited) {
-                        this.setState(State.DONE);
-                        break;
-                    }
-
-                    this.nextLink = this.getLinkInfoWithoutVisited(this.queue, action.nextLink || "");
-
-                    this.logManager.log(`Next link to test: ${JSON.stringify(this.nextLink)}`, this.buildState(), false);
+                    this.logManager.log(`Next link to test: ${JSON.stringify(this.activeLink)}`, this.buildState(), false);
 
                     if (result && result.message == "internal") {
                         this.setState(State.OBSERVE);
@@ -286,7 +267,7 @@ export default class AutoAnalyzer extends Agent {
     }
 
     async cleanup(): Promise<void> {
-        this.nextLink = null;
+        this.activeLink = null;
         this.queue = [];
         this.step = 0;
         this.goal = "Crawl the given page";
@@ -303,15 +284,10 @@ export default class AutoAnalyzer extends Agent {
     }
 
     getLinkInfoWithoutVisited(
-        links: LinkInfo[],
-        targetText: string
+        links: LinkInfo,
     ): Omit<LinkInfo, "visited"> | null {
-        if (!targetText) return null;
-        const found = links.find(link => link.description === targetText);
-        if (!found) return null;
-
         // Return a copy without 'visited'
-        const { visited, ...rest } = found;
+        const { visited, ...rest } = links;
         return rest;
     }
 }

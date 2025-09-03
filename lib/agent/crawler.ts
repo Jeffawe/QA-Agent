@@ -165,13 +165,13 @@ export class Crawler extends Agent {
                         break;
                     }
 
-                    const next = this.isCurrentPageVisited ? this.manualAnalyzer.nextLink : this.analyzer.nextLink;
-                    if (next) {
-                        PageMemory.markLinkVisited(this.currentUrl, next.description || next.href!);
+                    const active = this.isCurrentPageVisited ? this.manualAnalyzer.activeLink : this.analyzer.activeLink;
+                    if (active) {
+                        PageMemory.markLinkVisited(this.currentUrl, active.description || active.href!);
                         const finalUrl = page.url();
                         CrawlMap.recordPage(PageMemory.pages[this.currentUrl], this.sessionId);
                         PageMemory.pushToStack(this.currentUrl);
-                        CrawlMap.addEdge(this.currentUrl!, next.href!);
+                        CrawlMap.addEdge(this.currentUrl!, active.href!);
 
                         this.currentUrl = finalUrl;
                         this.setState(State.START);
