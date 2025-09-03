@@ -5,6 +5,7 @@ export interface Action {
     args: any[];
     reason: string;
     progressDescription?: string;
+    possibleActionSelected?: string;
     newGoal?: string;
     nextLink?: string;
     hasAchievedGoal?: boolean;

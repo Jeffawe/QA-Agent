@@ -6,8 +6,8 @@ import { setTimeout } from "node:timers/promises";
 import ManualAnalyzer from "./manualAnalyzer.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/autoActionService.js";
-import { getExternalLinks } from "../utility/functions.js";
 import AutoAnalyzer from "./autoanalyzer.js";
+import { UniqueInternalLinkExtractor } from "../utility/linkExtractor.js";
 
 export class AutoCrawler extends Agent {
     private isCurrentPageVisited = false;
@@ -83,8 +83,9 @@ export class AutoCrawler extends Agent {
                     // Record the page in memory if we haven’t seen it before
                     if (!PageMemory.pageExists(this.currentUrl)) {
                         const links: StageHandObserveResult[] = await this.stagehandSession.observe()
-                        const externalLinks = await getExternalLinks(links, this.currentUrl, page);
-                        this.logManager.log(`Links detected: ${links.length} are: ${JSON.stringify(links)}`, this.buildState(), false);
+                        const uniqueLinks = await UniqueInternalLinkExtractor.getUniqueInternalLinks(links, this.currentUrl, page);
+                        //const externalLinks = await getExternalLinks(uniqueLinks, this.currentUrl, page);
+                        this.logManager.log(`Links detected: ${uniqueLinks.length} out of ${links.length} are: ${JSON.stringify(uniqueLinks)}`, this.buildState(), false);
                         const pageDetails = {
                             title: this.currentUrl,
                             url: this.currentUrl,
@@ -93,7 +94,7 @@ export class AutoCrawler extends Agent {
                             visited: false,
                             screenshot: '',
                         };
-                        const linksConverted = this.convertElementsToLinks(externalLinks);
+                        const linksConverted = this.convertElementsToLinks(uniqueLinks);
                         const linkWithoutVisited = linksConverted.map(link => {
                             const { visited, ...rest } = link;
                             return rest;
@@ -157,12 +158,12 @@ export class AutoCrawler extends Agent {
 
                     if (this.isCurrentPageVisited) {
                         if (this.manualAnalyzer.isDone()) {
-                            this.logManager.log("Manual tester finished", this.buildState(), false);
+                            this.logManager.log("Manual analyzer finished", this.buildState(), false);
                             this.setState(State.ACT);
                         }
                     } else {
                         if (this.analyzer.isDone()) {
-                            this.logManager.log("Tester finished", this.buildState(), false);
+                            this.logManager.log("Analyzer finished", this.buildState(), false);
                             this.setState(State.ACT);
                         }
                     }

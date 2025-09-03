@@ -89,9 +89,13 @@ export const systemPromptJsonSchema = {
                 newGoal: {
                     type: "string",
                     description: "New mission goal for the next step"
+                },
+                possibleActionSelected: {
+                    type: "string",
+                    description: "The possible action you selected from the possible actions give to act on"
                 }
             },
-            required: ["step", "args", "reason", "newGoal"],
+            required: ["step", "args", "reason", "newGoal", "possibleActionSelected"],
             additionalProperties: false,
             description: "Action to take next"
         },
@@ -142,9 +146,13 @@ export const actionJsonSchema = {
         newGoal: {
             type: "string",
             description: "New mission goal for the next step"
+        },
+        possibleActionSelected: {
+            type: "string",
+            description: "The possible action you selected from the possible actions give to act on"
         }
     },
-    required: ["step", "args", "reason", "newGoal"],
+    required: ["step", "args", "reason", "newGoal", "possibleActionSelected"],
     additionalProperties: false
 };
 

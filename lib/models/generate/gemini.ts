@@ -382,7 +382,8 @@ export class GeminiLLm extends LLM {
             action: {
                 step: "no_op",
                 args: [],
-                reason: "LLM produced invalid response format"
+                reason: "LLM produced invalid response format",
+                possibleActionSelected: "",
             },
         };
 

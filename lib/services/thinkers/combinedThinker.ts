@@ -55,8 +55,8 @@ export class CombinedThinker extends Thinker {
                 - Goal: ${context.goal}
                 - Last Action: ${context.lastAction || "None"}
                 - Memory: ${context.memory.join("; ") || "None"}
-                - Possible Labels: ${context.possibleLabels.join("; ") || "None"}
-                (When using click action. Put the appropriate label tag (it must be in the list of possible labels provided) for the UI element box in the args list)
+                - Possible Actions: ${context.possibleLabels.join("; ") || "None"}
+                (When using click action. Put the appropriate label tag (it must be in the list of possible Actions provided) for the UI element box in the args list)
                 - Extra Info: ${extraInfo || "None"}
 
                 Respond with valid JSON only.
@@ -90,6 +90,7 @@ export class CombinedThinker extends Thinker {
                     step: "no_op",
                     reason: "LLM produced invalid JSON",
                     args: [],
+                    possibleActionSelected: ""
                 },
                 noErrors: false // Indicates that the action was not performed due to an error
             } satisfies ThinkResult;
@@ -114,7 +115,7 @@ export class CombinedThinker extends Thinker {
                     - Main Goal: ${context.mainGoal} (Full QA goal to complete)
                     - Last Action: ${context.lastAction || "None"}
                     - Memory: ${context.memory.join("; ") || "None"}
-                    - Possible Labels: ${context.possibleLabels.join("; ") || "None"}
+                    - Possible Actions: ${context.possibleLabels.join("; ") || "None"}
                     (This is the only list of available UI elements or links. Action must match one of these descriptions.)
                     - Extra Info (Validator Warnings): ${extraInfo || "None"}
     
@@ -149,6 +150,7 @@ export class CombinedThinker extends Thinker {
                     step: "no_op",
                     reason: "LLM produced invalid JSON",
                     args: [],
+                    possibleActionSelected: ""
                 },
                 noErrors: false // Indicates that the action was not performed due to an error
             } satisfies ThinkResult;

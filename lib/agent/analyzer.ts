@@ -163,8 +163,12 @@ export default class Analyzer extends Agent {
 
                     if (action.step === "click" && !this.checkifLabelValid(action.args[0])) {
                         this.logManager.error("Label is not valid", State.ERROR, false);
-                        this.response = "Validator warns that Label provided is not among the valid list. Return done step if there is nothing other to do"
-                        this.setState(State.OBSERVE);
+                        const warning = "Validator warns that Label provided is not among the valid list. Return done step if there is nothing other to do"
+                        this.bus.emit({
+                            ts: Date.now(),
+                            type: "validator_warning",
+                            message: warning
+                        });
                         break;
                     }
 
@@ -214,7 +218,7 @@ export default class Analyzer extends Agent {
 
                     const endTime = performance.now();
                     this.timeTaken = endTime - (this as any).startTime;
-                    
+
                     this.activeLink = null;
 
                     if (action.args && action.args.length > 0) {

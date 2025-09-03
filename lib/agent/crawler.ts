@@ -140,16 +140,16 @@ export class Crawler extends Agent {
                 }
 
                 case State.WAIT: {
-                    this.logManager.log("Waiting for tester to finish", this.buildState(), false);
+                    this.logManager.log("Waiting for analyzer to finish", this.buildState(), false);
 
                     if (this.isCurrentPageVisited) {
                         if (this.manualAnalyzer.isDone()) {
-                            this.logManager.log("Manual tester finished", this.buildState(), false);
+                            this.logManager.log("Manual analyzer finished", this.buildState(), false);
                             this.setState(State.ACT);
                         }
                     } else {
                         if (this.analyzer.isDone()) {
-                            this.logManager.log("Tester finished", this.buildState(), false);
+                            this.logManager.log("Analyzer finished", this.buildState(), false);
                             this.setState(State.ACT);
                         }
                     }

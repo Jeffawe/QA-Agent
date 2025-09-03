@@ -11,6 +11,7 @@ import { LLMUsageValidator } from './services/validators/llmValidator.js';
 import { logManagers } from './services/memory/logMemory.js';
 import { ThinkerValidator } from './services/validators/thinkerValidator.js';
 import { NewPageValidator } from './services/validators/newPageValidator.js';
+import { ValidatorWarningValidator } from './services/validators/validatorWarningValidator.js';
 
 let agent: BossAgent | null = null;
 
@@ -50,6 +51,7 @@ const createValidators = (sessionId: string): number => {
         new LLMUsageValidator(eventBus, sessionId);
         new ThinkerValidator(eventBus, sessionId);
         new NewPageValidator(eventBus, sessionId);
+        new ValidatorWarningValidator(eventBus, sessionId);
 
         let WebSocket_PORT = parseInt(process.env.WEBSOCKET_PORT || '3002');;
         if (process.env.NODE_ENV === 'production') {

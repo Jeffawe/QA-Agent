@@ -203,10 +203,19 @@ export default class AutoAnalyzer extends Agent {
                             specificLink = this.queue.find(link => link.description === action.args[0]);
                         }
 
-                        if (!specificLink) {
-                            throw new Error(`No link found for: ${action.step || action.args?.[0] || 'no search term'}`);
+                        if (!specificLink && action.possibleActionSelected) {
+                            specificLink = this.queue.find(link => link.description === action.possibleActionSelected);
                         }
 
+                        if (!specificLink) {
+                            const warning = "Validator warns that Action provided is not among the valid list. Please set step to a valid possible action from the list given or click done or all_done if you want to end the mission.";
+                            this.bus.emit({
+                                ts: Date.now(),
+                                type: "validator_warning",
+                                message: warning
+                            });
+                            break
+                        }
 
                         result = await this.localactionService.executeAction(action, specificLink, this.buildState());
                     } catch (error) {

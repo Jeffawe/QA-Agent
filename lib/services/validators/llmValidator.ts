@@ -1,5 +1,4 @@
 import { State } from "../../types.js";
-import { LogManager } from "../../utility/logManager.js";
 import { EventBus } from "../events/event.js";
 import { logManagers } from "../memory/logMemory.js";
 
