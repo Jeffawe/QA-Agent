@@ -7,18 +7,43 @@ export class PageMemory {
 
   static addPage(details: PageDetails) {
     if (!details.url) return;
-    if (!this.pages[details.url]) {
-      this.pages[details.url] = details;
+    const cleanUrl = PageMemory.cleanUrl(details.url);
+    if (!this.pages[cleanUrl]) {
+      this.pages[cleanUrl] = details;
+    }
+  }
+
+  static cleanUrl(url: string) {
+    try {
+      const u = new URL(url);
+
+      // Normalize hostname (strip www.)
+      let host = u.hostname.replace(/^www\./, "");
+
+      // Normalize path (remove trailing slash unless it's root)
+      let path = u.pathname === "/" ? "" : u.pathname.replace(/\/$/, "");
+
+      // Ignore search params and fragments
+      return host + path;
+    } catch {
+      // Fallback for malformed inputs like "https:jeffawe.com/"
+      return url
+        .replace(/^https?:\/\//, "")
+        .replace(/^www\./, "")
+        .replace(/\/$/, "")
+        .split("#")[0]
+        .split("?")[0];
     }
   }
 
   static addPage2(details: Omit<PageDetails, 'links'>, links: Omit<LinkInfo, 'visited'>[]) {
     if (!details.url) return;
-    if (!this.pages[details.url]) {
-      this.pages[details.url] = {
+    const cleanUrl = PageMemory.cleanUrl(details.url);
+    if (!this.pages[cleanUrl]) {
+      this.pages[cleanUrl] = {
         visited: false,
         title: details.title,
-        url: details.url,
+        url: cleanUrl,
         screenshot: details.screenshot,
         uniqueID: details.uniqueID,
         description: details.description,
@@ -28,12 +53,14 @@ export class PageMemory {
   }
 
   static markPageVisited(url: string) {
+    url = PageMemory.cleanUrl(url);
     if (this.pages[url]) {
       this.pages[url].visited = true;
     }
   }
 
   static isLinkVisited(url: string, identifier: string): boolean {
+    url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return false;
     const link = page.links.find(
@@ -44,12 +71,14 @@ export class PageMemory {
   }
 
   static addPageScreenshot(url: string, screenshot: string) {
+    url = PageMemory.cleanUrl(url);
     if (this.pages[url]) {
       this.pages[url].screenshot = screenshot;
     }
   }
 
   static addAnalysis(url: string, analysis: any, sessionId: string) {
+    url = PageMemory.cleanUrl(url);
     if (this.pages[url]) {
       this.pages[url].analysis = {
         ...this.pages[url].analysis,
@@ -61,10 +90,12 @@ export class PageMemory {
 
   ///True if there is a screenshot. False if not or doesn't exist
   static hasPageScreenshot(url: string): boolean {
+    url = PageMemory.cleanUrl(url);
     return !!this.pages[url]?.screenshot;
   }
 
   static markLinkVisited(url: string, identifier: string) {
+    url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return;
     const link = page.links.find(
@@ -76,44 +107,52 @@ export class PageMemory {
   }
 
   static getNextUnvisitedLink(url: string): LinkInfo | null {
+    url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return null;
     return page.links.find(link => !link.visited) || null;
   }
 
   static pageExists(url: string): boolean {
+    url = PageMemory.cleanUrl(url);
     return !!this.pages[url];
   }
 
   static isFullyExplored(url: string): boolean {
+    url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return true;
     return page.links.every(link => link.visited);
   }
 
   static removeLink(url: string, identifier: string) {
+    url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return;
     page.links = page.links.filter(link => link.description !== identifier);
   }
 
   static getAllUnvisitedLinks(url: string): LinkInfo[] {
+    url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return [];
     return page.links.filter(link => !link.visited);
   }
 
   static setAllLinksVisited(url: string) {
+    url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return;
     page.links.forEach(link => link.visited = true);
   }
 
   static pushToStack(url: string) {
+    url = PageMemory.cleanUrl(url);
     this.navStack.push(url);
   }
 
   static popFromStack(): string | undefined {
+    if (this.navStack.length === 0) return undefined;
     return this.navStack.pop();
   }
 
@@ -122,6 +161,7 @@ export class PageMemory {
   }
 
   static isPageVisited(url: string): boolean {
+    url = PageMemory.cleanUrl(url);
     return this.pages[url]?.visited || false;
   }
 }
