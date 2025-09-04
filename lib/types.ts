@@ -24,11 +24,6 @@ export interface Analysis {
     notes: string;
 }
 
-export interface TestResult {
-    success: boolean;
-    issues: string[];
-}
-
 export interface ActionResult {
     success: boolean;
     message: string;
@@ -39,7 +34,6 @@ export interface ThinkResult {
     action: Action;
     analysis?: Analysis;
     pageDetails?: LLMPageResult;
-    testResult?: TestResult
     noErrors?: boolean; // Indicates if the action was performed without errors
 }
 
@@ -180,4 +174,73 @@ export interface MiniAgentConfig<T extends BaseAgentDependencies = BaseAgentDepe
     dependent?: boolean; // If true, agent won't start until another agent triggers it
     dependencies?: Partial<T>; // Additional/override dependencies
     agentDependencies?: Namespaces[]; // Names of other agents this agent depends on
+}
+
+export enum UIElementType {
+    BUTTON = 'button',
+    TEXT_INPUT = 'text_input',
+    EMAIL_INPUT = 'email_input',
+    PASSWORD_INPUT = 'password_input',
+    NUMBER_INPUT = 'number_input',
+    DATE_INPUT = 'date_input',
+    FILE_INPUT = 'file_input',
+    TEXTAREA = 'textarea',
+    SELECT = 'select',
+    CHECKBOX = 'checkbox',
+    RADIO = 'radio',
+    RANGE = 'range',
+    COLOR = 'color',
+    SEARCH = 'search',
+    TEL = 'tel',
+    URL_INPUT = 'url_input',
+    TIME = 'time',
+    DATETIME_LOCAL = 'datetime_local',
+    WEEK = 'week',
+    MONTH = 'month',
+    FORM = 'form',
+    LINK = 'link',
+    IMAGE = 'image',
+    VIDEO = 'video',
+    AUDIO = 'audio',
+    CANVAS = 'canvas',
+    IFRAME = 'iframe',
+    UNKNOWN = 'unknown'
+}
+
+export interface ElementDetails {
+    tagName: string;
+    inputType?: string;
+    role?: string;
+    disabled?: boolean;
+    required?: boolean;
+    placeholder?: string;
+    value?: string;
+    options?: string[]; // for select elements
+    min?: string;
+    max?: string;
+    pattern?: string;
+    accept?: string; // for file inputs
+}
+
+
+export interface UIElementInfo extends StageHandObserveResult {
+    elementType: UIElementType;
+    elementDetails: ElementDetails;
+    testable: boolean;
+    extractedAttributes?: Record<string, string | null>;
+}
+
+export interface FormElementInfo extends UIElementInfo {
+    formElements?: UIElementInfo[];
+    formAction?: string;
+    formMethod?: string;
+}
+
+export interface UITesterResult {
+    element: UIElementInfo;
+    testType: 'positive' | 'negative';
+    testValue: any;
+    success: boolean;
+    error?: string;
+    response?: string;
 }

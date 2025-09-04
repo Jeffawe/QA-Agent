@@ -430,7 +430,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
 app.get('/test', async (req: Request, res: Response) => {
     try{
         const session = new StagehandSession('test_session');
-        const started = await session.start('https://www.jeffawe.com/');
+        const started = await session.start('https://forms.gle/r5cQQrEVoUodXvBv6');
         if(!started){
             res.status(500).send('Failed to start session.');
             return;
