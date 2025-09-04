@@ -2,8 +2,8 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { EventBus } from './event.js';
 import { PageDetails } from '../../types.js';
 import { LogManager } from '../../utility/logManager.js';
-import { CrawlMap } from '../../utility/crawlMap.js';
 import { logManagers } from '../memory/logMemory.js';
+import { PageMemory } from '../memory/pageMemory.js';
 
 interface WebSocketData {
     message?: string;
@@ -61,7 +61,7 @@ export class WebSocketEventBridge {
 
             this.sendToClient(ws, 'INITIAL_DATA', {
                 messages: this.logManager.getLogs(),
-                pages: CrawlMap.getPages(),
+                pages: PageMemory.getAllPages(),
                 timestamp: Date.now()
             });
 

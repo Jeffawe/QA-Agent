@@ -18,6 +18,7 @@ import { clearSessions, deleteSession, getSession, getSessions, getSessionSize, 
 import { clearSessionApiKeys, deleteSessionApiKey, getApiKeyForAgent, storeSessionApiKey } from './services/memory/apiMemory.js';
 import { LogManager } from './utility/logManager.js';
 import StagehandSession from './browserAuto/stagehandSession.js';
+import { UIElementGrouper } from './utility/links/linkGrouper.js';
 
 dotenv.config();
 
@@ -436,6 +437,12 @@ app.get('/test', async (req: Request, res: Response) => {
         }
         const observations = await session.observe();
         console.log(observations);
+        if(!session.page){
+            res.status(500).send('Failed to start session.');
+            return;
+        }
+        const groupedElements = await UIElementGrouper.groupUIElements(observations, session.page);
+        console.log(`Grouped Elements of page:`, groupedElements);
         await session.close();
         res.send('Test completed successfully!');
     }catch(error){

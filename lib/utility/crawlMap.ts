@@ -1,5 +1,3 @@
-/* infrastructure/logging/crawlMap.ts
-   ---------------------------------------------------------------------- */
 /* eslint-disable no-console */
 import { writeFileSync, existsSync } from "node:fs";
 import { join, dirname, isAbsolute } from "node:path";
@@ -7,6 +5,7 @@ import { mkdirSync } from "node:fs";
 import type { PageDetails } from "../types.js";
 import { LogManager } from "./logManager.js";
 import { eventBusManager } from "../services/events/eventBus.js";
+import { PageMemory } from "../services/memory/pageMemory.js";
 
 export interface Edge { from: string; to: string }
 
@@ -16,10 +15,7 @@ export class CrawlMap {
   private static file = "crawl_map.md";
 
   /** order of visitation (urls) */
-  private static navOrder: string[] = [];
-
-  /** url → PageDetails */
-  private static pages = new Map<string, PageDetails>();
+  private static navOrder: Set<string> = new Set();
 
   /** “from-->to” edge list (kept for completeness) */
   private static edges: Set<string> = new Set();
@@ -40,39 +36,21 @@ export class CrawlMap {
     this.write();        // create / clear file
   }
 
-  static getPages(): PageDetails[] { return Array.from(this.pages.values()); }
-
   /** Register page details (call as soon as PageDetails is ready) */
   static recordPage(page: PageDetails, sessionId: string) {
     try {
       if (!this.initialised) this.init();
       const eventBus = eventBusManager.getOrCreateBus(sessionId);
       eventBus.emit({ ts: Date.now(), type: "crawl_map_updated", page });
-      if (!this.pages.has(page.url ?? page.uniqueID)) {
-        this.navOrder.push(page.url ?? page.uniqueID);
+      if (!PageMemory.hasPage(page.url ?? page.uniqueID)) {
+        const url = PageMemory.addPageWithURL(page.url ?? page.uniqueID);
+        this.navOrder.add(url);
       }
-      this.pages.set(page.url ?? page.uniqueID, page);
       this.write();
     } catch (e) {
       console.error("CrawlMap.recordPage error:", e);
       throw e;
     }
-  }
-
-  static addAnalysis(url: string, analysis: any, sessionId: string) {
-    if (!this.pages.has(url)) return;
-    const page = this.pages.get(url);
-    if (!page) return;
-    page.analysis = analysis;
-    this.recordPage(page, sessionId);
-  }
-
-  static updateAnalysis(url: string, analysis: any, sessionId: string) {
-    if (!this.pages.has(url)) return;
-    const page = this.pages.get(url);
-    if (!page) return;
-    page.analysis = { ...page.analysis, ...analysis };
-    this.recordPage(page, sessionId);
   }
 
   /** Optional: keep edge list if you still need it elsewhere */
@@ -91,14 +69,14 @@ export class CrawlMap {
     /* ---------- quick overview ---------- */
     md += "## Quick overview\n\n";
     for (const url of this.navOrder) {
-      const title = this.pages.get(url)?.title ?? url;
+      const title = PageMemory.getPage(url)?.title ?? url;
       md += `| - ${title}\n`;
     }
     md += "\n---\n";
 
     /* ---------- per-page blocks ---------- */
     this.navOrder.forEach((url, idx) => {
-      const page = this.pages.get(url);
+      const page = PageMemory.getPage(url);
       if (!page) return;
 
       const heading = `### ${idx + 1}. ${page.title || "(untitled)"}  \n`;

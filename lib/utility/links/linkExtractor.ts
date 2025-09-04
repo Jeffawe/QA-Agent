@@ -1,8 +1,7 @@
-import { StageHandObserveResult, LinkInfo } from "../types.js";
+import { StageHandObserveResult, LinkInfo } from "../../types.js"
 import { Page } from "@browserbasehq/stagehand";
 
 export class UniqueInternalLinkExtractor {
-
     /**
      * Extract unique internal links from Stagehand observe results
      * Gets one link per unique path on the same domain
@@ -12,7 +11,6 @@ export class UniqueInternalLinkExtractor {
         currentUrl: string,
         page: Page
     ): Promise<StageHandObserveResult[]> {
-
         const currentDomain = new URL(currentUrl).hostname;
         const currentPath = new URL(currentUrl).pathname;
         const seenPaths = new Set<string>();

@@ -7,7 +7,7 @@ import ManualAnalyzer from "./manualAnalyzer.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/autoActionService.js";
 import AutoAnalyzer from "./autoanalyzer.js";
-import { UniqueInternalLinkExtractor } from "../utility/linkExtractor.js";
+import { UniqueInternalLinkExtractor } from "../utility/links/linkExtractor.js";
 
 export class AutoCrawler extends Agent {
     private isCurrentPageVisited = false;

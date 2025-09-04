@@ -10,12 +10,45 @@ export class PageMemory {
     const cleanUrl = PageMemory.cleanUrl(details.url);
     if (!this.pages[cleanUrl]) {
       this.pages[cleanUrl] = details;
+    } else {
+      this.pages[cleanUrl] = {
+        ...this.pages[cleanUrl],
+        ...details
+      }
     }
   }
 
-  static getPage(url: string) {
+  static addPageWithURL(url: string): string {
+    if (!url) throw new Error("No URL provided");
+    const cleanUrl = PageMemory.cleanUrl(url);
+    if (!this.pages[cleanUrl]) {
+      this.pages[cleanUrl] = {
+        url: cleanUrl,
+        title: "",
+        uniqueID: "",
+        description: "",
+        visited: false,
+        links: []
+      };
+    }
+
+    return cleanUrl;
+  }
+
+  // Check if a page exists
+  // @returns {boolean} true if page exists
+  static hasPage(url: string): boolean {
+    url = PageMemory.cleanUrl(url);
+    return !!this.pages[url];
+  }
+
+  static getPage(url: string): PageDetails {
     const cleanUrl = PageMemory.cleanUrl(url);
     return this.pages[cleanUrl];
+  }
+
+  static getAllPages(): PageDetails[] {
+    return Object.values(this.pages);
   }
 
   static cleanUrl(url: string) {
