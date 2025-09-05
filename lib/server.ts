@@ -255,7 +255,7 @@ app.get('/start', (req: Request, res: Response) => {
 });
 
 app.post('/start/:sessionId', async (req: Request, res: Response) => {
-    const { goal, url } = req.body;
+    const { goal, url, data } = req.body;
     const sessionId = req.params.sessionId;
 
     if (getSessionSize() >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
@@ -284,7 +284,7 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
         }));
 
         const worker = new Worker(join(__dirname, 'agent-worker.js'), {
-            workerData: { sessionId, url }
+            workerData: { sessionId, url, data }
         });
 
         const websocketPort = await setUpWorkerEvents(worker, sessionId, goal, serializableConfigs);
@@ -368,7 +368,7 @@ app.get('/stop', async (req: Request, res: Response) => {
 })
 
 app.post('/test/:key', async (req: Request, res: Response) => {
-    const { goal, url } = req.body;
+    const { goal, url, data } = req.body;
     const key = req.params.key;
     const sessionId = "test_" + key;
 
@@ -404,7 +404,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
         }));
 
         const worker = new Worker(join(__dirname, 'agent-worker.js'), {
-            workerData: { sessionId, url }
+            workerData: { sessionId, url, data }
         });
 
         const websocketPort = await setUpWorkerEvents(worker, sessionId, goal, serializableConfigs);

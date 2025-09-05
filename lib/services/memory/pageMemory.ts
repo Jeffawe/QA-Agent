@@ -1,4 +1,4 @@
-import { LinkInfo, PageDetails } from '../../types.js';
+import { LinkInfo, PageDetails, UITesterResult } from '../../types.js';
 import { CrawlMap } from '../../utility/crawlMap.js';
 
 export class PageMemory {
@@ -175,6 +175,17 @@ export class PageMemory {
     const page = this.pages[url];
     if (!page) return [];
     return page.links.filter(link => !link.visited);
+  }
+
+  static setTestResults(url: string, testResults: UITesterResult[]) {
+    url = PageMemory.cleanUrl(url);
+    const page = this.pages[url];
+    if (!page) return;
+    page.testResults = testResults;
+  }
+
+  static clear() {
+    PageMemory.pages = {};
   }
 
   static setAllLinksVisited(url: string) {

@@ -12,6 +12,8 @@ import { logManagers } from './services/memory/logMemory.js';
 import { ThinkerValidator } from './services/validators/thinkerValidator.js';
 import { NewPageValidator } from './services/validators/newPageValidator.js';
 import { ValidatorWarningValidator } from './services/validators/validatorWarningValidator.js';
+import { PageMemory } from './services/memory/pageMemory.js';
+import { dataMemory } from './services/memory/dataMemory.js';
 
 let agent: BossAgent | null = null;
 
@@ -191,6 +193,8 @@ const cleanup = async () => {
 
     eventBusManager.clear();
     logManagers.clear();
+    PageMemory.clear();
+    dataMemory.clear();
 };
 
 

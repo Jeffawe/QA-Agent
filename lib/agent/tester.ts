@@ -4,6 +4,7 @@ import AutoActionService from "../services/actions/autoActionService.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import { GroupedUIElements, UIElementGrouper } from "../utility/links/linkGrouper.js";
 import { Page } from "@browserbasehq/stagehand";
+import { PageMemory } from "../services/memory/pageMemory.js";
 
 export default class Tester extends Agent {
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
@@ -67,6 +68,8 @@ export default class Tester extends Agent {
             return;
         }
 
+        this.currentUrl = this.stagehandSession.page!.url();
+
         try {
             switch (this.state) {
                 case State.START:
@@ -99,6 +102,7 @@ export default class Tester extends Agent {
 
                 case State.VALIDATE:
                     await this.validateResults();
+                    PageMemory.setTestResults(this.currentUrl, this.testResults);
                     this.setState(State.DONE);
                     break;
 
@@ -131,6 +135,33 @@ export default class Tester extends Agent {
         this.setState(State.ACT);
     }
 
+    private async validateResults(): Promise<void> {
+        this.logManager.log('Validating test results', this.buildState(), true);
+
+        const totalTests = this.testResults.length;
+        const successfulTests = this.testResults.filter(r => r.success).length;
+        const failedTests = totalTests - successfulTests;
+        const positiveTests = this.testResults.filter(r => r.testType === 'positive').length;
+        const negativeTests = this.testResults.filter(r => r.testType === 'negative').length;
+
+        const summary = {
+            totalTests,
+            successfulTests,
+            failedTests,
+            positiveTests,
+            negativeTests,
+            successRate: totalTests > 0 ? (successfulTests / totalTests * 100).toFixed(2) + '%' : '0%'
+        };
+
+        this.logManager.log(`Test Summary: ${JSON.stringify(summary)}`, this.buildState(), true);
+
+        // Log failed tests for review
+        const failedTestsDetails = this.testResults.filter(r => !r.success);
+        if (failedTestsDetails.length > 0) {
+            this.logManager.error(`Failed tests: ${JSON.stringify(failedTestsDetails, null, 2)}`, this.buildState(), true);
+        }
+    }
+
     private async testButtons(): Promise<void> {
         if (!this.groupedElements || this.groupedElements.buttons.length === 0) {
             return;
@@ -145,22 +176,109 @@ export default class Tester extends Agent {
 
     private async testButtonElement(button: UIElementInfo): Promise<void> {
         try {
-            // Positive test: Normal click
-            const initialUrl = this.stagehandSession.page!.url();
-            await this.stagehandSession.page!.click(button.selector);
+            const initialUrl = this.page.url();
 
-            // Wait a bit for potential navigation or modal
-            await this.stagehandSession.page!.waitForTimeout(1000);
+            // Try to detect if this button will navigate by checking its attributes
+            const buttonInfo = await this.page.evaluate((selector) => {
+                let el: Element | null = null;
 
-            const newUrl = this.stagehandSession.page!.url();
+                if (selector.startsWith('xpath=')) {
+                    const xpath = selector.substring(6);
+                    const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                    el = result.singleNodeValue as Element;
+                } else {
+                    el = document.querySelector(selector);
+                }
+
+                if (!el) return null;
+
+                const href = el.getAttribute('href');
+                const onclick = el.getAttribute('onclick');
+                const formAction = el.closest('form')?.getAttribute('action');
+                const isSubmit = el.getAttribute('type') === 'submit';
+                const hasTarget = el.getAttribute('target');
+
+                return {
+                    href,
+                    onclick,
+                    formAction,
+                    isSubmit,
+                    hasTarget,
+                    tagName: el.tagName.toLowerCase(),
+                    type: el.getAttribute('type')
+                };
+            }, button.selector);
+
+
+            // Strategy 2: Normal click with navigation back if needed
+            await this.page.click(button.selector);
+
+            // Wait for potential navigation, modal, or other effects
+            await this.page.waitForTimeout(1500);
+
+            const newUrl = this.page.url();
             const navigationOccurred = initialUrl !== newUrl;
+
+            let responseMessage = '';
+
+            if (navigationOccurred) {
+                responseMessage = `Navigated to: ${newUrl}`;
+
+                // Navigate back to original page
+                try {
+                    await this.page.goBack();
+                    await this.page.waitForTimeout(1000);
+
+                    // Verify we're back on the original page
+                    const backUrl = this.page.url();
+                    if (backUrl === initialUrl) {
+                        responseMessage += ' (navigated back successfully)';
+                    } else {
+                        // If back didn't work, navigate directly to original URL
+                        await this.page.goto(initialUrl);
+                        await this.page.waitForTimeout(1000);
+                        responseMessage += ' (returned to original page via direct navigation)';
+                    }
+                } catch (backError) {
+                    // If going back fails, try direct navigation to original URL
+                    try {
+                        await this.page.goto(initialUrl);
+                        await this.page.waitForTimeout(1000);
+                        responseMessage += ' (returned via direct navigation after back failed)';
+                    } catch (directNavError) {
+                        responseMessage += ` (WARNING: Could not return to original page: ${directNavError})`;
+                        // This is a more serious issue, but we'll continue testing
+                    }
+                }
+            } else {
+                // Check if a modal or overlay appeared
+                const hasModal = await this.page.evaluate(() => {
+                    const modals = document.querySelectorAll('[role="dialog"], .modal, .popup, .overlay, [aria-modal="true"]');
+                    return modals.length > 0;
+                });
+
+                if (hasModal) {
+                    responseMessage = 'Button opened modal/dialog';
+
+                    // Try to close modal with Escape key
+                    try {
+                        await this.page.keyboard.press('Escape');
+                        await this.page.waitForTimeout(500);
+                        responseMessage += ' (modal closed with Escape)';
+                    } catch (escapeError) {
+                        responseMessage += ' (modal may still be open)';
+                    }
+                } else {
+                    responseMessage = 'Button clicked successfully (no navigation/modal detected)';
+                }
+            }
 
             this.testResults.push({
                 element: button,
                 testType: 'positive',
                 testValue: 'click',
                 success: true,
-                response: navigationOccurred ? `Navigated to: ${newUrl}` : 'Button clicked successfully'
+                response: responseMessage
             });
 
             this.logManager.log(`Button test passed: ${button.description}`, this.buildState(), false);
@@ -513,27 +631,59 @@ export default class Tester extends Agent {
     private async testLinkElement(link: UIElementInfo): Promise<void> {
         try {
             const initialUrl = this.page.url();
+
+            // Strategy 2: Normal click with navigation back
             await this.page.click(link.selector);
 
-            // Wait for potential navigation
+            // Wait for navigation
             await this.page.waitForTimeout(1500);
 
             const newUrl = this.page.url();
             const navigationOccurred = initialUrl !== newUrl;
+
+            let responseMessage = '';
+
+            if (navigationOccurred) {
+                responseMessage = `Navigated to: ${newUrl}`;
+
+                // Navigate back to original page
+                try {
+                    await this.page.goBack();
+                    await this.page.waitForTimeout(1000);
+
+                    // Verify we're back
+                    const backUrl = this.page.url();
+                    if (backUrl === initialUrl) {
+                        responseMessage += ' (navigated back successfully)';
+                    } else {
+                        // Direct navigation if back didn't work
+                        await this.page.goto(initialUrl);
+                        await this.page.waitForTimeout(1000);
+                        responseMessage += ' (returned via direct navigation)';
+                    }
+                } catch (backError) {
+                    // Fallback to direct navigation
+                    try {
+                        await this.page.goto(initialUrl);
+                        await this.page.waitForTimeout(1000);
+                        responseMessage += ' (returned via direct navigation after back failed)';
+                    } catch (directNavError) {
+                        responseMessage += ` (WARNING: Could not return to original page: ${directNavError})`;
+                    }
+                }
+            } else {
+                responseMessage = 'Link clicked (no navigation detected - may be anchor link or JavaScript)';
+            }
 
             this.testResults.push({
                 element: link,
                 testType: 'positive',
                 testValue: 'click',
                 success: true,
-                response: navigationOccurred ? `Navigated to: ${newUrl}` : 'Link clicked (no navigation)'
+                response: responseMessage
             });
 
-            // Navigate back if we moved to a new page
-            if (navigationOccurred) {
-                await this.page.goBack();
-                await this.page.waitForTimeout(1000);
-            }
+            this.logManager.log(`Link test passed: ${link.description}`, this.buildState(), false);
 
         } catch (error) {
             this.testResults.push({
@@ -543,6 +693,8 @@ export default class Tester extends Agent {
                 success: false,
                 error: String(error)
             });
+
+            this.logManager.error(`Link test failed: ${link.description} - ${error}`, this.buildState(), false);
         }
     }
 
@@ -702,33 +854,6 @@ export default class Tester extends Agent {
                 success: false,
                 error: String(error)
             });
-        }
-    }
-
-    private async validateResults(): Promise<void> {
-        this.logManager.log('Validating test results', this.buildState(), true);
-
-        const totalTests = this.testResults.length;
-        const successfulTests = this.testResults.filter(r => r.success).length;
-        const failedTests = totalTests - successfulTests;
-        const positiveTests = this.testResults.filter(r => r.testType === 'positive').length;
-        const negativeTests = this.testResults.filter(r => r.testType === 'negative').length;
-
-        const summary = {
-            totalTests,
-            successfulTests,
-            failedTests,
-            positiveTests,
-            negativeTests,
-            successRate: totalTests > 0 ? (successfulTests / totalTests * 100).toFixed(2) + '%' : '0%'
-        };
-
-        this.logManager.log(`Test Summary: ${JSON.stringify(summary)}`, this.buildState(), true);
-
-        // Log failed tests for review
-        const failedTestsDetails = this.testResults.filter(r => !r.success);
-        if (failedTestsDetails.length > 0) {
-            this.logManager.error(`Failed tests: ${JSON.stringify(failedTestsDetails, null, 2)}`, this.buildState(), true);
         }
     }
 

@@ -143,6 +143,7 @@ export interface PageDetails {
     uniqueID: string;
     screenshot?: string;
     analysis?: Analysis;
+    testResults?: UITesterResult[];
     description: string;
     visited: boolean;
     links: LinkInfo[];
