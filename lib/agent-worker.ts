@@ -22,7 +22,7 @@ const initializeWorker = async () => {
         const { sessionId } = workerData;
 
         // Create validators in the worker
-        const websocketPort = createValidators(sessionId);
+        const websocketPort = createValidatorsAsync(sessionId);
 
         const logManager = logManagers.getOrCreateManager(sessionId);
 
@@ -44,10 +44,14 @@ const initializeWorker = async () => {
     }
 };
 
-const createValidators = (sessionId: string): number => {
+const createValidatorsAsync = async (sessionId: string): Promise<number> => {
     try {
+        console.log(`🔨 Creating validators for session ${sessionId}...`);
+
         const eventBus = eventBusManager.getOrCreateBus(sessionId);
 
+        // Create validators
+        console.log(`📋 Creating action validators...`);
         new ActionSpamValidator(eventBus, sessionId);
         new ErrorValidator(eventBus, sessionId);
         new LLMUsageValidator(eventBus, sessionId);
@@ -55,15 +59,29 @@ const createValidators = (sessionId: string): number => {
         new NewPageValidator(eventBus, sessionId);
         new ValidatorWarningValidator(eventBus, sessionId);
 
-        let WebSocket_PORT = parseInt(process.env.WEBSOCKET_PORT || '3002');;
+        console.log(`🌐 Setting up WebSocket server...`);
+
+        let WebSocket_PORT = parseInt(process.env.WEBSOCKET_PORT || '3002');
         if (process.env.NODE_ENV === 'production') {
-            WebSocket_PORT = 0;
+            WebSocket_PORT = 0; // Let system assign port
         }
 
+        console.log(`🔌 Creating WebSocket on port ${WebSocket_PORT === 0 ? 'auto' : WebSocket_PORT}...`);
+
+        // Create WebSocket bridge
         const webSocketEventBridge = new WebSocketEventBridge(eventBus, sessionId, WebSocket_PORT);
-        return webSocketEventBridge.getPort();
+
+        // WAIT for the WebSocket server to be ready
+        await webSocketEventBridge.waitForReady();
+
+        // Now get the actual port
+        const port = webSocketEventBridge.getPort();
+
+        console.log(`✅ WebSocket server ready on port ${port}`);
+        return port;
+
     } catch (error) {
-        console.error('Error creating validators:', error);
+        console.error('❌ Error in createValidatorsAsync:', error);
         throw error;
     }
 };

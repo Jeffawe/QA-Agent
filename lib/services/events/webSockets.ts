@@ -34,20 +34,46 @@ export class WebSocketEventBridge {
     private clients: Set<WebSocket>;
     private wss: WebSocketServer;
     private logManager: LogManager
-    private port: number
+    private port: number;
+    private readyPromise: Promise<void>;
+    private isReady: boolean = false;
 
     constructor(private eventBus: EventBus, private sessionId: string, port: number) {
         this.eventBus = eventBus;
         this.clients = new Set();
         this.logManager = logManagers.getOrCreateManager(sessionId);
-        this.port = port
+        this.port = port;
 
         // Create WebSocket server
         this.wss = new WebSocketServer({ port: this.port });
 
-        this.port = (this.wss.address() as any)?.port || port;
-        console.log(`🚀 WebSocket server started on port ${this.port}`);
+        // Create a promise that resolves when the server is ready
+        this.readyPromise = new Promise((resolve, reject) => {
+            // Wait for the server to start listening
+            this.wss.on('listening', () => {
+                // NOW get the actual port
+                const address = this.wss.address();
+                if (address && typeof address === 'object') {
+                    this.port = address.port;
+                }
+                console.log(`🚀 WebSocket server started on port ${this.port}`);
+                this.isReady = true;
+                resolve();
+            });
 
+            this.wss.on('error', (error) => {
+                console.error('❌ WebSocket server error:', error);
+                reject(error);
+            });
+        });
+
+        // Set up the rest after the promise is created
+        this.setupConnectionHandlers();
+        this.setupEventListeners();
+    }
+
+    // Separate method for connection handling
+    private setupConnectionHandlers() {
         // Handle new client connections
         this.wss.on('connection', (ws: WebSocket) => {
             console.log('📞 New frontend client connected');
@@ -76,12 +102,17 @@ export class WebSocketEventBridge {
                 this.clients.delete(ws);
             });
         });
+    }
 
-        // Set up event listeners
-        this.setupEventListeners();
+    // Method to wait for the server to be ready
+    async waitForReady(): Promise<void> {
+        await this.readyPromise;
     }
 
     getPort(): number {
+        if (!this.isReady) {
+            console.warn('⚠️ WebSocket server not ready yet, port may be incorrect');
+        }
         return this.port;
     }
 
