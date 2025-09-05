@@ -22,11 +22,14 @@ const initializeWorker = async () => {
         const { sessionId } = workerData;
 
         // Create validators in the worker
-        const websocketPort = createValidatorsAsync(sessionId);
+        const websocketPort = await createValidatorsAsync(sessionId);
 
+        console.log('✅ createValidatorsAsync completed, port:', websocketPort);
         const logManager = logManagers.getOrCreateManager(sessionId);
-
-        // Notify parent process that initialization is complete
+        console.log('✅ logManager created');
+        logManager.log(`Worker initialized for session ${sessionId} with WebSocket port ${websocketPort}`, State.INFO, false);
+        console.log('✅ log written');
+        console.log('About to postMessage with:', { websocketPort, sessionId });
         parentPort?.postMessage({
             type: 'initialized',
             websocketPort: websocketPort
@@ -41,6 +44,8 @@ const initializeWorker = async () => {
             type: 'error',
             error: error instanceof Error ? error.message : String(error)
         });
+
+        process.exit(1);
     }
 };
 
