@@ -23,7 +23,7 @@ export class PageMemory {
     const cleanUrl = PageMemory.cleanUrl(url);
     if (!this.pages[cleanUrl]) {
       this.pages[cleanUrl] = {
-        url: cleanUrl,
+        url: url,
         title: "",
         uniqueID: "",
         description: "",
@@ -81,7 +81,7 @@ export class PageMemory {
       this.pages[cleanUrl] = {
         visited: false,
         title: details.title,
-        url: cleanUrl,
+        url: details.url,
         screenshot: details.screenshot,
         uniqueID: details.uniqueID,
         description: details.description,
@@ -185,7 +185,6 @@ export class PageMemory {
   }
 
   static pushToStack(url: string) {
-    url = PageMemory.cleanUrl(url);
     this.navStack.push(url);
   }
 

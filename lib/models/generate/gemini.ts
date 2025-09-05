@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import { LLM } from "../../utility/abstract.js";
-import { Action, ThinkResult, Namespaces, State } from "../../types.js";
+import { Action, ThinkResult, Namespaces, State, TokenUsage } from "../../types.js";
 import fs from 'fs';
 import path from 'path';
 import { getSystemPrompt, getSystemSchema, STOP_LEVEL_ERRORS } from "./prompts.js";
@@ -294,23 +294,15 @@ export class GeminiLLm extends LLM {
                 throw new Error("No response from Gemini LLM");
             }
 
-            if (response) {
-                this.eventBus?.emit({
-                    ts: Date.now(),
-                    type: "llm_call",
-                    model_name: "gemini-2.5-flash",
-                    promptTokens: prompt.length, // approximate: 1 token ~ 4 characters
-                    respTokens: response.length ?? 0, // approximate again
-                });
-            } else {
-                this.eventBus?.emit({
-                    ts: Date.now(),
-                    type: "llm_call",
-                    model_name: "gemini-2.5-flash",
-                    promptTokens: prompt.length, // approximate: 1 token ~ 4 characters
-                    respTokens: 0, // approximate again
-                });
-            }
+            const tokenUsage: TokenUsage = this.calculateTokenUsage(prompt, systemInstruction, imagePath, response.content);
+
+            this.eventBus?.emit({
+                ts: Date.now(),
+                type: "llm_call",
+                model_name: "gemini-2.5-flash",
+                promptTokens: tokenUsage.promptTokens, // approximate: 1 token ~ 4 characters
+                respTokens: tokenUsage.responseTokens ?? 0, // approximate again
+            });
 
             const finalContent = response?.content || response;
             const logContent = typeof finalContent === 'string'
@@ -318,7 +310,7 @@ export class GeminiLLm extends LLM {
                 : JSON.stringify(finalContent, null, 2);
             this.logManager.log(logContent, State.INFO, true);
             return recurrent ? this.parseActionFromResponse(finalContent) : this.parseDecisionFromResponse(finalContent);
-        }catch (error) {
+        } catch (error) {
             const err = error as Error;
 
             const isStopLevel = STOP_LEVEL_ERRORS.some(stopError =>

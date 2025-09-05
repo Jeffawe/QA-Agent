@@ -1,7 +1,8 @@
-import { GetNextActionContext, ThinkResult, ImageData, Action, NamespacedState, State, Namespaces } from "../types.js";
+import { GetNextActionContext, ThinkResult, ImageData, Action, NamespacedState, State, Namespaces, TokenUsage } from "../types.js";
 import { EventBus } from "../services/events/event.js";
 import { LogManager } from "./logManager.js";
 import { logManagers } from "../services/memory/logMemory.js";
+import * as fs from "fs";
 
 export abstract class Thinker {
     protected modelClient: LLM | null = null;
@@ -27,6 +28,107 @@ export abstract class LLM {
     abstract generateTextResponse(prompt: string): Promise<Action>;
 
     abstract generateMultimodalAction(prompt: string, imagePath: string, recurrent: boolean, agentName: Namespaces): Promise<ThinkResult>
+
+    /**
+     * More accurate token counting using a simple tokenizer approximation
+     */
+    protected estimateTokens(text: string): number {
+        if (!text) return 0;
+
+        // More sophisticated estimation than just character count
+        // This accounts for common patterns in text tokenization
+        const words = text.trim().split(/\s+/);
+        const totalChars = text.length;
+
+        // Average tokens per word is roughly 1.3 for English
+        // But also consider character density for non-word tokens
+        const wordBasedEstimate = words.length * 1.3;
+        const charBasedEstimate = totalChars / 4;
+
+        // Take the higher estimate to be conservative
+        return Math.ceil(Math.max(wordBasedEstimate, charBasedEstimate));
+    }
+
+    /**
+     * Calculate image token usage based on image dimensions and format
+     */
+    protected calculateImageTokens(imagePath: string): number {
+        try {
+            const stats = fs.statSync(imagePath);
+            const fileSizeKB = stats.size / 1024;
+
+            // Gemini token calculation is complex and depends on:
+            // - Image resolution
+            // - Image format
+            // - Model version
+
+            // For Gemini 2.5 Flash, rough estimates:
+            // - Small images (~100KB): ~250-500 tokens
+            // - Medium images (~500KB): ~750-1500 tokens  
+            // - Large images (1MB+): ~1500-3000 tokens
+
+            if (fileSizeKB < 100) {
+                return 400; // Conservative estimate for small images
+            } else if (fileSizeKB < 500) {
+                return Math.ceil(fileSizeKB * 2.5); // ~2.5 tokens per KB
+            } else if (fileSizeKB < 1000) {
+                return Math.ceil(fileSizeKB * 2); // ~2 tokens per KB
+            } else {
+                return Math.ceil(fileSizeKB * 1.5); // ~1.5 tokens per KB for large images
+            }
+        } catch (error) {
+            return 1000; // Default conservative estimate
+        }
+    }
+
+    /**
+     * Calculate tokens for structured response
+     */
+    protected calculateResponseTokens(response: any): number {
+        if (!response) return 0;
+
+        let responseText: string;
+
+        if (typeof response === 'string') {
+            responseText = response;
+        } else if (typeof response === 'object') {
+            // For structured responses, convert to JSON string
+            responseText = JSON.stringify(response);
+        } else {
+            responseText = String(response);
+        }
+
+        return this.estimateTokens(responseText);
+    }
+
+    /**
+     * Calculate total token usage for a multimodal request
+     */
+    protected calculateTokenUsage(
+        prompt: string,
+        systemInstruction: string,
+        imagePath: string | null,
+        response: any
+    ): TokenUsage {
+        const promptTokens = this.estimateTokens(prompt);
+        const systemTokens = this.estimateTokens(systemInstruction);
+        const imageTokens = imagePath ? this.calculateImageTokens(imagePath) : 0;
+        let responseTokens = 0;
+
+        if (response) {
+            responseTokens = this.calculateResponseTokens(response);
+        }
+
+
+        const totalPromptTokens = promptTokens + systemTokens + imageTokens;
+
+        return {
+            promptTokens: totalPromptTokens,
+            responseTokens,
+            totalTokens: totalPromptTokens + responseTokens,
+            imageTokens
+        };
+    }
 }
 
 export interface BaseAgentDependencies {
@@ -196,7 +298,7 @@ export abstract class Agent {
 
     // Optional hook for when the agent reaches DONE state
     public onDone?(): void {
-        if(this.requiredAgents.length === 0 ) return;
+        if (this.requiredAgents.length === 0) return;
         for (const agent of this.requiredAgents) {
             if (!agent.isDone()) {
                 this.logManager.log(`Waiting for required agent ${agent.name} to finish`, this.buildState(), false);

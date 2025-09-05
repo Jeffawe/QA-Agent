@@ -454,8 +454,10 @@ app.get('/test', async (req: Request, res: Response) => {
 // Endpoint to receive and encrypt API key
 app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
     try {
-        const { apiKey } = req.body;
+        const { apiKey, testKey } = req.body;
         const { sessionId } = req.params;
+
+        let newApiKey = apiKey;
 
         if (!apiKey) {
             res.status(400).json({ error: 'API key is required' });
@@ -467,8 +469,13 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
             return;
         }
 
+        if(testKey && apiKey.startsWith('TEST') && testKey == process.env.TEST_KEY){
+            console.log('Test API key received');
+            newApiKey = process.env.TEST_API_KEY;
+        }
+
         // Store encrypted key mapped to sessionId
-        storeSessionApiKey(sessionId, apiKey);
+        storeSessionApiKey(sessionId, newApiKey ?? apiKey);
 
         console.log(`🔑 API key stored for session ${sessionId}`);
 

@@ -30,6 +30,13 @@ export interface ActionResult {
     actionTaken: string;
 }
 
+export interface TokenUsage {
+    promptTokens: number;
+    responseTokens: number;
+    totalTokens: number;
+    imageTokens?: number;
+}
+
 export interface ThinkResult {
     action: Action;
     analysis?: Analysis;
