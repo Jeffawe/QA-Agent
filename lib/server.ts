@@ -396,15 +396,9 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
 
         // Send appropriate error response
         if (error instanceof Error && error.message.includes('timeout')) {
-            res.status(408).json({
-                error: 'Session initialization timeout',
-                message: 'The session took too long to initialize. Please try again.'
-            });
+            res.status(408).json('The session took too long to initialize. Please try again.');
         } else {
-            res.status(500).json({
-                error: 'Failed to start session',
-                message: error instanceof Error ? error.message : 'Unknown error occurred'
-            });
+            res.status(500).json(error instanceof Error ? error.message : 'Unknown error occurred');
         }
     }
 });
