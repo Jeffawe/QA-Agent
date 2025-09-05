@@ -166,66 +166,138 @@ const cleanup = async () => {
 // Sets up the worker events and returns the websocket port
 const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, serializableConfigs: MiniAgentConfig[]): Promise<number> => {
     return new Promise((resolve, reject) => {
+        let resolved = false;
+        let messageListener: ((message: any) => void) | null = null;
+        let errorListener: ((error: Error) => void) | null = null;
+
+        const cleanup = () => {
+            if (messageListener) {
+                worker.removeListener('message', messageListener);
+            }
+            if (errorListener) {
+                worker.removeListener('error', errorListener);
+            }
+        };
+
         const timeout = setTimeout(() => {
-            reject(new Error('Worker initialization timeout'));
+            if (!resolved) {
+                resolved = true;
+                cleanup();
+                console.error(`❌ Worker initialization timeout for session ${sessionId} after 10 seconds`);
+                reject(new Error('Worker initialization timeout'));
+            }
         }, 10000);
 
-        const messageHandler = (message: any) => {
+        const resolveOnce = (port: number) => {
+            if (!resolved) {
+                resolved = true;
+                clearTimeout(timeout);
+                cleanup();
+                console.log(`✅ Worker initialized for session ${sessionId} with WebSocket port ${port}`);
+                resolve(port);
+            }
+        };
+
+        const rejectOnce = (error: Error) => {
+            if (!resolved) {
+                resolved = true;
+                clearTimeout(timeout);
+                cleanup();
+                console.error(`❌ Worker initialization failed for session ${sessionId}:`, error.message);
+                reject(error);
+            }
+        };
+
+        messageListener = (message: any) => {
+            console.log(`📨 Worker message for session ${sessionId}:`, message.type);
+
             switch (message.type) {
                 case 'initialized':
-                    if (!resolved) {
-                        clearTimeout(timeout);
-                        resolved = true;
-                        resolve(message.websocketPort);
+                    if (message.websocketPort && typeof message.websocketPort === 'number') {
+                        resolveOnce(message.websocketPort);
+                    } else {
+                        rejectOnce(new Error('Worker initialized but no valid websocket port received'));
                     }
                     break;
 
                 case 'session_cleanup':
-                    console.log(`Received cleanup request for session ${message.sessionId}`);
+                    console.log(`🧹 Received cleanup request for session ${message.sessionId}`);
                     deleteSession(message.sessionId);
                     deleteSessionApiKey(message.sessionId);
                     break;
 
                 case 'error':
-                    console.error(`Agent error for session ${sessionId}:`, message.error);
-                    if (!resolved) {
-                        clearTimeout(timeout);
-                        resolved = true;
-                        reject(new Error(`Worker initialization error: ${message.error}`));
-                    }
+                    const errorMsg = message.error || 'Unknown worker error';
+                    console.error(`❌ Agent error for session ${sessionId}:`, errorMsg);
+                    rejectOnce(new Error(`Worker initialization error: ${errorMsg}`));
                     break;
+
+                case 'log':
+                    // Handle worker log messages if needed
+                    console.log(`🔍 Worker log for session ${sessionId}:`, message.message);
+                    break;
+
+                default:
+                    console.log(`⚠️ Unknown message type from worker ${sessionId}:`, message.type);
             }
         };
 
-        let resolved = false;
+        errorListener = (error: Error) => {
+            console.error(`💥 Worker error for session ${sessionId}:`, error);
+            rejectOnce(new Error(`Worker error: ${error.message}`));
 
-        worker.on('message', messageHandler);
-
-        worker.on('error', (error) => {
-            console.error(`Worker error for session ${sessionId}:`, error);
-            if (!resolved) {
-                clearTimeout(timeout);
-                resolved = true;
-                reject(error);
+            // Try to gracefully stop the worker
+            try {
+                worker.postMessage({ command: 'stop' });
+            } catch (stopError) {
+                console.error(`Failed to send stop command to worker ${sessionId}:`, stopError);
             }
-            worker.postMessage({ command: 'stop' });
-        });
+        };
+
+        worker.on('message', messageListener);
+        worker.on('error', errorListener);
 
         worker.on('exit', (code) => {
-            console.log(`Worker ${sessionId} exited with code ${code}`);
+            console.log(`🚪 Worker ${sessionId} exited with code ${code}`);
             deleteSession(sessionId);
-        });
 
-        // Send the start command
-        worker.postMessage({
-            command: 'start',
-            agentConfig: {
-                sessionId,
-                apiKey: getApiKeyForAgent(sessionId),
-                goalValue: goal,
-                agentConfigs: serializableConfigs
+            // If worker exits before initialization, reject the promise
+            if (!resolved) {
+                resolved = true;
+                clearTimeout(timeout);
+                cleanup();
+                reject(new Error(`Worker exited prematurely with code ${code}`));
             }
         });
+
+        // Validate required data before sending
+        const apiKey = getApiKeyForAgent(sessionId) ?? process.env.API_KEY;
+        if (!apiKey) {
+            rejectOnce(new Error('No API key available for session'));
+            return;
+        }
+
+        if (!serializableConfigs || serializableConfigs.length === 0) {
+            rejectOnce(new Error('No agent configurations provided'));
+            return;
+        }
+
+        console.log(`🚀 Starting worker for session ${sessionId}...`);
+
+        // Send the start command with error handling
+        try {
+            worker.postMessage({
+                command: 'start',
+                agentConfig: {
+                    sessionId,
+                    apiKey,
+                    goalValue: goal,
+                    agentConfigs: serializableConfigs
+                }
+            });
+        } catch (postError) {
+            rejectOnce(new Error(`Failed to send start command to worker: ${postError}`));
+        }
     });
 };
 
@@ -302,8 +374,38 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
             websocketport: websocketPort
         });
     } catch (error) {
-        console.error('Error starting session:', error);
-        res.status(500).send('Failed to start session.');
+        console.error(`❌ Error starting session ${sessionId}:`, error);
+
+        // Clean up worker if it was created
+        if (hasSession(sessionId)) {
+            try {
+                const session = getSession(sessionId);
+                if (session) {
+                    session.worker.postMessage({ command: 'stop' });
+                    setTimeout(() => {
+                        console.log(`⏰ Force terminating stuck worker ${sessionId}`);
+                        session.worker?.terminate();
+                        deleteSession(sessionId);
+                    }, 10000);
+                }
+                console.log(`🧹 Worker terminated for failed session ${sessionId}`);
+            } catch (terminateError) {
+                console.error(`Error terminating worker for session ${sessionId}:`, terminateError);
+            }
+        }
+
+        // Send appropriate error response
+        if (error instanceof Error && error.message.includes('timeout')) {
+            res.status(408).json({
+                error: 'Session initialization timeout',
+                message: 'The session took too long to initialize. Please try again.'
+            });
+        } else {
+            res.status(500).json({
+                error: 'Failed to start session',
+                message: error instanceof Error ? error.message : 'Unknown error occurred'
+            });
+        }
     }
 });
 
@@ -422,22 +524,52 @@ app.post('/test/:key', async (req: Request, res: Response) => {
             websocketport: websocketPort
         });
     } catch (error) {
-        console.error('Error starting session:', error);
-        res.status(500).send('Failed to start session.');
+        console.error(`❌ Error starting session ${sessionId}:`, error);
+
+        // Clean up worker if it was created
+        if (hasSession(sessionId)) {
+            try {
+                const session = getSession(sessionId);
+                if (session) {
+                    session.worker.postMessage({ command: 'stop' });
+                    setTimeout(() => {
+                        console.log(`⏰ Force terminating stuck worker ${sessionId}`);
+                        session.worker?.terminate();
+                        deleteSession(sessionId);
+                    }, 10000);
+                }
+                console.log(`🧹 Worker terminated for failed session ${sessionId}`);
+            } catch (terminateError) {
+                console.error(`Error terminating worker for session ${sessionId}:`, terminateError);
+            }
+        }
+
+        // Send appropriate error response
+        if (error instanceof Error && error.message.includes('timeout')) {
+            res.status(408).json({
+                error: 'Session initialization timeout',
+                message: 'The session took too long to initialize. Please try again.'
+            });
+        } else {
+            res.status(500).json({
+                error: 'Failed to start session',
+                message: error instanceof Error ? error.message : 'Unknown error occurred'
+            });
+        }
     }
 });
 
 app.get('/test', async (req: Request, res: Response) => {
-    try{
+    try {
         const session = new StagehandSession('test_session');
         const started = await session.start('https://forms.gle/r5cQQrEVoUodXvBv6');
-        if(!started){
+        if (!started) {
             res.status(500).send('Failed to start session.');
             return;
         }
         const observations = await session.observe();
         console.log(observations);
-        if(!session.page){
+        if (!session.page) {
             res.status(500).send('Failed to start session.');
             return;
         }
@@ -445,7 +577,7 @@ app.get('/test', async (req: Request, res: Response) => {
         console.log(`Grouped Elements of page:`, groupedElements);
         await session.close();
         res.send('Test completed successfully!');
-    }catch(error){
+    } catch (error) {
         console.error('Error starting session:', error);
         res.status(500).send('Failed to start session.');
     }
@@ -469,7 +601,7 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
             return;
         }
 
-        if(testKey && apiKey.startsWith('TEST') && testKey == process.env.TEST_KEY){
+        if (testKey && apiKey.startsWith('TEST') && testKey == process.env.TEST_KEY) {
             console.log('Test API key received');
             newApiKey = process.env.TEST_API_KEY;
         }
