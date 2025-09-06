@@ -16,6 +16,7 @@ import { PageMemory } from './services/memory/pageMemory.js';
 import { dataMemory } from './services/memory/dataMemory.js';
 
 let agent: BossAgent | null = null;
+let isInitialized = false;
 
 const initializeWorker = async () => {
     try {
@@ -30,6 +31,9 @@ const initializeWorker = async () => {
         logManager.log(`Worker initialized for session ${sessionId} with WebSocket port ${websocketPort}`, State.INFO, false);
         console.log('✅ log written');
         console.log('About to postMessage with:', { websocketPort, sessionId });
+
+        isInitialized = true
+
         parentPort?.postMessage({
             type: 'initialized',
             websocketPort: websocketPort
@@ -91,25 +95,14 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
     }
 };
 
-// Initialize the worker immediately
-Promise.race([
-    initializeWorker(),
-    new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Worker initialization timeout')), 25000)
-    )
-]).catch(error => {
-    console.error('❌ Worker initialization timeout:', error);
-    parentPort?.postMessage({
-        type: 'error',
-        error: 'Worker initialization timeout'
-    });
-    process.exit(1);
-});
-
 if (parentPort) {
     parentPort.on('message', async (data) => {
         if (data.command === 'start') {
             try {
+                if (!isInitialized) {
+                    await initializeWorker();
+                }
+
                 if (agent) {
                     console.warn(`Agent already running for session ${workerData.sessionId}`);
                     return;
