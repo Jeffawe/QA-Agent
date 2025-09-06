@@ -359,16 +359,17 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
             workerData: { sessionId, url, data }
         });
 
-        const websocketPort = await Promise.race([
+        const websocketPort: number = await Promise.race([
             setUpWorkerEvents(worker, sessionId, goal, serializableConfigs),
-            new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Worker initialization timeout')), 30000)
+            new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error("Worker initialization timeout")), 30000)
             )
         ]);
 
         setSession(sessionId, {
             worker,
-            status: 'starting'
+            status: 'running',
+            websocketPort: websocketPort
         });
 
         console.log(`Session ${sessionId} started successfully!`);
@@ -508,16 +509,17 @@ app.post('/test/:key', async (req: Request, res: Response) => {
             workerData: { sessionId, url, data }
         });
 
-        const websocketPort = await Promise.race([
+        const websocketPort: number = await Promise.race([
             setUpWorkerEvents(worker, sessionId, goal, serializableConfigs),
-            new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Worker initialization timeout')), 30000)
+            new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error("Worker initialization timeout")), 30000)
             )
         ]);
 
         setSession(sessionId, {
             worker,
-            status: 'starting'
+            status: 'running',
+            websocketPort: websocketPort
         });
 
         console.log(`Starting Test Session: ${sessionId}`);
@@ -560,6 +562,39 @@ app.post('/test/:key', async (req: Request, res: Response) => {
                 message: error instanceof Error ? error.message : 'Unknown error occurred'
             });
         }
+    }
+});
+
+app.get('/status/:sessionId', async (req: Request, res: Response) => {
+    try {
+        const sessionId = req.params.sessionId;
+
+        if (hasSession(sessionId)) {
+            res.json({ "active": true })
+        } else {
+            res.json({ "active": false })
+        }
+    } catch (error) {
+        console.error('Error stopping sessions:', error);
+        res.status(500).send('Failed to stop sessions.');
+        setTimeout(() => process.exit(1), 100);
+    }
+});
+
+app.get('/websocket-port/:sessionId', async (req: Request, res: Response) => {
+    try {
+        const sessionId = req.params.sessionId;
+
+        if (hasSession(sessionId)) {
+            const websocket_port: number = getSession(sessionId)!.websocketPort
+
+            res.json({ "success": true, "websocketPort": websocket_port })
+        } else {
+            res.status(500).send('Session does not exist');
+        }
+    } catch (error) {
+        console.error('Error stopping sessions:', error);
+        res.status(500).send('Failed to get session port.');
     }
 });
 

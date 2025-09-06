@@ -4,6 +4,7 @@ import { Worker } from 'worker_threads';
 interface SessionData {
     worker: Worker;    // Add worker reference
     status: string;
+    websocketPort: number;
 }
 
 let sessions = new Map<string, SessionData>();
