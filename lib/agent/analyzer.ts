@@ -23,7 +23,7 @@ export default class Analyzer extends Agent {
 
     constructor(dependencies: BaseAgentDependencies) {
         super("analyzer", dependencies);
-        this.state = dependencies.dependent ? State.WAIT : State.START;
+        this.setState(dependencies.dependent ? State.WAIT : State.START);
 
         this.playwrightSession = this.session as playwrightSession;
         this.localactionService = this.actionService as ManualActionService;
@@ -263,7 +263,6 @@ export default class Analyzer extends Agent {
         this.queue = [];
         this.step = 0;
         this.goal = "Crawl the given page";
-        this.state = State.WAIT;
         this.lastAction = "";
         this.visitedPage = false;
         this.noErrors = false;

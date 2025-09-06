@@ -20,7 +20,7 @@ export default class Tester extends Agent {
 
     constructor(dependencies: BaseAgentDependencies) {
         super("tester", dependencies);
-        this.state = dependencies.dependent ? State.WAIT : State.START;
+        this.setState(dependencies.dependent ? State.WAIT : State.START);
 
         this.stagehandSession = this.session as StagehandSession;
         this.localactionService = this.actionService as AutoActionService;
@@ -860,7 +860,6 @@ export default class Tester extends Agent {
     async cleanup(): Promise<void> {
         this.nextLink = null;
         this.queue = [];
-        this.state = State.WAIT;
         this.response = "";
         this.testResults = [];
         this.groupedElements = null;

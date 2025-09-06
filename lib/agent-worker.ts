@@ -92,7 +92,19 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
 };
 
 // Initialize the worker immediately
-initializeWorker();
+Promise.race([
+    initializeWorker(),
+    new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Worker initialization timeout')), 25000)
+    )
+]).catch(error => {
+    console.error('❌ Worker initialization timeout:', error);
+    parentPort?.postMessage({
+        type: 'error',
+        error: 'Worker initialization timeout'
+    });
+    process.exit(1);
+});
 
 if (parentPort) {
     parentPort.on('message', async (data) => {

@@ -22,7 +22,7 @@ export default class AutoAnalyzer extends Agent {
 
     constructor(dependencies: BaseAgentDependencies) {
         super("autoanalyzer", dependencies);
-        this.state = dependencies.dependent ? State.WAIT : State.START;
+        this.setState(dependencies.dependent ? State.WAIT : State.START);
 
         this.stagehandSession = this.session as StagehandSession;
         this.localactionService = this.actionService as AutoActionService;
@@ -280,7 +280,6 @@ export default class AutoAnalyzer extends Agent {
         this.queue = [];
         this.step = 0;
         this.goal = "Crawl the given page";
-        this.state = State.WAIT;
         this.lastAction = "";
         this.visitedPage = false;
         this.noErrors = false;

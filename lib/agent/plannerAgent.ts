@@ -40,7 +40,7 @@ export default class PlannerAgent extends Agent {
     constructor(dependencies: BaseAgentDependencies) {
         super("planneragent", dependencies);
         this.mainGoal = "";
-        this.state = dependencies.dependent ? State.WAIT : State.START;
+        this.setState(dependencies.dependent ? State.WAIT : State.START);
 
         this.goalAgent = this.requireAgent<GoalAgent>("goalagent");
 

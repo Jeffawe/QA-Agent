@@ -359,7 +359,12 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
             workerData: { sessionId, url, data }
         });
 
-        const websocketPort = await setUpWorkerEvents(worker, sessionId, goal, serializableConfigs);
+        const websocketPort = await Promise.race([
+            setUpWorkerEvents(worker, sessionId, goal, serializableConfigs),
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Worker initialization timeout')), 30000)
+            )
+        ]);
 
         setSession(sessionId, {
             worker,
@@ -503,7 +508,12 @@ app.post('/test/:key', async (req: Request, res: Response) => {
             workerData: { sessionId, url, data }
         });
 
-        const websocketPort = await setUpWorkerEvents(worker, sessionId, goal, serializableConfigs);
+        const websocketPort = await Promise.race([
+            setUpWorkerEvents(worker, sessionId, goal, serializableConfigs),
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Worker initialization timeout')), 30000)
+            )
+        ]);
 
         setSession(sessionId, {
             worker,

@@ -21,7 +21,7 @@ export class GoalAgent extends Agent {
     constructor(dependencies: BaseAgentDependencies) {
         super("goalagent", dependencies);
         this.goal = "";
-        this.state = dependencies.dependent ? State.WAIT : State.START;
+        this.setState(dependencies.dependent ? State.WAIT : State.START);
 
         this.stageHandSession = this.session as StagehandSession;
         this.localactionService = this.actionService as AutoActionService;
@@ -220,7 +220,6 @@ export class GoalAgent extends Agent {
         this.previousActions = [];
         this.progressDescription = "";
         this.goal = "";
-        this.state = State.WAIT;
         this.lastAction = "";
         this.noErrors = false;
         this.actionResponse = null;

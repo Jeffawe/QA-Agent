@@ -20,7 +20,7 @@ export class Crawler extends Agent {
 
     constructor(dependencies: BaseAgentDependencies) {
         super("crawler", dependencies);
-        this.state = dependencies.dependent ? State.WAIT : State.START;
+        this.setState(dependencies.dependent ? State.WAIT : State.START);
 
         this.analyzer = this.requireAgent<Analyzer>("analyzer");
         this.manualAnalyzer = this.requireAgent<ManualAnalyzer>("manualanalyzer");
@@ -293,7 +293,7 @@ export class Crawler extends Agent {
     }
 
     async cleanup(): Promise<void> {
-        this.state = State.START;
+        
     }
 }
 

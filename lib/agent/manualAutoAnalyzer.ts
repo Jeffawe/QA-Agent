@@ -15,7 +15,7 @@ export default class ManualAutoAnalyzer extends Agent {
     constructor(dependencies: BaseAgentDependencies) {
         super("manualAutoanalyzer", dependencies);
         this.goal = "";
-        this.state = dependencies.dependent ? State.WAIT : State.START;
+        this.setState(dependencies.dependent ? State.WAIT : State.START);
 
         this.stageHandSession = this.session as StagehandSession;
         this.localactionService = this.actionService as AutoActionService;
@@ -167,7 +167,6 @@ export default class ManualAutoAnalyzer extends Agent {
         this.activeLink = null;
         this.queue = [];
         this.goal = "Crawl the given page";
-        this.state = State.WAIT;
         this.response = "";
     }
 

@@ -21,7 +21,7 @@ export class AutoCrawler extends Agent {
 
     constructor(dependencies: BaseAgentDependencies) {
         super("autocrawler", dependencies);
-        this.state = dependencies.dependent ? State.WAIT : State.START;
+        this.setState(dependencies.dependent ? State.WAIT : State.START);
 
         this.analyzer = this.requireAgent<AutoAnalyzer>("autoanalyzer");
         this.manualAnalyzer = this.requireAgent<ManualAnalyzer>("manualAutoanalyzer");
@@ -267,7 +267,6 @@ export class AutoCrawler extends Agent {
     }
 
     async cleanup(): Promise<void> {
-        this.state = State.START;
         this.currentUrl = "";
         this.isCurrentPageVisited = false;
         this.timeTaken = 0;

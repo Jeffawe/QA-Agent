@@ -143,7 +143,13 @@ export interface BaseAgentDependencies {
 
 export abstract class Agent {
     public readonly name: Namespaces;
-    public state: State = State.START;
+    protected _state: State = State.START;
+
+    // public read-only access
+    public get state(): State {
+        return this._state;
+    }
+
     public baseUrl: string | null = null;
 
     // Indicates if the agent had any errors during its operation
@@ -180,7 +186,7 @@ export abstract class Agent {
         this.sessionId = dependencies.sessionId;
 
         if (dependencies.dependent) {
-            this.state = State.WAIT;
+            this._state = State.WAIT;
         }
 
         this.logManager = logManagers.getOrCreateManager(this.sessionId);
@@ -271,14 +277,18 @@ export abstract class Agent {
         return `${this.name}.${this.state}` as NamespacedState;
     }
 
-    protected setState(next: State) {
+    public setState(next: State) {
         const prev = this.state;
-        this.state = next;
-        this.bus.emit({ ts: Date.now(), type: "state_transition", from: prev, to: this.state });
+        this._state = next;
+        this.bus.emit({ ts: Date.now(), type: "state_transition", from: prev, to: this._state });
 
         if (next === State.DONE) {
             this.onDone?.();
         }
+    }
+
+    public getState() {
+        return this.state
     }
 
     public areDependenciesDone(): boolean {

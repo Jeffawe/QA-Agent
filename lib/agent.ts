@@ -210,6 +210,7 @@ export default class BossAgent {
       agent.setBaseValues(url, this.goal);
     }
 
+    let encounteredError = false;
     while (agents.some(a => !a.isDone())) {
       if (this.stopLoop) {
         this.logManager.log("Stopping main loop as requested", State.INFO, true);
@@ -224,8 +225,16 @@ export default class BossAgent {
       for (const agent of agents) {
         if (!agent.isDone()) {
           await agent.tick();
+        }else{
+          if(agent.getState() == State.ERROR){
+            encounteredError = true
+            this.bus.emit({ ts: Date.now(), type: "stop", message: `There was an error with ${agent.name} agent`, sessionId: this.sessionId });
+            break;
+          }
         }
       }
+
+      if(encounteredError) break;
     }
 
     await this.stop();
@@ -244,7 +253,7 @@ export default class BossAgent {
       const agents = this.agentRegistry.getAllAgents();
       for (const agent of agents) {
         await agent.cleanup();
-        agent.state = State.DONE;
+        agent.setState(State.DONE)
       }
 
       for (const session of this.sessions.values()) {
