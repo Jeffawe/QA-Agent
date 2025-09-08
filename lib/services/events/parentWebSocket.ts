@@ -52,7 +52,6 @@ export class ParentWebSocketServer {
     private async initialize(): Promise<void> {
         try {
             // Initialize Redis subscriber
-            await this.redisSubscriber.connect();
             await this.redisSubscriber.subscribe(this.channelName);
             console.log(`🔔 Redis subscriber connected and subscribed to ${this.channelName}`);
 

@@ -41,7 +41,6 @@ export class RedisEventBridge {
 
     private async initializeRedis(): Promise<void> {
         try {
-            await this.redisPublisher.connect();
             console.log(`🚀 Redis publisher connected for session ${this.sessionId}`);
             this.isReady = true;
 
