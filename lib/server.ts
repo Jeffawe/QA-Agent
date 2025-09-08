@@ -19,7 +19,6 @@ import { clearSessionApiKeys, deleteSessionApiKey, getApiKeyForAgent, storeSessi
 import { LogManager } from './utility/logManager.js';
 import StagehandSession from './browserAuto/stagehandSession.js';
 import { UIElementGrouper } from './utility/links/linkGrouper.js';
-import { WebSocketServer } from 'ws';
 import { ParentWebSocketServer } from './services/events/parentWebSocket.js';
 
 dotenv.config();

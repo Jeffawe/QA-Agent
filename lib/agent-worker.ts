@@ -87,7 +87,7 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
         await redisBridge.waitForReady();
 
         // Now get the actual port
-        const port = Number(process.env.WEBSOCKET_PORT) || 3002;
+        const port = parseInt(process.env.WEBSOCKET_PORT ?? '8080');
 
         console.log(`✅ WebSocket server ready on port ${port}`);
         return port;
