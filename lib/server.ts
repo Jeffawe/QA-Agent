@@ -19,6 +19,8 @@ import { clearSessionApiKeys, deleteSessionApiKey, getApiKeyForAgent, storeSessi
 import { LogManager } from './utility/logManager.js';
 import StagehandSession from './browserAuto/stagehandSession.js';
 import { UIElementGrouper } from './utility/links/linkGrouper.js';
+import { WebSocketServer } from 'ws';
+import { ParentWebSocketServer } from './services/events/parentWebSocket.js';
 
 dotenv.config();
 
@@ -301,6 +303,21 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
     });
 };
 
+const setupWSS = async () => {
+    try {
+        const port = parseInt(process.env.WEBSOCKET_PORT ?? '8080');
+        const newParentWebSocket = new ParentWebSocketServer(port);
+
+        await newParentWebSocket.waitForReady();
+
+        console.log(`✅ WebSocket server is ready at port ${port}`);
+        return newParentWebSocket;
+    } catch (error) {
+        console.error('❌ WebSocket connection error:', error);
+        throw error;
+    }
+}
+
 app.get('/', (req: Request, res: Response) => {
     res.send('Welcome to QA-Agent! Go to https://www.qa-agent.site/ for more info.');
 });
@@ -377,7 +394,7 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
         res.json({
             message: `Session ${sessionId} started successfully!`,
             sessionId: sessionId,
-            websocketport: websocketPort
+            websocketport: websocketPort || 8080
         });
     } catch (error) {
         console.error(`❌ Error starting session ${sessionId}:`, error);
@@ -527,7 +544,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
         res.json({
             message: `Test Session started successfully!`,
             sessionId: sessionId,
-            websocketport: websocketPort
+            websocketport: websocketPort || 8080
         });
     } catch (error) {
         console.error(`❌ Error starting session ${sessionId}:`, error);
@@ -662,9 +679,17 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server listening on port ${PORT} on all interfaces`);
+app.listen(PORT, '0.0.0.0', async () => {
+    try {
+        await setupWSS(); // or setupWSS().catch(...)
+        console.log(`🚀 Server listening on port ${PORT} on all interfaces`);
+    } catch (err) {
+        console.error("❌ Failed to set up WSS:", err);
+        // Decide: do you want to exit, or keep running HTTP only?
+        process.exit(1); // force exit if WS is critical
+    }
 });
+
 
 process.on('SIGINT', () => {
     console.log('\n🛑 Shutting down...');

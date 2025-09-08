@@ -14,6 +14,7 @@ import { NewPageValidator } from './services/validators/newPageValidator.js';
 import { ValidatorWarningValidator } from './services/validators/validatorWarningValidator.js';
 import { PageMemory } from './services/memory/pageMemory.js';
 import { dataMemory } from './services/memory/dataMemory.js';
+import { RedisEventBridge } from './services/events/redisEventBridge.js';
 
 let agent: BossAgent | null = null;
 let isInitialized = false;
@@ -78,13 +79,15 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
         console.log(`🔌 Creating WebSocket on port ${WebSocket_PORT === 0 ? 'auto' : WebSocket_PORT}...`);
 
         // Create WebSocket bridge
-        const webSocketEventBridge = new WebSocketEventBridge(eventBus, sessionId, WebSocket_PORT);
+        // const webSocketEventBridge = new WebSocketEventBridge(eventBus, sessionId, WebSocket_PORT);
+
+        const redisBridge = new RedisEventBridge(eventBus, sessionId);
 
         // WAIT for the WebSocket server to be ready
-        await webSocketEventBridge.waitForReady();
+        await redisBridge.waitForReady();
 
         // Now get the actual port
-        const port = webSocketEventBridge.getPort();
+        const port = Number(process.env.WEBSOCKET_PORT) || 3002;
 
         console.log(`✅ WebSocket server ready on port ${port}`);
         return port;
