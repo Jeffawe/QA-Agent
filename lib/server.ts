@@ -138,6 +138,7 @@ app.use(speedLimiter);
 app.set('trust proxy', 1);
 
 const PORT: number = parseInt(process.env.PORT || '3001');
+let parentWSS: ParentWebSocketServer | null = null;
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -303,19 +304,15 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
 };
 
 const setupWSS = async () => {
-    try {
-        const port = parseInt(process.env.WEBSOCKET_PORT ?? '8080');
-        const newParentWebSocket = new ParentWebSocketServer(port);
+    if (parentWSS) return parentWSS; // reuse
 
-        await newParentWebSocket.waitForReady();
+    const port = parseInt(process.env.WEBSOCKET_PORT ?? '8080');
+    parentWSS = new ParentWebSocketServer(port);
 
-        console.log(`✅ WebSocket server is ready at port ${port}`);
-        return newParentWebSocket;
-    } catch (error) {
-        console.error('❌ WebSocket connection error:', error);
-        throw error;
-    }
-}
+    await parentWSS.waitForReady();
+    console.log(`✅ WebSocket server is ready at port ${port}`);
+    return parentWSS;
+};
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Welcome to QA-Agent! Go to https://www.qa-agent.site/ for more info.');
