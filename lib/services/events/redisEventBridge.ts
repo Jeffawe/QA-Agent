@@ -41,6 +41,27 @@ export class RedisEventBridge {
 
     private async initializeRedis(): Promise<void> {
         try {
+            // Wait for Redis to be actually ready
+            await new Promise<void>((resolve, reject) => {
+                if (this.redisPublisher.status === 'ready') {
+                    resolve();
+                    return;
+                }
+
+                const onReady = () => {
+                    this.redisPublisher.off('error', onError);
+                    resolve();
+                };
+
+                const onError = (error: Error) => {
+                    this.redisPublisher.off('ready', onReady);
+                    reject(error);
+                };
+
+                this.redisPublisher.once('ready', onReady);
+                this.redisPublisher.once('error', onError);
+            });
+
             console.log(`🚀 Redis publisher connected for session ${this.sessionId}`);
             this.isReady = true;
 
@@ -148,11 +169,6 @@ export class RedisEventBridge {
         try {
             const messageStr = JSON.stringify(message);
             const subscriberCount = await this.redisPublisher.publish(this.channelName, messageStr);
-
-            // Optional: Log if no subscribers (useful for debugging)
-            if (subscriberCount === 0) {
-                console.debug(`📡 No subscribers for message type: ${type} (session: ${this.sessionId})`);
-            }
         } catch (error) {
             console.error('❌ Failed to publish message:', error);
         }

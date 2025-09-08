@@ -20,6 +20,7 @@ import { LogManager } from './utility/logManager.js';
 import StagehandSession from './browserAuto/stagehandSession.js';
 import { UIElementGrouper } from './utility/links/linkGrouper.js';
 import { ParentWebSocketServer } from './services/events/parentWebSocket.js';
+import { createServer } from 'http';
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
+const server = createServer(app);
 
 // Referer validation middleware to replace CORS
 const validateReferer = (req: Request, res: Response, next: express.NextFunction): void => {
@@ -303,15 +305,19 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
     });
 };
 
-const setupWSS = async () => {
-    if (parentWSS) return parentWSS; // reuse
+const setupWSS = async (): Promise<ParentWebSocketServer> => {
+    try {
+        if (parentWSS) return parentWSS; // reuse
 
-    const port = parseInt(process.env.WEBSOCKET_PORT ?? '8080');
-    parentWSS = new ParentWebSocketServer(port);
+        parentWSS = new ParentWebSocketServer(server, PORT);
 
-    await parentWSS.waitForReady();
-    console.log(`✅ WebSocket server is ready at port ${port}`);
-    return parentWSS;
+        await parentWSS.waitForReady();
+        console.log(`✅ WebSocket server is ready at port ${PORT}`);
+        return parentWSS;
+    } catch (error) {
+        console.error('❌ WebSocket server setup error:', error);
+        throw error;
+    }
 };
 
 app.get('/', (req: Request, res: Response) => {
@@ -367,6 +373,8 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
             dependent: config.dependent,
             agentDependencies: config.agentDependencies,
         }));
+
+        await parentWSS?.waitForReady();
 
         const worker = new Worker(join(__dirname, 'agent-worker.js'), {
             workerData: { sessionId, url, data }
@@ -518,6 +526,8 @@ app.post('/test/:key', async (req: Request, res: Response) => {
             agentDependencies: config.agentDependencies,
         }));
 
+        await parentWSS?.waitForReady();
+
         const worker = new Worker(join(__dirname, 'agent-worker.js'), {
             workerData: { sessionId, url, data }
         });
@@ -594,23 +604,6 @@ app.get('/status/:sessionId', async (req: Request, res: Response) => {
     }
 });
 
-app.get('/websocket-port/:sessionId', async (req: Request, res: Response) => {
-    try {
-        const sessionId = req.params.sessionId;
-
-        if (hasSession(sessionId)) {
-            const websocket_port: number = getSession(sessionId)!.websocketPort
-
-            res.json({ "success": true, "websocketPort": websocket_port })
-        } else {
-            res.status(500).send('Session does not exist');
-        }
-    } catch (error) {
-        console.error('Error stopping sessions:', error);
-        res.status(500).send('Failed to get session port.');
-    }
-});
-
 app.get('/test', async (req: Request, res: Response) => {
     try {
         const session = new StagehandSession('test_session');
@@ -675,7 +668,7 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
     }
 });
 
-app.listen(PORT, '0.0.0.0', async () => {
+server.listen(PORT, '0.0.0.0', async () => {
     try {
         await setupWSS(); // or setupWSS().catch(...)
         console.log(`🚀 Server listening on port ${PORT} on all interfaces`);

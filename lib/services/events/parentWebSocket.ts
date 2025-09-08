@@ -1,5 +1,6 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import { Redis } from 'ioredis';
+import { deleteSession, getSession } from '../memory/sessionMemory.js';
 
 interface RedisMessage {
     type: string;
@@ -24,6 +25,7 @@ export class ParentWebSocketServer {
     private readonly channelName: string = 'websocket_events';
 
     constructor(
+        server: any,
         port: number,
         redisConfig?: {
             host?: string;
@@ -33,8 +35,7 @@ export class ParentWebSocketServer {
         }
     ) {
         this.port = port;
-
-        try{
+        try {
             // Initialize Redis subscriber
             this.redisSubscriber = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL) : new Redis();
         } catch (error) {
@@ -43,7 +44,10 @@ export class ParentWebSocketServer {
         }
 
         // Create WebSocket server
-        this.wss = new WebSocketServer({ port: this.port });
+        this.wss = new WebSocketServer({
+            server, // Use the same server
+            path: '/websocket' // Optional: specify a path
+        });
 
         // Create a promise that resolves when both Redis and WebSocket are ready
         this.readyPromise = this.initialize();
@@ -71,22 +75,8 @@ export class ParentWebSocketServer {
                 console.log('🔄 Redis subscriber reconnecting...');
             });
 
-            // Set up WebSocket server
-            await new Promise<void>((resolve, reject) => {
-                this.wss.on('listening', () => {
-                    const address = this.wss.address();
-                    if (address && typeof address === 'object') {
-                        this.port = address.port;
-                    }
-                    console.log(`🚀 Parent WebSocket server started on port ${this.port}`);
-                    resolve();
-                });
-
-                this.wss.on('error', (error) => {
-                    console.error('❌ WebSocket server error:', error);
-                    reject(error);
-                });
-            });
+            // Set up WebSocket server - when using existing server, it's ready immediately
+            console.log(`🚀 Parent WebSocket server attached to existing server on port ${this.port}`);
 
             this.setupWebSocketHandlers();
             this.isReady = true;
@@ -148,6 +138,22 @@ export class ParentWebSocketServer {
             // Handle client disconnect
             ws.on('close', () => {
                 console.log(`🔌 Client disconnected from session: ${sessionId}`);
+                const session = getSession(sessionId);
+
+                if (!session) {
+                    console.log(`❌ Session ${sessionId} not found.`);
+                    return;
+                }
+
+                if (session.worker) {
+                    session.worker.postMessage({ command: 'stop' });
+
+                    setTimeout(() => {
+                        console.log(`⏰ Force terminating stuck worker ${sessionId}`);
+                        session.worker?.terminate();
+                        deleteSession(sessionId);
+                    }, 10000);
+                }
                 this.clients.delete(sessionId);
             });
 
@@ -155,6 +161,11 @@ export class ParentWebSocketServer {
                 console.error(`❌ WebSocket error for session ${sessionId}:`, error);
                 this.clients.delete(sessionId);
             });
+        });
+
+        // Handle WebSocket server errors
+        this.wss.on('error', (error: Error) => {
+            console.error('❌ WebSocket server error:', error);
         });
     }
 
@@ -175,7 +186,6 @@ export class ParentWebSocketServer {
         const client = this.clients.get(sessionId);
 
         if (!client) {
-            console.debug(`📡 No client connected for session: ${sessionId}`);
             return;
         }
 
@@ -196,6 +206,7 @@ export class ParentWebSocketServer {
 
     // Method to wait for the server to be ready
     async waitForReady(): Promise<void> {
+        console.log('🚀 Waiting for parent WebSocket server to be ready...');
         await this.readyPromise;
     }
 

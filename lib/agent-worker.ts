@@ -4,7 +4,6 @@ import { eventBusManager } from './services/events/eventBus.js';
 import { AgentFactory } from './agentFactory.js';
 import { AgentConfig, MiniAgentConfig, State } from './types.js';
 import { storeSessionApiKey } from './services/memory/apiMemory.js';
-import { WebSocketEventBridge } from './services/events/webSockets.js';
 import { ActionSpamValidator } from './services/validators/actionValidator.js';
 import { ErrorValidator } from './services/validators/errorValidator.js';
 import { LLMUsageValidator } from './services/validators/llmValidator.js';
@@ -70,14 +69,6 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
         new ValidatorWarningValidator(eventBus, sessionId);
 
         console.log(`🌐 Setting up WebSocket server...`);
-
-        let WebSocket_PORT = parseInt(process.env.WEBSOCKET_PORT || '3002');
-        if (process.env.NODE_ENV === 'production') {
-            WebSocket_PORT = 0; // Let system assign port
-        }
-
-        console.log(`🔌 Creating WebSocket on port ${WebSocket_PORT === 0 ? 'auto' : WebSocket_PORT}...`);
-
         // Create WebSocket bridge
         // const webSocketEventBridge = new WebSocketEventBridge(eventBus, sessionId, WebSocket_PORT);
 
@@ -87,7 +78,7 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
         await redisBridge.waitForReady();
 
         // Now get the actual port
-        const port = parseInt(process.env.WEBSOCKET_PORT ?? '8080');
+        const port = parseInt(process.env.PORT ?? '3001');
 
         console.log(`✅ WebSocket server ready on port ${port}`);
         return port;
