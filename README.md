@@ -59,7 +59,7 @@ agent-run --goal "Analyze UI usability" --url https://myapp.com --key ABC123
 
 ```
 ├── bin/                # CLI entry point
-├── lib/                # Agent logic, server, and testing modules
+├── lib or dist/        # Agent logic, server, and testing modules
 ├── package.json        # NPM metadata
 └── README.md           # Project documentation
 ```
