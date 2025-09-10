@@ -101,6 +101,12 @@ export class ParentWebSocketServer {
                 return;
             }
 
+            if (this.clients.has(sessionId)) {
+                console.warn('⚠️ Client connected with duplicate sessionId, closing connection');
+                ws.close(1008, 'Duplicate session ID');
+                return;
+            }
+
             console.log(`📞 New client connected for session: ${sessionId}`);
 
             // Store client connection with sessionId
