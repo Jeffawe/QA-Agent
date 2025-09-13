@@ -17,10 +17,9 @@ import { getAgents } from './agentConfig.js';
 import { clearSessions, deleteSession, getSession, getSessions, getSessionSize, hasSession, setSession } from './services/memory/sessionMemory.js';
 import { clearSessionApiKeys, deleteSessionApiKey, getApiKeyForAgent, storeSessionApiKey } from './services/memory/apiMemory.js';
 import { LogManager } from './utility/logManager.js';
-import StagehandSession from './browserAuto/stagehandSession.js';
-import { UIElementGrouper } from './utility/links/linkGrouper.js';
 import { ParentWebSocketServer } from './services/events/parentWebSocket.js';
 import { createServer } from 'http';
+import testRoutes from './test/testAgent.js'
 
 dotenv.config();
 
@@ -144,6 +143,7 @@ let parentWSS: ParentWebSocketServer | null = null;
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+app.use("/testing", testRoutes);
 
 const cleanup = async () => {
     if (getSessionSize() === 0) {
@@ -601,30 +601,6 @@ app.get('/status/:sessionId', async (req: Request, res: Response) => {
         console.error('Error stopping sessions:', error);
         res.status(500).send('Failed to stop sessions.');
         setTimeout(() => process.exit(1), 100);
-    }
-});
-
-app.get('/test', async (req: Request, res: Response) => {
-    try {
-        const session = new StagehandSession('test_session');
-        const started = await session.start('https://forms.gle/r5cQQrEVoUodXvBv6');
-        if (!started) {
-            res.status(500).send('Failed to start session.');
-            return;
-        }
-        const observations = await session.observe();
-        console.log(observations);
-        if (!session.page) {
-            res.status(500).send('Failed to start session.');
-            return;
-        }
-        const groupedElements = await UIElementGrouper.groupUIElements(observations, session.page);
-        console.log(`Grouped Elements of page:`, groupedElements);
-        await session.close();
-        res.send('Test completed successfully!');
-    } catch (error) {
-        console.error('Error starting session:', error);
-        res.status(500).send('Failed to start session.');
     }
 });
 

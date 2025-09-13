@@ -174,6 +174,7 @@ const autoStart = args['auto-start'] || config['auto-start'] || true;
 const daemonMode = args.daemon || args.d || false;
 const sessionid = args.sessionid || config.sessionid || null;
 const headless = args.headless || config.headless || false;
+const detailed = args.detailed || config.detailed || false;
 
 if (args.help || args.h) {
   console.log(`
@@ -192,6 +193,7 @@ if (args.help || args.h) {
       --daemon, -d     Run in daemon mode
       --sessionId      Session ID
       --headless       Run browser in headless mode (default: false)
+      --detailed       Run in detailed mode. Tests every UI element in every page as well
 
     Logs:
       agent-run logs            Show main agent log

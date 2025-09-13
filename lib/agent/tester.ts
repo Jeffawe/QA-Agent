@@ -5,6 +5,7 @@ import StagehandSession from "../browserAuto/stagehandSession.js";
 import { GroupedUIElements, UIElementGrouper } from "../utility/links/linkGrouper.js";
 import { Page } from "@browserbasehq/stagehand";
 import { PageMemory } from "../services/memory/pageMemory.js";
+import { TestingThinker } from "../services/thinkers/testingThinker.js";
 
 export default class Tester extends Agent {
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
@@ -12,11 +13,12 @@ export default class Tester extends Agent {
     private queue: LinkInfo[] = [];
     private observedElements: StageHandObserveResult[] = [];
     private groupedElements: GroupedUIElements | null = null;
-    private testResults: UITesterResult[] = [];
+    public testResults: UITesterResult[] = [];
     private page: Page;
 
     private stagehandSession: StagehandSession;
     private localactionService: AutoActionService;
+    private testingThinker: TestingThinker
 
     constructor(dependencies: BaseAgentDependencies) {
         super("tester", dependencies);
@@ -24,6 +26,7 @@ export default class Tester extends Agent {
 
         this.stagehandSession = this.session as StagehandSession;
         this.localactionService = this.actionService as AutoActionService;
+        this.testingThinker = new TestingThinker(this.sessionId);
 
 
         if (this.stagehandSession.page === null) {
@@ -77,8 +80,14 @@ export default class Tester extends Agent {
                     break;
 
                 case State.OBSERVE:
-                    this.observedElements = await this.stagehandSession.observe();
-                    this.setState(State.DECIDE);
+                    try {
+                        this.logManager.log(`Observing page: ${this.currentUrl}`, this.buildState());
+                        this.observedElements = await this.stagehandSession.observe();
+                        this.setState(State.DECIDE);
+                    } catch (e) {
+                        this.logManager.error(`Error observing page: ${String(e)}`, this.buildState());
+                        this.setState(State.ERROR);
+                    }
                     break;
 
                 case State.DECIDE:
@@ -86,23 +95,32 @@ export default class Tester extends Agent {
                     break;
 
                 case State.ACT:
-                    await this.testButtons();
                     await this.testTextInputs();
                     await this.testSelects();
                     await this.testCheckboxes();
                     await this.testRadios();
-                    await this.testForms();
-                    await this.testLinks();
                     await this.testFileInputs();
                     await this.testDateInputs();
                     await this.testNumberInputs();
                     await this.testOtherInputs();
+                    await this.testForms();
+                    await this.testLinks();
+                    await this.testButtons();
                     this.setState(State.VALIDATE);
                     break;
 
                 case State.VALIDATE:
-                    await this.validateResults();
-                    PageMemory.setTestResults(this.currentUrl, this.testResults);
+                    try {
+                        await this.validateResults();
+                        PageMemory.setTestResults(this.currentUrl, this.testResults);
+                        this.setState(State.DONE);
+                    } catch (e) {
+                        this.logManager.error(`Error validating results: ${String(e)}`, this.buildState());
+                        this.setState(State.ERROR);
+                    }
+                    break;
+
+                case State.EVALUATE:
                     this.setState(State.DONE);
                     break;
 
@@ -170,7 +188,10 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.buttons.length} buttons`, this.buildState(), true);
 
         for (const button of this.groupedElements.buttons) {
+            const initialUrl = this.page.url();
             await this.testButtonElement(button);
+            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page.waitForTimeout(1000);
         }
     }
 
@@ -304,7 +325,10 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.textInputs.length} text inputs`, this.buildState(), true);
 
         for (const input of this.groupedElements.textInputs) {
+            const initialUrl = this.page.url()
             await this.testTextInputElement(input);
+            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page.waitForTimeout(1000);
         }
     }
 
@@ -569,7 +593,11 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.forms.length} forms`, this.buildState(), true);
 
         for (const form of this.groupedElements.forms) {
+            const initialUrl = this.page.url()
             await this.testFormElement(form);
+            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page.waitForTimeout(1000);
+
         }
     }
 
@@ -624,7 +652,10 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.links.length} links`, this.buildState(), true);
 
         for (const link of this.groupedElements.links) {
+            const initialUrl = this.page.url()
             await this.testLinkElement(link);
+            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page.waitForTimeout(1000);
         }
     }
 
@@ -706,7 +737,10 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.fileInputs.length} file inputs`, this.buildState(), true);
 
         for (const fileInput of this.groupedElements.fileInputs) {
+            const initialUrl = this.page.url()
             await this.testFileInputElement(fileInput);
+            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page.waitForTimeout(1000);
         }
     }
 
@@ -730,7 +764,10 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.dateInputs.length} date inputs`, this.buildState(), true);
 
         for (const dateInput of this.groupedElements.dateInputs) {
+            const initialUrl = this.page.url()
             await this.testDateInputElement(dateInput);
+            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page.waitForTimeout(1000);
         }
     }
 
@@ -823,7 +860,10 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.otherInputs.length} other inputs`, this.buildState(), true);
 
         for (const otherInput of this.groupedElements.otherInputs) {
+            const initialUrl = this.page.url()
             await this.testOtherInputElement(otherInput);
+            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page.waitForTimeout(1000);
         }
     }
 
