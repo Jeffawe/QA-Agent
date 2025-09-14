@@ -14,3 +14,4 @@ dist/webCode.js.map
 .dockerignore
 DockerFile
 agentConfig.json
+dist/test/

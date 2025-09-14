@@ -366,7 +366,8 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
     }
 
     try {
-        const agents = await getAgents(goal);
+        const detailed = data['detailed'] || false;
+        const agents = await getAgents(goal, detailed);
         const serializableConfigs: MiniAgentConfig[] = Array.from(agents).map(config => ({
             name: config.name,
             sessionType: config.sessionType,
@@ -518,7 +519,8 @@ app.post('/test/:key', async (req: Request, res: Response) => {
             return;
         }
 
-        const agents = await getAgents(goal);
+        const detailed = data['detailed'] || false;
+        const agents = await getAgents(goal, detailed);
         const serializableConfigs: MiniAgentConfig[] = Array.from(agents).map(config => ({
             name: config.name,
             sessionType: config.sessionType,

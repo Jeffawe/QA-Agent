@@ -65,15 +65,35 @@ export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
     }
 ];
 
+// Tester configuration that gets added when detailed is true
+const testerConfig: AgentConfigWithDescription = {
+    name: "tester",
+    sessionType: "stagehand",
+    dependent: false,
+    description: "Test functionality and validate elements automatically",
+    keywords: ["test", "validate", "verify", "check", "functionality", "behavior", "automatic"]
+};
+
+// Function to get crawler config based on detailed flag
+const getCrawlerConfig = (detailed: boolean): AgentConfigWithDescription[] => {
+    if (detailed) {
+        return [...crawlerConfigWithDesc, testerConfig];
+    }
+    return crawlerConfigWithDesc;
+};
+
 // All available configurations
-const allConfigs = [
+const getAllConfigs = (detailed: boolean) => [
     { name: "goal", configs: goalConfigWithDesc, description: "Intelligent goal achievement and planning" },
-    { name: "crawler", configs: crawlerConfigWithDesc, description: "Comprehensive web crawling and data extraction" }
+    { name: "crawler", configs: getCrawlerConfig(detailed), description: "Comprehensive web crawling and data extraction" }
 ];
 
-export const getAgents = async (goal: string): Promise<AgentConfigWithDescription[]> => {
+
+export const getAgents = async (goal: string, detailed: boolean = false): Promise<AgentConfigWithDescription[]> => {
     const options: ExtractorOptions = { pooling: 'mean', normalize: true };
     const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+
+    const allConfigs = getAllConfigs(detailed);
 
     // Get goal embedding
     const goalVec = await extractor(goal, options);
@@ -141,12 +161,14 @@ export const normalizedCosineSimilarity = (vecA: number[], vecB: number[]): numb
 };
 
 // Alternative: Hybrid approach with multiple similarity methods
-export const getAgentsHybrid = async (goal: string): Promise<AgentConfigWithDescription[]> => {
+export const getAgentsHybrid = async (goal: string, detailed: boolean = false): Promise<AgentConfigWithDescription[]> => {
     const options: ExtractorOptions = { pooling: 'mean', normalize: true };
     const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
 
     const goalVec = await extractor(goal, options);
     const goalArray = Array.from(goalVec.data);
+
+    const allConfigs = getAllConfigs(detailed);
 
     const matches: (ConfigMatch & {
         semanticSim: number;

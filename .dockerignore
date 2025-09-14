@@ -1,4 +1,3 @@
-.npmignore
 node_modules
 npm-debug.log
 .git
@@ -9,3 +8,4 @@ README.md
 coverage
 .nyc_output
 agentConfig.json
+dist/test

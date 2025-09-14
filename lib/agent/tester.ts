@@ -15,6 +15,7 @@ export default class Tester extends Agent {
     private groupedElements: GroupedUIElements | null = null;
     public testResults: UITesterResult[] = [];
     private page: Page;
+    private pagesSeen: string[] = [];
 
     private stagehandSession: StagehandSession;
     private localactionService: AutoActionService;
@@ -76,6 +77,13 @@ export default class Tester extends Agent {
         try {
             switch (this.state) {
                 case State.START:
+                    (this as any).startTime = performance.now();
+                    if (this.pagesSeen.includes(this.currentUrl)) {
+                        this.setState(State.DONE);
+                        break;
+                    } else {
+                        this.pagesSeen.push(this.currentUrl);
+                    }
                     this.setState(State.OBSERVE);
                     break;
 
@@ -121,6 +129,8 @@ export default class Tester extends Agent {
                     break;
 
                 case State.EVALUATE:
+                    const endTime = performance.now();
+                    this.logManager.log(`Test complete in ${((endTime - (this as any).startTime) / 1000).toFixed(2)}s`, this.buildState(), true);
                     this.setState(State.DONE);
                     break;
 
