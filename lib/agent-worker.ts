@@ -103,6 +103,9 @@ if (parentPort) {
                 }
 
                 const workerEventBus = eventBusManager.getOrCreateBus(data.agentConfig.sessionId);
+                if (workerData.data && typeof workerData.data === 'object') {
+                    dataMemory.loadData(workerData.data);
+                }
 
                 const stopHandler = async (evt: any) => {
                     const sessionId = evt.sessionId;

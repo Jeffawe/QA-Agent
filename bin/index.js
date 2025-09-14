@@ -9,7 +9,7 @@ import path from 'path';
 function checkPort(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
-    
+
     console.log(`🔍 Trying to bind to port ${port}...`);
 
     server.listen(port, () => {
@@ -59,7 +59,7 @@ function readConfigFile(configPath) {
 async function makeRequest(url, endpoint, options = {}) {
   try {
     const fetch = (await import('node-fetch')).default;
-    
+
     // Default options for POST requests
     const defaultOptions = {
       method: 'POST',
@@ -69,7 +69,7 @@ async function makeRequest(url, endpoint, options = {}) {
       },
       ...options
     };
-    
+
     const response = await fetch(`${url}${endpoint}`, defaultOptions);
 
     if (response.ok) {
@@ -175,6 +175,7 @@ const daemonMode = args.daemon || args.d || false;
 const sessionid = args.sessionid || config.sessionid || null;
 const headless = args.headless || config.headless || false;
 const detailed = args.detailed || config.detailed || false;
+const data = config.data || {};
 
 if (args.help || args.h) {
   console.log(`
@@ -362,7 +363,15 @@ if (autoStart) {
     // Wait a bit more to ensure server is fully initialized
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    const body = JSON.stringify({ goal: goal, url: url });
+    data['detailed'] = detailed;
+
+    const requestBody = {
+      goal: goal,
+      url: url,
+      data: data
+    };
+
+    const body = JSON.stringify(requestBody);
     const headers = { 'Content-Type': 'application/json' };
 
     await makeRequest(baseUrl, endpoint, { body, headers });
