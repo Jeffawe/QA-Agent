@@ -14,7 +14,7 @@ export default class Tester extends Agent {
     private observedElements: StageHandObserveResult[] = [];
     private groupedElements: GroupedUIElements | null = null;
     public testResults: UITesterResult[] = [];
-    private page: Page;
+    private page: Page | null = null;
     private pagesSeen: string[] = [];
 
     private stagehandSession: StagehandSession;
@@ -28,14 +28,6 @@ export default class Tester extends Agent {
         this.stagehandSession = this.session as StagehandSession;
         this.localactionService = this.actionService as AutoActionService;
         this.testingThinker = new TestingThinker(this.sessionId);
-
-
-        if (this.stagehandSession.page === null) {
-            this.logManager.error('Page not initialized', this.buildState(), true);
-            throw new Error('Page not initialized');
-        }
-
-        this.page = this.stagehandSession.page;
     }
 
     public enqueue(links: LinkInfo[]) {
@@ -45,6 +37,25 @@ export default class Tester extends Agent {
         } else {
             this.logManager.log("Tester is already running or cannot start up", this.buildState(), true);
         }
+    }
+
+    public nextTick(): void {
+        if (this.state === State.DONE) {
+            this.setState(State.START);
+        }
+    }
+
+    public setBaseValues(url: string, mainGoal?: string): void {
+        super.setBaseValues(url, mainGoal);
+
+
+        if (this.stagehandSession.page === null) {
+            this.logManager.error('Page not initialized', this.buildState(), true);
+            this.setState(State.ERROR);
+            throw new Error('Page not initialized');
+        }
+
+        this.page! = this.stagehandSession.page;
     }
 
     protected validateSessionType(): void {
@@ -132,7 +143,7 @@ export default class Tester extends Agent {
                     try {
                         await this.validateResults();
                         PageMemory.setTestResults(this.currentUrl, this.testResults);
-                        this.setState(State.DONE);
+                        this.setState(State.EVALUATE);
                     } catch (e) {
                         this.logManager.error(`Error validating results: ${String(e)}`, this.buildState());
                         this.setState(State.ERROR);
@@ -209,19 +220,19 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.buttons.length} buttons`, this.buildState(), true);
 
         for (const button of this.groupedElements.buttons) {
-            const initialUrl = this.page.url();
+            const initialUrl = this.page!.url();
             await this.testButtonElement(button);
-            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
-            await this.page.waitForTimeout(1000);
+            await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page!.waitForTimeout(1000);
         }
     }
 
     private async testButtonElement(button: UIElementInfo): Promise<void> {
         try {
-            const initialUrl = this.page.url();
+            const initialUrl = this.page!.url();
 
             // Try to detect if this button will navigate by checking its attributes
-            const buttonInfo = await this.page.evaluate((selector) => {
+            const buttonInfo = await this.page!.evaluate((selector) => {
                 let el: Element | null = null;
 
                 if (selector.startsWith('xpath=')) {
@@ -253,12 +264,12 @@ export default class Tester extends Agent {
 
 
             // Strategy 2: Normal click with navigation back if needed
-            await this.page.click(button.selector);
+            await this.page!.click(button.selector);
 
             // Wait for potential navigation, modal, or other effects
-            await this.page.waitForTimeout(1500);
+            await this.page!.waitForTimeout(1500);
 
-            const newUrl = this.page.url();
+            const newUrl = this.page!.url();
             const navigationOccurred = initialUrl !== newUrl;
 
             let responseMessage = '';
@@ -268,24 +279,24 @@ export default class Tester extends Agent {
 
                 // Navigate back to original page
                 try {
-                    await this.page.goBack();
-                    await this.page.waitForTimeout(1000);
+                    await this.page!.goBack();
+                    await this.page!.waitForTimeout(1000);
 
                     // Verify we're back on the original page
-                    const backUrl = this.page.url();
+                    const backUrl = this.page!.url();
                     if (backUrl === initialUrl) {
                         responseMessage += ' (navigated back successfully)';
                     } else {
                         // If back didn't work, navigate directly to original URL
-                        await this.page.goto(initialUrl);
-                        await this.page.waitForTimeout(1000);
+                        await this.page!.goto(initialUrl);
+                        await this.page!.waitForTimeout(1000);
                         responseMessage += ' (returned to original page via direct navigation)';
                     }
                 } catch (backError) {
                     // If going back fails, try direct navigation to original URL
                     try {
-                        await this.page.goto(initialUrl);
-                        await this.page.waitForTimeout(1000);
+                        await this.page!.goto(initialUrl);
+                        await this.page!.waitForTimeout(1000);
                         responseMessage += ' (returned via direct navigation after back failed)';
                     } catch (directNavError) {
                         responseMessage += ` (WARNING: Could not return to original page: ${directNavError})`;
@@ -294,7 +305,7 @@ export default class Tester extends Agent {
                 }
             } else {
                 // Check if a modal or overlay appeared
-                const hasModal = await this.page.evaluate(() => {
+                const hasModal = await this.page!.evaluate(() => {
                     const modals = document.querySelectorAll('[role="dialog"], .modal, .popup, .overlay, [aria-modal="true"]');
                     return modals.length > 0;
                 });
@@ -304,8 +315,8 @@ export default class Tester extends Agent {
 
                     // Try to close modal with Escape key
                     try {
-                        await this.page.keyboard.press('Escape');
-                        await this.page.waitForTimeout(500);
+                        await this.page!.keyboard.press('Escape');
+                        await this.page!.waitForTimeout(500);
                         responseMessage += ' (modal closed with Escape)';
                     } catch (escapeError) {
                         responseMessage += ' (modal may still be open)';
@@ -348,10 +359,10 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.textInputs.length} text inputs`, this.buildState(), true);
 
         for (const input of this.groupedElements.textInputs) {
-            const initialUrl = this.page.url()
+            const initialUrl = this.page!.url()
             await this.testTextInputElement(input);
-            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
-            await this.page.waitForTimeout(1000);
+            await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page!.waitForTimeout(1000);
         }
     }
 
@@ -361,13 +372,13 @@ export default class Tester extends Agent {
         for (const testCase of testData) {
             try {
                 // Clear the input first
-                await this.page.fill(input.selector, '');
+                await this.page!.fill(input.selector, '');
 
                 // Fill with test data
-                await this.page.fill(input.selector, testCase.value);
+                await this.page!.fill(input.selector, testCase.value);
 
                 // Trigger change event
-                await this.page.dispatchEvent(input.selector, 'change');
+                await this.page!.dispatchEvent(input.selector, 'change');
 
                 this.testResults.push({
                     element: input,
@@ -393,7 +404,7 @@ export default class Tester extends Agent {
             }
 
             // Small delay between tests
-            await this.page.waitForTimeout(200);
+            await this.page!.waitForTimeout(200);
         }
     }
 
@@ -450,7 +461,7 @@ export default class Tester extends Agent {
     private async testSelectElement(select: UIElementInfo): Promise<void> {
         try {
             // Get all options
-            const options = await this.page.evaluate((selector) => {
+            const options = await this.page!.evaluate((selector) => {
                 const selectEl = document.querySelector(selector) as HTMLSelectElement;
                 if (!selectEl) return [];
 
@@ -468,7 +479,7 @@ export default class Tester extends Agent {
             // Positive test: Select each valid option
             for (const option of options) {
                 try {
-                    await this.page.selectOption(select.selector, option.value);
+                    await this.page!.selectOption(select.selector, option.value);
 
                     this.testResults.push({
                         element: select,
@@ -478,7 +489,7 @@ export default class Tester extends Agent {
                         response: `Selected option: ${option.text}`
                     });
 
-                    await this.page.waitForTimeout(200);
+                    await this.page!.waitForTimeout(200);
 
                 } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -494,7 +505,7 @@ export default class Tester extends Agent {
 
             // Negative test: Try to select invalid option
             try {
-                await this.page.selectOption(select.selector, 'invalid-option-value');
+                await this.page!.selectOption(select.selector, 'invalid-option-value');
 
                 this.testResults.push({
                     element: select,
@@ -542,7 +553,7 @@ export default class Tester extends Agent {
     private async testCheckboxElement(checkbox: UIElementInfo): Promise<void> {
         try {
             // Test checking the checkbox
-            await this.page.check(checkbox.selector);
+            await this.page!.check(checkbox.selector);
 
             this.testResults.push({
                 element: checkbox,
@@ -552,10 +563,10 @@ export default class Tester extends Agent {
                 response: 'Checkbox checked successfully'
             });
 
-            await this.page.waitForTimeout(200);
+            await this.page!.waitForTimeout(200);
 
             // Test unchecking the checkbox
-            await this.page.uncheck(checkbox.selector);
+            await this.page!.uncheck(checkbox.selector);
 
             this.testResults.push({
                 element: checkbox,
@@ -591,7 +602,7 @@ export default class Tester extends Agent {
 
     private async testRadioElement(radio: UIElementInfo): Promise<void> {
         try {
-            await this.page.check(radio.selector);
+            await this.page!.check(radio.selector);
 
             this.testResults.push({
                 element: radio,
@@ -621,10 +632,10 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.forms.length} forms`, this.buildState(), true);
 
         for (const form of this.groupedElements.forms) {
-            const initialUrl = this.page.url()
+            const initialUrl = this.page!.url()
             await this.testFormElement(form);
-            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
-            await this.page.waitForTimeout(1000);
+            await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page!.waitForTimeout(1000);
 
         }
     }
@@ -681,24 +692,24 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.links.length} links`, this.buildState(), true);
 
         for (const link of this.groupedElements.links) {
-            const initialUrl = this.page.url()
+            const initialUrl = this.page!.url()
             await this.testLinkElement(link);
-            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
-            await this.page.waitForTimeout(1000);
+            await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page!.waitForTimeout(1000);
         }
     }
 
     private async testLinkElement(link: UIElementInfo): Promise<void> {
         try {
-            const initialUrl = this.page.url();
+            const initialUrl = this.page!.url();
 
             // Strategy 2: Normal click with navigation back
-            await this.page.click(link.selector);
+            await this.page!.click(link.selector);
 
             // Wait for navigation
-            await this.page.waitForTimeout(1500);
+            await this.page!.waitForTimeout(1500);
 
-            const newUrl = this.page.url();
+            const newUrl = this.page!.url();
             const navigationOccurred = initialUrl !== newUrl;
 
             let responseMessage = '';
@@ -708,24 +719,24 @@ export default class Tester extends Agent {
 
                 // Navigate back to original page
                 try {
-                    await this.page.goBack();
-                    await this.page.waitForTimeout(1000);
+                    await this.page!.goBack();
+                    await this.page!.waitForTimeout(1000);
 
                     // Verify we're back
-                    const backUrl = this.page.url();
+                    const backUrl = this.page!.url();
                     if (backUrl === initialUrl) {
                         responseMessage += ' (navigated back successfully)';
                     } else {
                         // Direct navigation if back didn't work
-                        await this.page.goto(initialUrl);
-                        await this.page.waitForTimeout(1000);
+                        await this.page!.goto(initialUrl);
+                        await this.page!.waitForTimeout(1000);
                         responseMessage += ' (returned via direct navigation)';
                     }
                 } catch (backError) {
                     // Fallback to direct navigation
                     try {
-                        await this.page.goto(initialUrl);
-                        await this.page.waitForTimeout(1000);
+                        await this.page!.goto(initialUrl);
+                        await this.page!.waitForTimeout(1000);
                         responseMessage += ' (returned via direct navigation after back failed)';
                     } catch (directNavError) {
                         responseMessage += ` (WARNING: Could not return to original page: ${directNavError})`;
@@ -768,10 +779,10 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.fileInputs.length} file inputs`, this.buildState(), true);
 
         for (const fileInput of this.groupedElements.fileInputs) {
-            const initialUrl = this.page.url()
+            const initialUrl = this.page!.url()
             await this.testFileInputElement(fileInput);
-            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
-            await this.page.waitForTimeout(1000);
+            await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page!.waitForTimeout(1000);
         }
     }
 
@@ -795,10 +806,10 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.dateInputs.length} date inputs`, this.buildState(), true);
 
         for (const dateInput of this.groupedElements.dateInputs) {
-            const initialUrl = this.page.url()
+            const initialUrl = this.page!.url()
             await this.testDateInputElement(dateInput);
-            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
-            await this.page.waitForTimeout(1000);
+            await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page!.waitForTimeout(1000);
         }
     }
 
@@ -812,7 +823,7 @@ export default class Tester extends Agent {
 
         for (const testCase of testDates) {
             try {
-                await this.page.fill(dateInput.selector, testCase.value);
+                await this.page!.fill(dateInput.selector, testCase.value);
 
                 this.testResults.push({
                     element: dateInput,
@@ -862,7 +873,7 @@ export default class Tester extends Agent {
 
         for (const testCase of testNumbers) {
             try {
-                await this.page.fill(numberInput.selector, testCase.value);
+                await this.page!.fill(numberInput.selector, testCase.value);
 
                 this.testResults.push({
                     element: numberInput,
@@ -893,10 +904,10 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.otherInputs.length} other inputs`, this.buildState(), true);
 
         for (const otherInput of this.groupedElements.otherInputs) {
-            const initialUrl = this.page.url()
+            const initialUrl = this.page!.url()
             await this.testOtherInputElement(otherInput);
-            await this.page.goto(initialUrl, { waitUntil: 'domcontentloaded' });
-            await this.page.waitForTimeout(1000);
+            await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+            await this.page!.waitForTimeout(1000);
         }
     }
 
@@ -906,7 +917,7 @@ export default class Tester extends Agent {
             const testData = UIElementGrouper.generateTestData(otherInput.elementType, otherInput.elementDetails);
 
             for (const value of testData) {
-                await this.page.fill(otherInput.selector, String(value));
+                await this.page!.fill(otherInput.selector, String(value));
 
                 this.testResults.push({
                     element: otherInput,
@@ -916,7 +927,7 @@ export default class Tester extends Agent {
                     response: `Input filled with: ${value}`
                 });
 
-                await this.page.waitForTimeout(200);
+                await this.page!.waitForTimeout(200);
             }
 
         } catch (error) {

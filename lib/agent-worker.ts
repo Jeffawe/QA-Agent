@@ -14,6 +14,7 @@ import { ValidatorWarningValidator } from './services/validators/validatorWarnin
 import { PageMemory } from './services/memory/pageMemory.js';
 import { dataMemory } from './services/memory/dataMemory.js';
 import { RedisEventBridge } from './services/events/redisEventBridge.js';
+import { CrawlMap } from './utility/crawlMap.js';
 
 let agent: BossAgent | null = null;
 let isInitialized = false;
@@ -142,7 +143,7 @@ if (parentPort) {
                 };
 
                 workerEventBus.on('stop', stopHandler);
-                workerEventBus.on('done', stopHandler);
+                //workerEventBus.on('done', stopHandler);
 
                 // Convert serializable configs back to full AgentConfigs
                 const fullAgentConfigs: Set<AgentConfig> = new Set(
@@ -164,6 +165,8 @@ if (parentPort) {
                 await agent.start(workerData.url);
 
                 console.log(`✅ Agent completed for session ${data.agentConfig.sessionId}`);
+
+                await stopWorker();
 
             } catch (error) {
                 console.error('❌ Worker agent error:', error);
@@ -218,6 +221,7 @@ const cleanup = async () => {
 
     eventBusManager.clear();
     logManagers.clear();
+    CrawlMap.finish();
     PageMemory.clear();
     dataMemory.clear();
 };

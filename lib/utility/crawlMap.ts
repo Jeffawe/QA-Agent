@@ -21,6 +21,7 @@ export class CrawlMap {
   private static edges: Set<string> = new Set();
 
   private static initialised = false;
+  private static finished = false;
 
   /** Call once at program start (optional custom path) */
   static init(filePath = "crawl_map.md") {
@@ -53,6 +54,10 @@ export class CrawlMap {
     }
   }
 
+  static finish() {
+    this.finished = true;
+  }
+
   /** Optional: keep edge list if you still need it elsewhere */
   static addEdge(from: string, to: string) {
     if (!this.initialised) this.init();
@@ -63,6 +68,8 @@ export class CrawlMap {
   /* ───── markdown writer ───── */
 
   private static write() {
+    if (this.navOrder.size === 0) return;
+    if (this.finished) return; // prevent late writes
     let md =
       `# Crawl Map  \n_Auto-generated – refresh to see the latest state_\n\n`;
 

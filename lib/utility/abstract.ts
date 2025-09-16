@@ -152,6 +152,8 @@ export abstract class Agent {
 
     public baseUrl: string | null = null;
 
+    public dependent: boolean = false;
+
     // Indicates if the agent had any errors during its operation
     public noErrors: boolean = false;
 
@@ -184,6 +186,7 @@ export abstract class Agent {
         this.actionService = dependencies.actionService;
         this.agentRegistry = dependencies.agentRegistry;
         this.sessionId = dependencies.sessionId;
+        this.dependent = dependencies.dependent;
 
         if (dependencies.dependent) {
             this._state = State.WAIT;
@@ -219,6 +222,11 @@ export abstract class Agent {
             this.paused = true;
         }
     }
+
+    /**
+     * This method is called on each tick of the agent
+    */
+    public nextTick(): void { }
 
     public resumeAgent(): void {
         if (this.paused) {

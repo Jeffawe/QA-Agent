@@ -146,104 +146,112 @@ export default class BossAgent {
   }
 
   public async start(url: string): Promise<void> {
-    this.logManager.initialize();
-    NavigationTree.initialize();
-    const startTime = performance.now();
-    CrawlMap.init(`logs/crawl_map_${this.sessionId}.md`);
+    try {
+      this.logManager.initialize();
+      NavigationTree.initialize();
+      const startTime = performance.now();
+      CrawlMap.init(`logs/crawl_map_${this.sessionId}.md`);
 
-    // Start all sessions
-    for (const [name, session] of this.sessions.entries()) {
-      const started = await session.start(url);
-      if (!started) {
-        this.logManager.error(`Failed to start session for agent: ${name}`, State.ERROR);
-        return;
-      }
-    }
-
-    this.bus.on('stop', async (evt) => {
-      this.stopLoop = true;
-      this.bus.emit({ ts: Date.now(), type: 'issue', message: `Agent stopped because of ${evt.message}` });
-      this.logManager.log(`Agent stopped because of ${evt.message}`, State.ERROR, true);
-    });
-
-    this.bus.on('pause_all', () => {
-      this.pauseAllAgents();
-    });
-
-    this.bus.on('resume_all', () => {
-      this.resumeAllAgents();
-    });
-
-    this.bus.on('pause_agent', (data: { agentName: Namespaces }) => {
-      const agent = this.getAgent(data.agentName);
-      if (agent) {
-        agent.pauseAgent();
-      }
-    });
-
-    this.bus.on('resume_agent', (data: { agentName: Namespaces }) => {
-      const agent = this.getAgent(data.agentName);
-      if (agent) {
-        agent.resumeAgent();
-      }
-    });
-
-    // Set base URL for all action services
-    for (const actionService of this.actionServices.values()) {
-      actionService.setBaseUrl(url);
-    }
-
-    const agents = this.agentRegistry.getAllAgents();
-
-    if (agents.length === 0) {
-      this.logManager.error("No agents registered to run", State.ERROR, true);
-      return;
-    }
-
-    if (!this.goal) {
-      this.logManager.error("Goal is not set", State.ERROR, true);
-      return;
-    }
-
-    // Set base values for all agents
-    for (const agent of agents) {
-      agent.setBaseValues(url, this.goal);
-    }
-
-    let encounteredError = false;
-    while (agents.some(a => !a.isDone())) {
-      if (this.stopLoop) {
-        this.logManager.log("Stopping main loop as requested", State.INFO, true);
-        break;
-      }
-
-      if (agents.every(a => a.isPaused())) {
-        await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to avoid busy waiting
-        continue; // Skip this iteration if all agents are paused
-      }
-
-      for (const agent of agents) {
-        if (!agent.isDone()) {
-          await agent.tick();
-        }else{
-          if(agent.getState() == State.ERROR){
-            encounteredError = true
-            this.bus.emit({ ts: Date.now(), type: "stop", message: `There was an error with ${agent.name} agent`, sessionId: this.sessionId });
-            break;
-          }
+      // Start all sessions
+      for (const [name, session] of this.sessions.entries()) {
+        const started = await session.start(url);
+        if (!started) {
+          this.logManager.error(`Failed to start session for agent: ${name}`, State.ERROR);
+          return;
         }
       }
 
-      if(encounteredError) break;
-    }
+      this.bus.on('stop', async (evt) => {
+        this.stopLoop = true;
+        this.bus.emit({ ts: Date.now(), type: 'issue', message: `Agent stopped because of ${evt.message}` });
+        this.logManager.log(`Agent stopped because of ${evt.message}`, State.ERROR, true);
+      });
 
-    await this.stop();
-    const doneMessage = `Agent is done with task. Used ${this.logManager.getTokens()} tokens`;
-    this.bus.emit({ ts: Date.now(), type: "done", message: doneMessage, sessionId: this.sessionId });
-    const endTime = performance.now();
-    const timeTaken = endTime - startTime;
-    this.logManager.log("Done", State.DONE, true);
-    this.logManager.log(`All Agents finished in: ${timeTaken.toFixed(2)} ms`, State.DONE, true);
+      this.bus.on('pause_all', () => {
+        this.pauseAllAgents();
+      });
+
+      this.bus.on('resume_all', () => {
+        this.resumeAllAgents();
+      });
+
+      this.bus.on('pause_agent', (data: { agentName: Namespaces }) => {
+        const agent = this.getAgent(data.agentName);
+        if (agent) {
+          agent.pauseAgent();
+        }
+      });
+
+      this.bus.on('resume_agent', (data: { agentName: Namespaces }) => {
+        const agent = this.getAgent(data.agentName);
+        if (agent) {
+          agent.resumeAgent();
+        }
+      });
+
+      // Set base URL for all action services
+      for (const actionService of this.actionServices.values()) {
+        actionService.setBaseUrl(url);
+      }
+
+      const agents = this.agentRegistry.getAllAgents();
+
+      if (agents.length === 0) {
+        this.logManager.error("No agents registered to run", State.ERROR, true);
+        return;
+      }
+
+      if (!this.goal) {
+        this.logManager.error("Goal is not set", State.ERROR, true);
+        return;
+      }
+
+      // Set base values for all agents
+      for (const agent of agents) {
+        agent.setBaseValues(url, this.goal);
+      }
+
+      let encounteredError = false;
+      while (agents.some(a => !a.isDone())) {
+        if (this.stopLoop) {
+          this.logManager.log("Stopping main loop as requested", State.INFO, true);
+          break;
+        }
+
+        if (agents.every(a => a.isPaused())) {
+          await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to avoid busy waiting
+          continue; // Skip this iteration if all agents are paused
+        }
+
+        for (const agent of agents) {
+          agent.nextTick();
+          if (!agent.isDone()) {
+            await agent.tick();
+          } else {
+            if (agent.getState() == State.ERROR) {
+              encounteredError = true
+              this.bus.emit({ ts: Date.now(), type: "stop", message: `There was an error with ${agent.name} agent`, sessionId: this.sessionId });
+              break;
+            }
+          }
+        }
+
+        if (encounteredError) break;
+      }
+
+      this.logManager.log("Done", State.DONE, true);
+      const doneMessage = `Agent is done with task. Used ${this.logManager.getTokens()} tokens`;
+      this.bus.emit({ ts: Date.now(), type: "done", message: doneMessage, sessionId: this.sessionId });
+      await this.stop();
+      const endTime = performance.now();
+      const timeTaken = endTime - startTime;
+      this.logManager.log(`All Agents finished in: ${timeTaken.toFixed(2)} ms`, State.DONE, true);
+    }
+    catch (error) {
+      this.logManager.error(`Error starting agent: ${error}`, State.ERROR, true);
+      await this.stop();
+      throw error;
+    }
   }
 
   public async stop(): Promise<boolean> {
