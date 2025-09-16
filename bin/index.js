@@ -200,9 +200,9 @@ if (args.help || args.h) {
       agent-run logs            Show main agent log
       agent-run logs --json     Show main agent log in JSON format
       agent-run mission         Show mission log in markdown
-      agent-run crawl-map       Show crawl map in markdown
-      agent-run navigation-tree  Show navigation tree in markdown
-      agent-run logs-dir         Show logs directory
+      agent-run crawl-map       Show crawl map in markdown. The crawl map shows detailed results of the agent's crawl
+      agent-run navigation-tree Show navigation tree in markdown
+      agent-run logs-dir        Show logs directory
       agent-run stop            Stop all agents
 
     Config File Example:
@@ -213,7 +213,8 @@ if (args.help || args.h) {
         "port": 3001,
         "websocket": 3002,
         "test-mode": true,
-        "auto-start": true
+        "auto-start": true,
+        "detailed": true
       }
 
     Examples:

@@ -90,7 +90,18 @@ export default class Tester extends Agent {
                 case State.OBSERVE:
                     try {
                         this.logManager.log(`Observing page: ${this.currentUrl}`, this.buildState());
-                        this.observedElements = await this.stagehandSession.observe();
+
+                        this.logManager.log(`Observing page: ${this.currentUrl}`, this.buildState());
+                        const rawObservedElements = await this.stagehandSession.observe();
+
+                        // Filter out any elements that already exist in the queue
+                        this.observedElements = rawObservedElements.filter(observedElement => {
+                            return !this.queue.some(queueItem =>
+                                queueItem.description === observedElement.description ||
+                                queueItem.selector === observedElement.selector
+                            );
+                        });
+
                         this.setState(State.DECIDE);
                     } catch (e) {
                         this.logManager.error(`Error observing page: ${String(e)}`, this.buildState());
@@ -306,6 +317,7 @@ export default class Tester extends Agent {
 
             this.testResults.push({
                 element: button,
+                ledTo: newUrl,
                 testType: 'positive',
                 testValue: 'click',
                 success: true,
@@ -315,12 +327,13 @@ export default class Tester extends Agent {
             this.logManager.log(`Button test passed: ${button.description}`, this.buildState(), false);
 
         } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.testResults.push({
                 element: button,
                 testType: 'positive',
                 testValue: 'click',
                 success: false,
-                error: String(error)
+                error: errorMessage
             });
 
             this.logManager.error(`Button test failed: ${button.description} - ${error}`, this.buildState(), false);
@@ -367,12 +380,13 @@ export default class Tester extends Agent {
                 this.logManager.log(`Text input test (${testCase.type}) passed: ${input.description}`, this.buildState(), false);
 
             } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
                 this.testResults.push({
                     element: input,
                     testType: testCase.type,
                     testValue: testCase.value,
                     success: false,
-                    error: String(error)
+                    error: String(errorMessage)
                 });
 
                 this.logManager.error(`Text input test (${testCase.type}) failed: ${input.description} - ${error}`, this.buildState(), false);
@@ -467,12 +481,13 @@ export default class Tester extends Agent {
                     await this.page.waitForTimeout(200);
 
                 } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
                     this.testResults.push({
                         element: select,
                         testType: 'positive',
                         testValue: option.value,
                         success: false,
-                        error: String(error)
+                        error: errorMessage
                     });
                 }
             }
@@ -501,12 +516,13 @@ export default class Tester extends Agent {
             }
 
         } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.testResults.push({
                 element: select,
                 testType: 'positive',
                 testValue: 'general',
                 success: false,
-                error: String(error)
+                error: errorMessage
             });
         }
     }
@@ -550,12 +566,13 @@ export default class Tester extends Agent {
             });
 
         } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.testResults.push({
                 element: checkbox,
                 testType: 'positive',
                 testValue: 'toggle',
                 success: false,
-                error: String(error)
+                error: errorMessage
             });
         }
     }
@@ -585,12 +602,13 @@ export default class Tester extends Agent {
             });
 
         } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.testResults.push({
                 element: radio,
                 testType: 'positive',
                 testValue: true,
                 success: false,
-                error: String(error)
+                error: errorMessage
             });
         }
     }
@@ -620,12 +638,13 @@ export default class Tester extends Agent {
             await this.fillFormWithInvalidData(form);
 
         } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.testResults.push({
                 element: form,
                 testType: 'positive',
                 testValue: 'form_test',
                 success: false,
-                error: String(error)
+                error: errorMessage
             });
         }
     }
@@ -718,6 +737,7 @@ export default class Tester extends Agent {
 
             this.testResults.push({
                 element: link,
+                ledTo: newUrl,
                 testType: 'positive',
                 testValue: 'click',
                 success: true,
@@ -727,12 +747,13 @@ export default class Tester extends Agent {
             this.logManager.log(`Link test passed: ${link.description}`, this.buildState(), false);
 
         } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.testResults.push({
                 element: link,
                 testType: 'positive',
                 testValue: 'click',
                 success: false,
-                error: String(error)
+                error: errorMessage
             });
 
             this.logManager.error(`Link test failed: ${link.description} - ${error}`, this.buildState(), false);
@@ -802,12 +823,13 @@ export default class Tester extends Agent {
                 });
 
             } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
                 this.testResults.push({
                     element: dateInput,
                     testType: testCase.type,
                     testValue: testCase.value,
                     success: false,
-                    error: String(error)
+                    error: errorMessage
                 });
             }
         }
@@ -851,12 +873,13 @@ export default class Tester extends Agent {
                 });
 
             } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
                 this.testResults.push({
                     element: numberInput,
                     testType: testCase.type,
                     testValue: testCase.value,
                     success: false,
-                    error: String(error)
+                    error: errorMessage
                 });
             }
         }
@@ -897,12 +920,13 @@ export default class Tester extends Agent {
             }
 
         } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.testResults.push({
                 element: otherInput,
                 testType: 'positive',
                 testValue: 'general',
                 success: false,
-                error: String(error)
+                error: errorMessage
             });
         }
     }
@@ -914,6 +938,7 @@ export default class Tester extends Agent {
         this.testResults = [];
         this.groupedElements = null;
         this.observedElements = [];
+        this.pagesSeen = [];
     }
 
     public getTestResults(): UITesterResult[] {

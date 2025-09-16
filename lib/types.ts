@@ -246,6 +246,7 @@ export interface FormElementInfo extends UIElementInfo {
 
 export interface UITesterResult {
     element: UIElementInfo;
+    ledTo?: string;
     testType: 'positive' | 'negative';
     testValue: any;
     success: boolean;

@@ -99,6 +99,39 @@ export class CrawlMap {
         md += "\n";
       }
 
+      /* ----- test results ----- */
+      if (page.testResults && page.testResults.length > 0) {
+        md += "**Test Results:**\n\n";
+
+        for (const test of page.testResults) {
+          const statusIcon = test.success ? "✅" : "❌";
+          const testTypeLabel = test.testType === 'positive' ? "Positive" : "Negative";
+          const elementType = test.element.elementType;
+          const testValue = typeof test.testValue === 'object'
+            ? JSON.stringify(test.testValue)
+            : String(test.testValue);
+
+          md += `- ${statusIcon} **${testTypeLabel} Test** (${elementType})\n`;
+          md += `  ↳ Element: \`${test.element.selector}\`\n`;
+          md += `  ↳ Description: ${test.element.description}\n`;
+          md += `  ↳ Test Value: \`${testValue}\`\n`;
+
+          if (test.ledTo) {
+            md += `  ↳ Led To: ${test.ledTo}\n`;
+          }
+
+          if (test.error) {
+            md += `  ↳ Error: ${test.error}\n`;
+          }
+
+          if (test.response) {
+            md += `  ↳ Response: ${test.response}\n`;
+          }
+
+          md += "\n";
+        }
+      }
+
       /* ----- analysis ----- */
       if (page.analysis) {
         md += "**Analysis:**\n\n";
