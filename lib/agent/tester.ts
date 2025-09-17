@@ -6,6 +6,7 @@ import { GroupedUIElements, UIElementGrouper } from "../utility/links/linkGroupe
 import { Page } from "@browserbasehq/stagehand";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { TestingThinker } from "../services/thinkers/testingThinker.js";
+import { batchTestElements, quickTestButtonElement, validateLinkUrl } from "../utility/links/linktesterUtilities.js";
 
 export default class Tester extends Agent {
     public nextLink: Omit<LinkInfo, 'visited'> | null = null;
@@ -16,6 +17,7 @@ export default class Tester extends Agent {
     public testResults: UITesterResult[] = [];
     private page: Page | null = null;
     private pagesSeen: string[] = [];
+    private maxBatchSize = 15;
 
     private stagehandSession: StagehandSession;
     private localactionService: AutoActionService;
@@ -47,7 +49,6 @@ export default class Tester extends Agent {
 
     public setBaseValues(url: string, mainGoal?: string): void {
         super.setBaseValues(url, mainGoal);
-
 
         if (this.stagehandSession.page === null) {
             this.logManager.error('Page not initialized', this.buildState(), true);
@@ -100,8 +101,6 @@ export default class Tester extends Agent {
 
                 case State.OBSERVE:
                     try {
-                        this.logManager.log(`Observing page: ${this.currentUrl}`, this.buildState());
-
                         this.logManager.log(`Observing page: ${this.currentUrl}`, this.buildState());
                         const rawObservedElements = await this.stagehandSession.observe();
 
@@ -220,10 +219,8 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.buttons.length} buttons`, this.buildState(), true);
 
         for (const button of this.groupedElements.buttons) {
-            const initialUrl = this.page!.url();
-            await this.testButtonElement(button);
-            await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
-            await this.page!.waitForTimeout(1000);
+            const testerResult = await quickTestButtonElement(this.page!, button);
+            this.testResults.push(testerResult);
         }
     }
 
@@ -358,11 +355,18 @@ export default class Tester extends Agent {
 
         this.logManager.log(`Testing ${this.groupedElements.textInputs.length} text inputs`, this.buildState(), true);
 
-        for (const input of this.groupedElements.textInputs) {
-            const initialUrl = this.page!.url()
-            await this.testTextInputElement(input);
-            await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
-            await this.page!.waitForTimeout(1000);
+        // Batch process text inputs
+        const batchSize = this.maxBatchSize; // Can be higher for text inputs since they're non-destructive
+        for (let i = 0; i < this.groupedElements.textInputs.length; i += batchSize) {
+            const batch = this.groupedElements.textInputs.slice(i, i + batchSize);
+
+            // Process batch in parallel
+            await Promise.all(batch.map(input => this.testTextInputElement(input)));
+
+            // Optional small delay between batches (can be removed for text inputs)
+            if (i + batchSize < this.groupedElements.textInputs.length) {
+                await new Promise(resolve => setTimeout(resolve, 50)); // Very small delay
+            }
         }
     }
 
@@ -691,12 +695,8 @@ export default class Tester extends Agent {
 
         this.logManager.log(`Testing ${this.groupedElements.links.length} links`, this.buildState(), true);
 
-        for (const link of this.groupedElements.links) {
-            const initialUrl = this.page!.url()
-            await this.testLinkElement(link);
-            await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
-            await this.page!.waitForTimeout(1000);
-        }
+        const testResults = await batchTestElements(this.page!, this.groupedElements.links, this.maxBatchSize);
+        this.testResults.push(...testResults);
     }
 
     private async testLinkElement(link: UIElementInfo): Promise<void> {
@@ -806,9 +806,7 @@ export default class Tester extends Agent {
         this.logManager.log(`Testing ${this.groupedElements.dateInputs.length} date inputs`, this.buildState(), true);
 
         for (const dateInput of this.groupedElements.dateInputs) {
-            const initialUrl = this.page!.url()
             await this.testDateInputElement(dateInput);
-            await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
             await this.page!.waitForTimeout(1000);
         }
     }

@@ -3,9 +3,9 @@ import StagehandSession from "../browserAuto/stagehandSession.js";
 import { UIElementGrouper } from "../utility/links/linkGrouper.js";
 import { BaseAgentDependencies } from "../utility/abstract.js";
 import Tester from "../agent/tester.js";
-import { CombinedThinker } from "../services/thinkers/combinedThinker.js";
 import AutoActionService from "../services/actions/autoActionService.js";
 import { eventBusManager } from "../services/events/eventBus.js";
+import { TestingThinker } from "../services/thinkers/testingThinker.js";
 
 const router = Router();
 
@@ -14,8 +14,11 @@ router.get("/test-agent", async (req, res) => {
     try {
         console.log('Starting test session...');
         const sessionId = "test_session"
+        const url = 'https://forms.gle/C5wE2k9fpHtC4561A';
+
         const session = new StagehandSession(sessionId);
-        const started = await session.start('https://forms.gle/C5wE2k9fpHtC4561A');
+        const started = await session.start(url);
+        
         if (!started) {
             res.status(500).send('Failed to start session.');
             return;
@@ -26,7 +29,7 @@ router.get("/test-agent", async (req, res) => {
         }
 
         const eventBus = eventBusManager.getOrCreateBus(sessionId);
-        const thinker = new CombinedThinker(sessionId);
+        const thinker = new TestingThinker(sessionId);
         const actionService = new AutoActionService(session);
 
         const dependencies: BaseAgentDependencies = {
@@ -40,6 +43,7 @@ router.get("/test-agent", async (req, res) => {
         };
 
         const agent = new Tester(dependencies);
+        agent.setBaseValues(url, 'Crawl the site');
         while (!agent.isDone()) {
             await agent.tick();
         }
