@@ -31,56 +31,41 @@ const server = createServer(app);
 
 // Referer validation middleware to replace CORS
 const validateReferer = (req: Request, res: Response, next: express.NextFunction): void => {
-    const allowedOrigins = process.env.NODE_ENV === 'production'
-        ? ['https://www.qa-agent.site']
-        : true; // Allow all in development
+    const allowedOrigins =
+        process.env.NODE_ENV === 'production'
+            ? ['https://www.qa-agent.site', 'https://qa-agent.site'] // support both
+            : true;
 
-    // Get the origin from referer or origin header
     const referer = req.get('Referer');
     const origin = req.get('Origin');
     const requestOrigin = origin || (referer ? new URL(referer).origin : null);
 
-    // Allow requests with no origin in development (like Postman, mobile apps)
-    if (!requestOrigin) {
-        if (process.env.NODE_ENV !== 'production') {
-            next();
-            return;
-        } else {
-            // In production, you might want to be stricter
-            console.log('❌ Access blocked: No origin/referer header');
-            res.status(403).json({
-                error: 'Access denied',
-                message: 'Origin not specified'
-            });
-            return;
-        }
+    // Allow no-origin requests in dev
+    if (!requestOrigin && process.env.NODE_ENV !== 'production') {
+        return next();
     }
 
-    // Check if origin is allowed
-    if (allowedOrigins === true || allowedOrigins.includes(requestOrigin)) {
-        // Set CORS headers for the allowed origin
-        res.header('Access-Control-Allow-Origin', requestOrigin);
+    if (allowedOrigins === true || allowedOrigins.includes(requestOrigin || '')) {
+        res.header('Access-Control-Allow-Origin', requestOrigin || '*');
         res.header('Access-Control-Allow-Credentials', 'true');
         res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
         res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 
-        // Handle preflight requests
         if (req.method === 'OPTIONS') {
             res.status(200).end();
             return;
         }
 
-        next();
-        return;
-    } else {
-        console.log('❌ Access blocked:', requestOrigin);
-        res.status(403).json({
-            error: 'Access denied',
-            message: 'Origin not allowed'
-        });
-        return;
+        return next();
     }
+
+    console.log('❌ Access blocked:', requestOrigin);
+    res.status(403).json({
+        error: 'Access denied',
+        message: 'Origin not allowed'
+    });
 };
+
 
 // Replace your CORS configuration with this:
 app.use(validateReferer);
