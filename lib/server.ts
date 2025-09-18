@@ -31,6 +31,10 @@ const server = createServer(app);
 
 // Referer validation middleware to replace CORS
 const validateReferer = (req: Request, res: Response, next: express.NextFunction): void => {
+    if (req.path === '/health') {
+        return next();
+    }
+
     const allowedOrigins =
         process.env.NODE_ENV === 'production'
             ? ['https://www.qa-agent.site', 'https://qa-agent.site'] // support both

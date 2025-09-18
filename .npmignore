@@ -15,3 +15,4 @@ dist/webCode.js.map
 DockerFile
 agentConfig.json
 dist/test/
+dist/python
