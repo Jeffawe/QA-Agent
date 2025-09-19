@@ -16,3 +16,4 @@ DockerFile
 agentConfig.json
 dist/test/
 dist/python
+dist/externalCall.js

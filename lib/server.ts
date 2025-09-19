@@ -496,11 +496,16 @@ app.post('/test/:key', async (req: Request, res: Response) => {
     }
 
     try {
-        const getKey: boolean = process.env.NODE_ENV === 'production'
-        const success = await checkUserKey(sessionId, key, getKey);
-        if (!success) {
+        const getKey: boolean = process.env.NODE_ENV === 'production';
+        try {
+            const success = await checkUserKey(sessionId, key, getKey);
+            if (!success) {
+                res.status(401).send('Unauthorized');
+                return;
+            }
+        } catch {
             res.status(401).send('Unauthorized');
-            return;
+            return; // Critical: don't forget this!
         }
 
         if (!goal) {
