@@ -166,29 +166,25 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
         let errorListener: ((error: Error) => void) | null = null;
 
         const cleanup = () => {
-            if (messageListener) {
-                worker.removeListener('message', messageListener);
-            }
-            if (errorListener) {
-                worker.removeListener('error', errorListener);
-            }
+            if (messageListener) worker.removeListener('message', messageListener);
+            if (errorListener) worker.removeListener('error', errorListener);
         };
 
+        // REDUCED TIMEOUT: 15s instead of 50s for faster feedback
         const timeout = setTimeout(() => {
             if (!resolved) {
                 resolved = true;
                 cleanup();
-                console.error(`❌ Worker initialization timeout for session ${sessionId} after 10 seconds`);
+                console.error(`❌ Worker initialization timeout for session ${sessionId} after 15 seconds`);
                 reject(new Error('Worker initialization timeout'));
             }
-        }, 50000);
+        }, 15000);
 
         const resolveOnce = (port: number) => {
             if (!resolved) {
                 resolved = true;
                 clearTimeout(timeout);
                 cleanup();
-                console.log(`✅ Worker initialized for session ${sessionId} with WebSocket port ${port}`);
                 resolve(port);
             }
         };
@@ -198,14 +194,11 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
                 resolved = true;
                 clearTimeout(timeout);
                 cleanup();
-                console.error(`❌ Worker initialization failed for session ${sessionId}:`, error.message);
                 reject(error);
             }
         };
 
         messageListener = (message: any) => {
-            console.log(`📨 Worker message for session ${sessionId}:`, message.type);
-
             switch (message.type) {
                 case 'initialized':
                     if (message.websocketPort && typeof message.websocketPort === 'number') {
@@ -228,12 +221,8 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
                     break;
 
                 case 'log':
-                    // Handle worker log messages if needed
                     console.log(`🔍 Worker log for session ${sessionId}:`, message.message);
                     break;
-
-                default:
-                    console.log(`⚠️ Unknown message type from worker ${sessionId}:`, message.type);
             }
         };
 
@@ -241,7 +230,6 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
             console.error(`💥 Worker error for session ${sessionId}:`, error);
             rejectOnce(new Error(`Worker error: ${error.message}`));
 
-            // Try to gracefully stop the worker
             try {
                 worker.postMessage({ command: 'stop' });
             } catch (stopError) {
@@ -256,7 +244,6 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
             console.log(`🚪 Worker ${sessionId} exited with code ${code}`);
             deleteSession(sessionId);
 
-            // If worker exits before initialization, reject the promise
             if (!resolved) {
                 resolved = true;
                 clearTimeout(timeout);
@@ -265,7 +252,7 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
             }
         });
 
-        // Validate required data before sending
+        // Validate and send data
         const apiKey = getApiKeyForAgent(sessionId) ?? process.env.API_KEY;
         if (!apiKey) {
             rejectOnce(new Error('No API key available for session'));
@@ -277,9 +264,6 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
             return;
         }
 
-        console.log(`🚀 Starting worker for session ${sessionId}...`);
-
-        // Send the start command with error handling
         try {
             worker.postMessage({
                 command: 'start',
@@ -313,12 +297,12 @@ const setupWSS = async (): Promise<ParentWebSocketServer> => {
 
 async function getCachedAgents(goal: string, detailed: boolean): Promise<MiniAgentConfig[]> {
     const cacheKey = `${goal}_${detailed}`;
-    
+
     if (agentConfigCache.has(cacheKey)) {
         console.log('⚡ Using cached agent configuration');
         return agentConfigCache.get(cacheKey)!;
     }
-    
+
     const agents = await getAgents(goal, detailed);
     const serializableConfigs: MiniAgentConfig[] = Array.from(agents).map(config => ({
         name: config.name,
@@ -326,7 +310,7 @@ async function getCachedAgents(goal: string, detailed: boolean): Promise<MiniAge
         dependent: config.dependent,
         agentDependencies: config.agentDependencies,
     }));
-    
+
     agentConfigCache.set(cacheKey, serializableConfigs);
     console.log('💾 Agent configuration cached');
     return serializableConfigs;
@@ -380,7 +364,7 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
 
     try {
         const detailed = data['detailed'] || false;
-        
+
         // PARALLEL EXECUTION: Start both operations simultaneously
         const [serializableConfigs] = await Promise.all([
             getCachedAgents(goal, detailed),
@@ -391,11 +375,10 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
         const workerPool = WorkerPool.getInstance();
         const worker = workerPool.getWorker(sessionId, url, data);
 
-        // REDUCED TIMEOUT: 20s instead of 30s
         const websocketPort: number = await Promise.race([
             setUpWorkerEvents(worker, sessionId, goal, serializableConfigs),
             new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("Worker initialization timeout")), 20000)
+                setTimeout(() => reject(new Error("Worker initialization timeout")), 30000)
             )
         ]);
 
@@ -520,7 +503,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
         // PARALLEL EXECUTION: Run key validation and config loading simultaneously
         const getKey: boolean = process.env.NODE_ENV === 'production';
         const detailed = data['detailed'] || false;
-        
+
         const [keyValidationSuccess, serializableConfigs] = await Promise.all([
             checkUserKey(sessionId, key, getKey).catch(() => false),
             getCachedAgents(goal, detailed),
@@ -543,7 +526,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
         const websocketPort: number = await Promise.race([
             setUpWorkerEvents(worker, sessionId, goal, serializableConfigs),
             new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("Worker initialization timeout")), 20000)
+                setTimeout(() => reject(new Error("Worker initialization timeout")), 30000)
             )
         ]);
 
