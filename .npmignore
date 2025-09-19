@@ -2,6 +2,7 @@ node_modules/
 lib/
 *.ts
 tsconfig.json
+tsconfig.tsbuildinfo
 nodemon.json
 images/
 logs/
@@ -15,5 +16,24 @@ dist/webCode.js.map
 DockerFile
 agentConfig.json
 dist/test/
-dist/python
+dist/python/
 dist/externalCall.js
+assets/
+agent-config.json
+
+# Exclude source maps and declaration maps
+*.js.map
+*.d.ts.map
+
+# Additional common exclusions
+*.log
+*.tmp
+.DS_Store
+.vscode/
+.idea/
+coverage/
+.nyc_output/
+test/
+tests/
+spec/
+__tests__/
