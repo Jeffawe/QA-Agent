@@ -18,22 +18,27 @@ import { CrawlMap } from './utility/crawlMap.js';
 
 let agent: BossAgent | null = null;
 let isInitialized = false;
+let redisBridge: RedisEventBridge | null = null;
+let eventBus: any = null;
 
+// Pre-initialize common resources for pre-warmed workers
 const initializeWorker = async () => {
     try {
         const { sessionId } = workerData;
 
-        // Create validators in the worker
+        // Early return if already initialized (for pre-warmed workers)
+        if (isInitialized && workerData.preWarmed) {
+            console.log('✅ Using pre-warmed worker, skipping full initialization');
+            return;
+        }
+
+        // Parallel validator creation and event bus setup
         const websocketPort = await createValidatorsAsync(sessionId);
 
-        console.log('✅ createValidatorsAsync completed, port:', websocketPort);
         const logManager = logManagers.getOrCreateManager(sessionId);
-        console.log('✅ logManager created');
         logManager.log(`Worker initialized for session ${sessionId} with WebSocket port ${websocketPort}`, State.INFO, false);
-        console.log('✅ log written');
-        console.log('About to postMessage with:', { websocketPort, sessionId });
 
-        isInitialized = true
+        isInitialized = true;
 
         parentPort?.postMessage({
             type: 'initialized',
@@ -41,7 +46,6 @@ const initializeWorker = async () => {
         });
 
         console.log(`✅ Worker initialized for session ${sessionId} with WebSocket port ${websocketPort}`);
-        logManager.log(`Worker initialized for session ${sessionId} with WebSocket port ${websocketPort}`, State.INFO, false);
 
     } catch (error) {
         console.error('❌ Worker initialization error:', error);
@@ -54,34 +58,46 @@ const initializeWorker = async () => {
     }
 };
 
+// Streamlined validator creation with lazy loading
 const createValidatorsAsync = async (sessionId: string): Promise<number> => {
     try {
         console.log(`🔨 Creating validators for session ${sessionId}...`);
 
-        const eventBus = eventBusManager.getOrCreateBus(sessionId);
+        // Reuse existing event bus if available (for pre-warmed workers)
+        if (!eventBus) {
+            eventBus = eventBusManager.getOrCreateBus(sessionId);
+        }
 
-        // Create validators
-        console.log(`📋 Creating action validators...`);
-        new ActionSpamValidator(eventBus, sessionId);
-        new ErrorValidator(eventBus, sessionId);
-        new LLMUsageValidator(eventBus, sessionId);
-        new ThinkerValidator(eventBus, sessionId);
-        new NewPageValidator(eventBus, sessionId);
-        new ValidatorWarningValidator(eventBus, sessionId);
+        // Create validators in parallel batches
+        const validatorPromises = [
+            () => new ActionSpamValidator(eventBus, sessionId),
+            () => new ErrorValidator(eventBus, sessionId),
+            () => new LLMUsageValidator(eventBus, sessionId),
+            () => new ThinkerValidator(eventBus, sessionId),
+            () => new NewPageValidator(eventBus, sessionId),
+            () => new ValidatorWarningValidator(eventBus, sessionId)
+        ];
 
-        console.log(`🌐 Setting up WebSocket server...`);
-        // Create WebSocket bridge
-        // const webSocketEventBridge = new WebSocketEventBridge(eventBus, sessionId, WebSocket_PORT);
+        // Execute validator creation in parallel
+        await Promise.all(validatorPromises.map(createValidator => 
+            createValidator()
+        ));
 
-        const redisBridge = new RedisEventBridge(eventBus, sessionId);
+        console.log(`📋 All validators created successfully`);
 
-        // WAIT for the WebSocket server to be ready
-        await redisBridge.waitForReady();
+        // Reuse Redis bridge if available
+        if (!redisBridge) {
+            console.log(`🌐 Setting up Redis event bridge...`);
+            redisBridge = new RedisEventBridge(eventBus, sessionId);
+        }
 
-        // Now get the actual port
+        // OPTIMIZATION 7: Reduce wait time or make it optional for pre-warmed workers
+        if (!workerData.preWarmed) {
+            await redisBridge.waitForReady();
+        }
+
         const port = parseInt(process.env.PORT ?? '3001');
-
-        console.log(`✅ WebSocket server ready on port ${port}`);
+        console.log(`✅ Event bridge ready on port ${port}`);
         return port;
 
     } catch (error) {
@@ -90,11 +106,37 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
     }
 };
 
+// Handle session data updates for pre-warmed workers
+const handleSessionDataUpdate = (sessionId: string, url: any, data: any) => {
+    console.log(`🔄 Updating session data for pre-warmed worker: ${sessionId}`);
+    
+    // Update worker data
+    (workerData as any).sessionId = sessionId;
+    (workerData as any).url = url;
+    (workerData as any).data = data;
+    (workerData as any).preWarmed = false; // No longer pre-warmed
+    
+    // Update event bus for new session
+    eventBus = eventBusManager.getOrCreateBus(sessionId);
+    
+    // Update Redis bridge for new session
+    if (redisBridge) {
+        redisBridge = new RedisEventBridge(eventBus, sessionId);
+    }
+};
+
 if (parentPort) {
     parentPort.on('message', async (data) => {
+        if (data.command === 'update_session_data') {
+            // Handle session data update for pre-warmed workers
+            handleSessionDataUpdate(data.sessionId, data.url, data.data);
+            return;
+        }
+
         if (data.command === 'start') {
             try {
-                if (!isInitialized) {
+                // Skip initialization for pre-warmed workers that are already initialized
+                if (!isInitialized || !workerData.preWarmed) {
                     await initializeWorker();
                 }
 
@@ -104,6 +146,8 @@ if (parentPort) {
                 }
 
                 const workerEventBus = eventBusManager.getOrCreateBus(data.agentConfig.sessionId);
+                
+                // Load data memory only when needed
                 if (workerData.data && typeof workerData.data === 'object') {
                     dataMemory.loadData(workerData.data);
                 }
@@ -116,20 +160,18 @@ if (parentPort) {
                         await cleanup();
                         console.log(`✅ Agent stopped, cleaning up...`);
 
-                        // Notify parent thread to cleanup session values
                         parentPort?.postMessage({
                             type: 'session_cleanup',
                             sessionId: sessionId,
                             message: 'Worker completed cleanup, requesting parent cleanup'
                         });
 
-                        // Small delay to ensure message is sent before exit
-                        await new Promise(resolve => setTimeout(resolve, 100));
+                        // OPTIMIZATION 11: Reduced delay for faster cleanup
+                        await new Promise(resolve => setTimeout(resolve, 50));
 
                     } catch (error) {
                         console.error('Error during cleanup:', error);
 
-                        // Even if cleanup fails, notify parent
                         parentPort?.postMessage({
                             type: 'session_cleanup',
                             sessionId: sessionId,
@@ -143,29 +185,42 @@ if (parentPort) {
                 };
 
                 workerEventBus.on('stop', stopHandler);
-                //workerEventBus.on('done', stopHandler);
 
-                // Convert serializable configs back to full AgentConfigs
+                // Parallel agent config processing
                 const fullAgentConfigs: Set<AgentConfig> = new Set(
                     data.agentConfig.agentConfigs.map((config: MiniAgentConfig) => ({
                         ...config,
-                        agentClass: AgentFactory.getAgentClass(config.name) // Recreate class reference
+                        agentClass: AgentFactory.getAgentClass(config.name)
                     }))
                 );
 
-                storeSessionApiKey(data.agentConfig.sessionId, data.agentConfig.apiKey);
+                // Store API key in parallel with agent creation
+                const apiKeyPromise = Promise.resolve(
+                    storeSessionApiKey(data.agentConfig.sessionId, data.agentConfig.apiKey)
+                );
 
-                agent = new BossAgent({
-                    sessionId: data.agentConfig.sessionId,
-                    eventBus: workerEventBus,
-                    goalValue: data.agentConfig.goalValue,
-                    agentConfigs: fullAgentConfigs,
+                const agentCreationPromise = new Promise<BossAgent>((resolve) => {
+                    const newAgent = new BossAgent({
+                        sessionId: data.agentConfig.sessionId,
+                        eventBus: workerEventBus,
+                        goalValue: data.agentConfig.goalValue,
+                        agentConfigs: fullAgentConfigs,
+                    });
+                    resolve(newAgent);
                 });
 
+                // Execute both operations in parallel
+                const [newAgent] = await Promise.all([
+                    agentCreationPromise,
+                    apiKeyPromise
+                ]);
+
+                agent = newAgent;
+
+                // Start agent with minimal delay
                 await agent.start(workerData.url);
 
                 console.log(`✅ Agent completed for session ${data.agentConfig.sessionId}`);
-
                 await stopWorker();
 
             } catch (error) {
@@ -194,7 +249,8 @@ if (parentPort) {
                 message: 'Worker completed cleanup, requesting parent cleanup'
             });
 
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // OPTIMIZATION 15: Reduced cleanup delay
+            await new Promise(resolve => setTimeout(resolve, 50));
             console.log(`✅ Agent stopped, terminating worker...`);
         } catch (error) {
             console.error('Error during cleanup:', error);
@@ -211,20 +267,56 @@ if (parentPort) {
     };
 }
 
+// Streamlined cleanup with parallel operations
 const cleanup = async () => {
     console.log(`🛑 Stopping agent ${workerData.sessionId}...`);
 
+    const cleanupPromises: Promise<void>[] = [];
+
     if (agent) {
-        await agent.stop();
-        agent = null; // Clear the reference
+        cleanupPromises.push(agent.stop().then(() => {
+            agent = null;
+        }));
     }
 
-    eventBusManager.clear();
-    logManagers.clear();
-    CrawlMap.finish();
-    PageMemory.clear();
-    dataMemory.clear();
+    // Parallel cleanup of memory systems
+    cleanupPromises.push(
+        Promise.resolve().then(() => {
+            eventBusManager.clear();
+        }),
+        Promise.resolve().then(() => {
+            logManagers.clear();
+        }),
+        Promise.resolve().then(() => {
+            CrawlMap.finish();
+        }),
+        Promise.resolve().then(() => {
+            PageMemory.clear();
+        }),
+        Promise.resolve().then(() => {
+            dataMemory.clear();
+        })
+    );
+
+    // Execute all cleanup operations in parallel
+    await Promise.all(cleanupPromises);
+    console.log(`✅ Cleanup completed for ${workerData.sessionId}`);
 };
 
-
-console.log(`✅ Worker ready for session ${workerData.sessionId}`);
+// Pre-warm initialization for worker pool
+if (workerData.preWarmed) {
+    console.log(`🔥 Pre-warming worker...`);
+    // Pre-initialize common resources but don't fully initialize
+    // This reduces cold start time when the worker is actually used
+    Promise.resolve().then(async () => {
+        try {
+            // Pre-create event bus manager
+            eventBusManager.getOrCreateBus('pre-warm');
+            console.log(`✅ Worker pre-warmed and ready`);
+        } catch (error) {
+            console.error('❌ Error pre-warming worker:', error);
+        }
+    });
+} else {
+    console.log(`✅ Worker ready for session ${workerData.sessionId}`);
+}

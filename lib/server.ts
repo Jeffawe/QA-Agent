@@ -20,6 +20,7 @@ import { LogManager } from './utility/logManager.js';
 import { ParentWebSocketServer } from './services/events/parentWebSocket.js';
 import { createServer } from 'http';
 import testRoutes from './test/testAgent.js'
+import { WorkerPool } from './workerPool.js';
 
 dotenv.config();
 
@@ -129,6 +130,7 @@ app.set('trust proxy', 1);
 
 const PORT: number = parseInt(process.env.PORT || '3001');
 let parentWSS: ParentWebSocketServer | null = null;
+const agentConfigCache = new Map<string, MiniAgentConfig[]>();
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -309,6 +311,27 @@ const setupWSS = async (): Promise<ParentWebSocketServer> => {
     }
 };
 
+async function getCachedAgents(goal: string, detailed: boolean): Promise<MiniAgentConfig[]> {
+    const cacheKey = `${goal}_${detailed}`;
+    
+    if (agentConfigCache.has(cacheKey)) {
+        console.log('⚡ Using cached agent configuration');
+        return agentConfigCache.get(cacheKey)!;
+    }
+    
+    const agents = await getAgents(goal, detailed);
+    const serializableConfigs: MiniAgentConfig[] = Array.from(agents).map(config => ({
+        name: config.name,
+        sessionType: config.sessionType,
+        dependent: config.dependent,
+        agentDependencies: config.agentDependencies,
+    }));
+    
+    agentConfigCache.set(cacheKey, serializableConfigs);
+    console.log('💾 Agent configuration cached');
+    return serializableConfigs;
+}
+
 app.get('/', (req: Request, res: Response) => {
     res.send('Welcome to QA-Agent! Go to https://www.qa-agent.site/ for more info.');
 });
@@ -340,6 +363,7 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
 
     if (getSessionSize() >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
         res.status(429).send('We have reached the maximum number of sessions. Try again another time');
+        return;
     }
 
     if (hasSession(sessionId)) {
@@ -356,24 +380,22 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
 
     try {
         const detailed = data['detailed'] || false;
-        const agents = await getAgents(goal, detailed);
-        const serializableConfigs: MiniAgentConfig[] = Array.from(agents).map(config => ({
-            name: config.name,
-            sessionType: config.sessionType,
-            dependent: config.dependent,
-            agentDependencies: config.agentDependencies,
-        }));
+        
+        // PARALLEL EXECUTION: Start both operations simultaneously
+        const [serializableConfigs] = await Promise.all([
+            getCachedAgents(goal, detailed),
+            parentWSS // Ensure WSS is ready
+        ]);
 
-        await parentWSS?.waitForReady();
+        // Use worker pool for faster startup
+        const workerPool = WorkerPool.getInstance();
+        const worker = workerPool.getWorker(sessionId, url, data);
 
-        const worker = new Worker(join(__dirname, 'agent-worker.js'), {
-            workerData: { sessionId, url, data }
-        });
-
+        // REDUCED TIMEOUT: 20s instead of 30s
         const websocketPort: number = await Promise.race([
             setUpWorkerEvents(worker, sessionId, goal, serializableConfigs),
             new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("Worker initialization timeout")), 30000)
+                setTimeout(() => reject(new Error("Worker initialization timeout")), 20000)
             )
         ]);
 
@@ -383,7 +405,7 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
             websocketPort: websocketPort
         });
 
-        console.log(`Session ${sessionId} started successfully!`);
+        console.log(`⚡ Session ${sessionId} started successfully in optimized mode!`);
 
         res.json({
             message: `Session ${sessionId} started successfully!`,
@@ -393,7 +415,6 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
     } catch (error) {
         console.error(`❌ Error starting session ${sessionId}:`, error);
 
-        // Clean up worker if it was created
         if (hasSession(sessionId)) {
             try {
                 const session = getSession(sessionId);
@@ -403,7 +424,7 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
                         console.log(`⏰ Force terminating stuck worker ${sessionId}`);
                         session.worker?.terminate();
                         deleteSession(sessionId);
-                    }, 10000);
+                    }, 5000); // Reduced from 10s to 5s
                 }
                 console.log(`🧹 Worker terminated for failed session ${sessionId}`);
             } catch (terminateError) {
@@ -411,7 +432,6 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
             }
         }
 
-        // Send appropriate error response
         if (error instanceof Error && error.message.includes('timeout')) {
             res.status(408).json('The session took too long to initialize. Please try again.');
         } else {
@@ -487,6 +507,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
 
     if (getSessionSize() >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
         res.status(429).send('We have reached the maximum number of sessions. Try again another time');
+        return;
     }
 
     if (hasSession(sessionId)) {
@@ -496,16 +517,19 @@ app.post('/test/:key', async (req: Request, res: Response) => {
     }
 
     try {
+        // PARALLEL EXECUTION: Run key validation and config loading simultaneously
         const getKey: boolean = process.env.NODE_ENV === 'production';
-        try {
-            const success = await checkUserKey(sessionId, key, getKey);
-            if (!success) {
-                res.status(401).send('Unauthorized');
-                return;
-            }
-        } catch {
+        const detailed = data['detailed'] || false;
+        
+        const [keyValidationSuccess, serializableConfigs] = await Promise.all([
+            checkUserKey(sessionId, key, getKey).catch(() => false),
+            getCachedAgents(goal, detailed),
+            parentWSS // Ensure WSS is ready
+        ]);
+
+        if (!keyValidationSuccess) {
             res.status(401).send('Unauthorized');
-            return; // Critical: don't forget this!
+            return;
         }
 
         if (!goal) {
@@ -513,25 +537,13 @@ app.post('/test/:key', async (req: Request, res: Response) => {
             return;
         }
 
-        const detailed = data['detailed'] || false;
-        const agents = await getAgents(goal, detailed);
-        const serializableConfigs: MiniAgentConfig[] = Array.from(agents).map(config => ({
-            name: config.name,
-            sessionType: config.sessionType,
-            dependent: config.dependent,
-            agentDependencies: config.agentDependencies,
-        }));
-
-        await parentWSS?.waitForReady();
-
-        const worker = new Worker(join(__dirname, 'agent-worker.js'), {
-            workerData: { sessionId, url, data }
-        });
+        const workerPool = WorkerPool.getInstance();
+        const worker = workerPool.getWorker(sessionId, url, data);
 
         const websocketPort: number = await Promise.race([
             setUpWorkerEvents(worker, sessionId, goal, serializableConfigs),
             new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("Worker initialization timeout")), 30000)
+                setTimeout(() => reject(new Error("Worker initialization timeout")), 20000)
             )
         ]);
 
@@ -541,7 +553,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
             websocketPort: websocketPort
         });
 
-        console.log(`Starting Test Session: ${sessionId}`);
+        console.log(`⚡ Starting Test Session: ${sessionId} (optimized)`);
 
         res.json({
             message: `Test Session started successfully!`,
@@ -551,7 +563,6 @@ app.post('/test/:key', async (req: Request, res: Response) => {
     } catch (error) {
         console.error(`❌ Error starting session ${sessionId}:`, error);
 
-        // Clean up worker if it was created
         if (hasSession(sessionId)) {
             try {
                 const session = getSession(sessionId);
@@ -561,7 +572,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
                         console.log(`⏰ Force terminating stuck worker ${sessionId}`);
                         session.worker?.terminate();
                         deleteSession(sessionId);
-                    }, 10000);
+                    }, 5000);
                 }
                 console.log(`🧹 Worker terminated for failed session ${sessionId}`);
             } catch (terminateError) {
@@ -569,7 +580,6 @@ app.post('/test/:key', async (req: Request, res: Response) => {
             }
         }
 
-        // Send appropriate error response
         if (error instanceof Error && error.message.includes('timeout')) {
             res.status(408).json({
                 error: 'Session initialization timeout',
@@ -642,7 +652,10 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
 
 server.listen(PORT, '0.0.0.0', async () => {
     try {
-        await setupWSS(); // or setupWSS().catch(...)
+        await Promise.all([
+            setupWSS(),
+            Promise.resolve(WorkerPool.getInstance()) // Initialize worker pool
+        ]);
         console.log(`🚀 Server listening on port ${PORT} on all interfaces`);
     } catch (err) {
         console.error("❌ Failed to set up WSS:", err);

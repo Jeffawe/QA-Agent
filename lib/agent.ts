@@ -212,32 +212,33 @@ export default class BossAgent {
       }
 
       let encounteredError = false;
-      while (agents.some(a => !a.isDone())) {
-        if (this.stopLoop) {
-          this.logManager.log("Stopping main loop as requested", State.INFO, true);
-          break;
-        }
+      await this.loop(agents, encounteredError);
+      // while (agents.some(a => !a.isDone())) {
+      //   if (this.stopLoop) {
+      //     this.logManager.log("Stopping main loop as requested", State.INFO, true);
+      //     break;
+      //   }
 
-        if (agents.every(a => a.isPaused())) {
-          await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to avoid busy waiting
-          continue; // Skip this iteration if all agents are paused
-        }
+      //   if (agents.every(a => a.isPaused())) {
+      //     await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to avoid busy waiting
+      //     continue; // Skip this iteration if all agents are paused
+      //   }
 
-        for (const agent of agents) {
-          agent.nextTick();
-          if (!agent.isDone()) {
-            await agent.tick();
-          } else {
-            if (agent.getState() == State.ERROR) {
-              encounteredError = true
-              this.bus.emit({ ts: Date.now(), type: "stop", message: `There was an error with ${agent.name} agent`, sessionId: this.sessionId });
-              break;
-            }
-          }
-        }
+      //   for (const agent of agents) {
+      //     agent.nextTick();
+      //     if (!agent.isDone()) {
+      //       await agent.tick();
+      //     } else {
+      //       if (agent.getState() == State.ERROR) {
+      //         encounteredError = true
+      //         this.bus.emit({ ts: Date.now(), type: "stop", message: `There was an error with ${agent.name} agent`, sessionId: this.sessionId });
+      //         break;
+      //       }
+      //     }
+      //   }
 
-        if (encounteredError) break;
-      }
+      //   if (encounteredError) break;
+      // }
 
       this.logManager.log("Done", State.DONE, true);
       const doneMessage = `Agent is done with task. Used ${this.logManager.getTokens()} tokens`;
@@ -251,6 +252,72 @@ export default class BossAgent {
       this.logManager.error(`Error starting agent: ${error}`, State.ERROR, true);
       await this.stop();
       throw error;
+    }
+  }
+
+  private async loop(agents: Agent[], encounteredError: boolean) {
+    while (agents.some(a => !a.isDone())) {
+      if (this.stopLoop) {
+        this.logManager.log("Stopping main loop as requested", State.INFO, true);
+        break;
+      }
+
+      if (agents.every(a => a.isPaused())) {
+        await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to avoid busy waiting
+        continue; // Skip this iteration if all agents are paused
+      }
+
+      // Separate agents into dependent and non-dependent
+      const dependentAgents = agents.filter(agent => agent.dependent && !agent.isDone());
+      const nonDependentAgents = agents.filter(agent => !agent.dependent && !agent.isDone());
+
+      // Process non-dependent agents in parallel (they orchestrate their own dependent agents)
+      const nonDependentPromises = nonDependentAgents.map(async (agent) => {
+        try {
+          agent.nextTick();
+          if (!agent.isDone()) {
+            await agent.tick();
+          }
+          return { agent, success: true, error: null };
+        } catch (error) {
+          return { agent, success: false, error };
+        }
+      });
+
+      // Wait for all non-dependent agents to complete their tick FIRST
+      const nonDependentResults = await Promise.all(nonDependentPromises);
+
+      // THEN process dependent agents sequentially (they mostly stay inactive until called)
+      const dependentResults = [];
+      for (const agent of dependentAgents) {
+        try {
+          agent.nextTick();
+          if (!agent.isDone()) {
+            await agent.tick();
+          }
+          dependentResults.push({ agent, success: true, error: null });
+        } catch (error) {
+          dependentResults.push({ agent, success: false, error });
+          break; // Stop processing dependent agents on first error
+        }
+      }
+
+      // Check for errors in all results
+      const allResults = [...nonDependentResults, ...dependentResults];
+      for (const result of allResults) {
+        if (!result.success || result.agent.getState() === State.ERROR) {
+          encounteredError = true;
+          this.bus.emit({
+            ts: Date.now(),
+            type: "stop",
+            message: `There was an error with ${result.agent.name} agent`,
+            sessionId: this.sessionId
+          });
+          break;
+        }
+      }
+
+      if (encounteredError) break;
     }
   }
 
