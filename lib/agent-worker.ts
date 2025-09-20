@@ -91,10 +91,7 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
             redisBridge = new RedisEventBridge(eventBus, sessionId);
         }
 
-        // OPTIMIZATION 7: Reduce wait time or make it optional for pre-warmed workers
-        if (!workerData.preWarmed) {
-            await redisBridge.waitForReady();
-        }
+        await redisBridge.waitForReady();
 
         const port = parseInt(process.env.PORT ?? '3001');
         console.log(`✅ Event bridge ready on port ${port}`);
@@ -116,9 +113,6 @@ const handleSessionDataUpdate = (sessionId: string, url: any, data: any) => {
     (workerData as any).data = data;
     (workerData as any).preWarmed = false; // No longer pre-warmed
 
-    // Update event bus for new session
-    eventBus = eventBusManager.getOrCreateBus(sessionId);
-
     // Update Redis bridge for new session
     if (redisBridge) {
         redisBridge = new RedisEventBridge(eventBus, sessionId);
@@ -138,7 +132,7 @@ if (parentPort) {
         if (data.command === 'start') {
             try {
                 // Skip initialization for pre-warmed workers that are already initialized
-                if (!isInitialized || !workerData.preWarmed) {
+                if (!isInitialized) {
                     await initializeWorker();
                 }
 

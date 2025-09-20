@@ -175,10 +175,10 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
             if (!resolved) {
                 resolved = true;
                 cleanup();
-                console.error(`❌ Worker initialization timeout for session ${sessionId} after 15 seconds`);
+                console.error(`❌ Worker initialization timeout for session ${sessionId}`);
                 reject(new Error('Worker initialization timeout'));
             }
-        }, 40000);
+        }, 50000);
 
         const resolveOnce = (port: number) => {
             if (!resolved) {

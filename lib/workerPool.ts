@@ -24,7 +24,8 @@ export class WorkerPool {
     private preWarmPool() {
         console.log(`🔥 Pre-warming worker pool with ${this.poolSize} workers...`);
         for (let i = 0; i < this.poolSize; i++) {
-            this.createWorker();
+            const worker = this.createWorker();
+            this.availableWorkers.push(worker);
         }
     }
     
@@ -54,12 +55,12 @@ export class WorkerPool {
         } else {
             console.log('⚡ Using pre-warmed worker');
             // Update worker data for this session
-            worker.postMessage({
-                command: 'update_session_data',
-                sessionId,
-                url,
-                data
-            });
+            // worker.postMessage({
+            //     command: 'update_session_data',
+            //     sessionId,
+            //     url,
+            //     data
+            // });
         }
         
         // Create replacement worker for pool
