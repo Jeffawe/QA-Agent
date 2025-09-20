@@ -14,20 +14,21 @@ export class RedisEventBridge {
 
     constructor(
         private eventBus: EventBus,
-        private sessionId: string,
-        redisConfig?: {
-            host?: string;
-            port?: number;
-            password?: string;
-            db?: number;
-        }
+        private sessionId: string
     ) {
         this.eventBus = eventBus;
         this.logManager = logManagers.getOrCreateManager(sessionId);
 
+        const redisConfig = {
+            connectTimeout: 2000,     // Fast connection
+            lazyConnect: true,        // Connect only when needed
+            maxRetriesPerRequest: 1,  // Fail fast
+            enableOfflineQueue: false
+        }
+
         try {
             // Initialize Redis subscriber
-            this.redisPublisher = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL) : new Redis();
+            this.redisPublisher = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL, redisConfig) : new Redis(redisConfig);
         } catch (error) {
             console.error('❌ Redis connection error:', error);
             throw error;

@@ -26,18 +26,18 @@ export class ParentWebSocketServer {
 
     constructor(
         server: any,
-        port: number,
-        redisConfig?: {
-            host?: string;
-            port?: number;
-            password?: string;
-            db?: number;
-        }
+        port: number
     ) {
+        const redisConfig = {
+            connectTimeout: 2000,     // Fast connection
+            lazyConnect: true,        // Connect only when needed
+            maxRetriesPerRequest: 1,  // Fail fast
+            enableOfflineQueue: false
+        }
         this.port = port;
         try {
             // Initialize Redis subscriber
-            this.redisSubscriber = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL) : new Redis();
+            this.redisSubscriber = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL, redisConfig) : new Redis(redisConfig);
         } catch (error) {
             console.error('❌ Redis connection error:', error);
             throw error;
