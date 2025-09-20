@@ -179,7 +179,7 @@ export class RedisEventBridge {
 
     // Method to send a custom message (for external use)
     async sendMessage(type: string, data: WebSocketData): Promise<void> {
-        if(!this.isConnected()) {
+        if (!this.isConnected()) {
             console.warn('⚠️ Redis not connected, skipping message:', type);
             return;
         }
@@ -189,6 +189,11 @@ export class RedisEventBridge {
     public async cleanup(): Promise<void> {
         try {
             console.log(`🧹 Starting cleanup for Redis bridge session ${this.sessionId}`);
+
+            await this.publishMessage('STOP_WARNING', {
+                message: "Worker is shutting down. Stopping session. Click 'Stop Session' if session doesn't end automatically",
+                timestamp: Date.now()
+            });
 
             // 1. Remove all event listeners from the event bus to prevent memory leaks
             this.eventBus.removeAllListeners();
