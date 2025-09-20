@@ -81,7 +81,10 @@ export default class StagehandSession extends Session<Page> {
                 throw new Error("Failed to initialize Stagehand page");
             }
 
-            await this.page.goto(url);
+            await this.page.goto(url, {
+                timeout: 90000, // 90 seconds instead of 30
+                waitUntil: 'domcontentloaded' // Less strict than 'load'
+            });
 
             return true;
         } catch (error) {
@@ -92,8 +95,23 @@ export default class StagehandSession extends Session<Page> {
     }
 
     async close(): Promise<void> {
-        await this.stagehand?.close();
-        await new Promise((r) => setTimeout(r, 500));
+        try {
+            if (this.stagehand?.page) {
+                await this.stagehand.page.close();
+            }
+            if (this.stagehand) {
+                await this.stagehand.close();
+            }
+        } catch (error) {
+            console.error('Error during stagehand cleanup:', error);
+        }
+
+        // Force garbage collection if available
+        if (global.gc) {
+            global.gc();
+        }
+
+        await new Promise(r => setTimeout(r, 1000)); // Longer delay
     }
 
     public async observe(): Promise<ObserveResult[]> {

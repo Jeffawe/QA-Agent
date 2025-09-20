@@ -109,7 +109,9 @@ export class RedisEventBridge {
     }
 
     isConnected(): boolean {
-        return this.isReady && this.redisPublisher.status === 'ready';
+        const connected = this.isReady && this.redisPublisher.status === 'ready';
+        console.log(`Redis connection check: isReady=${this.isReady}, status=${this.redisPublisher.status}, connected=${connected}`);
+        return connected;
     }
 
     setupEventListeners() {
@@ -158,7 +160,7 @@ export class RedisEventBridge {
         data: WebSocketData | ConnectionData | FirstConnectionData
     ): Promise<void> {
         if (!this.isConnected()) {
-            console.warn('⚠️ Redis not connected, skipping message:', type);
+            console.warn(`⚠️ Redis not connected. Status: ${this.redisPublisher.status} skipping message:`, type);
             return;
         }
 
