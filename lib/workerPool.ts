@@ -8,7 +8,7 @@ const __dirname = dirname(__filename);
 export class WorkerPool {
     private static instance: WorkerPool;
     private availableWorkers: Worker[] = [];
-    private readonly poolSize = 2; // Adjust based on expected concurrent sessions
+    private readonly poolSize = parseInt(process.env.WORKER_POOL_SIZE || "10"); // Adjust based on expected concurrent sessions
     
     private constructor() {
         this.preWarmPool();

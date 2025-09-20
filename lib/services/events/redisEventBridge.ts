@@ -20,11 +20,13 @@ export class RedisEventBridge {
         this.logManager = logManagers.getOrCreateManager(sessionId);
 
         const redisConfig = {
-            connectTimeout: 2000,     // Fast connection
-            lazyConnect: true,        // Connect only when needed
-            maxRetriesPerRequest: 1,  // Fail fast
-            enableOfflineQueue: false
-        }
+            connectTimeout: 2000,
+            lazyConnect: true,
+            maxRetriesPerRequest: 1,
+            retryDelayOnFailover: 50,
+            keepAlive: 30000,
+            family: 4
+        };
 
         try {
             // Initialize Redis subscriber
