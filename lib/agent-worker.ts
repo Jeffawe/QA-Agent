@@ -91,8 +91,6 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
             redisBridge = new RedisEventBridge(eventBus, sessionId);
         }
 
-        await redisBridge.waitForReady();
-
         const port = parseInt(process.env.PORT ?? '3001');
         console.log(`✅ Event bridge ready on port ${port}`);
         return port;

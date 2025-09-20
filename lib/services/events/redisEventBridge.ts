@@ -179,6 +179,10 @@ export class RedisEventBridge {
 
     // Method to send a custom message (for external use)
     async sendMessage(type: string, data: WebSocketData): Promise<void> {
+        if(!this.isConnected()) {
+            console.warn('⚠️ Redis not connected, skipping message:', type);
+            return;
+        }
         await this.publishMessage(type, data);
     }
 
