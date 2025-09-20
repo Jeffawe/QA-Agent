@@ -8,7 +8,7 @@ import compression from 'compression';
 import helmet from 'helmet';
 import { Worker } from 'worker_threads';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname } from 'path';
 
 import { MiniAgentConfig } from './types.js';
 import { checkUserKey } from './externalCall.js';
@@ -363,12 +363,15 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
     }
 
     try {
+        if (!parentWSS) {
+            throw new Error('WebSocket server not initialized');
+        }
+
         const detailed = data['detailed'] || false;
 
         // PARALLEL EXECUTION: Start both operations simultaneously
         const [serializableConfigs] = await Promise.all([
-            getCachedAgents(goal, detailed),
-            parentWSS // Ensure WSS is ready
+            getCachedAgents(goal, detailed)
         ]);
 
         // Use worker pool for faster startup
@@ -500,14 +503,16 @@ app.post('/test/:key', async (req: Request, res: Response) => {
     }
 
     try {
+        if (!parentWSS) {
+            throw new Error('WebSocket server not initialized');
+        }
         // PARALLEL EXECUTION: Run key validation and config loading simultaneously
         const getKey: boolean = process.env.NODE_ENV === 'production';
         const detailed = data['detailed'] || false;
 
         const [keyValidationSuccess, serializableConfigs] = await Promise.all([
             checkUserKey(sessionId, key, getKey).catch(() => false),
-            getCachedAgents(goal, detailed),
-            parentWSS // Ensure WSS is ready
+            getCachedAgents(goal, detailed)
         ]);
 
         if (!keyValidationSuccess) {
@@ -656,7 +661,7 @@ process.on('SIGINT', () => {
 
 const memoryCheck = setInterval(() => {
     const mem = process.memoryUsage();
-    
+
     if (mem.heapUsed > 450 * 1024 * 1024) {
         console.error('Memory limit reached - restarting');
         process.exit(1); // Let Render restart the instance

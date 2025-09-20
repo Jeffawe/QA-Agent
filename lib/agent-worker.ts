@@ -123,6 +123,8 @@ const handleSessionDataUpdate = (sessionId: string, url: any, data: any) => {
     if (redisBridge) {
         redisBridge = new RedisEventBridge(eventBus, sessionId);
     }
+
+    console.log(`✅ Session data updated for pre-warmed worker: ${sessionId}`);
 };
 
 if (parentPort) {
@@ -303,21 +305,3 @@ const cleanup = async () => {
     await Promise.all(cleanupPromises);
     console.log(`✅ Cleanup completed for ${workerData.sessionId}`);
 };
-
-// Pre-warm initialization for worker pool
-if (workerData.preWarmed) {
-    console.log(`🔥 Pre-warming worker...`);
-    // Pre-initialize common resources but don't fully initialize
-    // This reduces cold start time when the worker is actually used
-    Promise.resolve().then(async () => {
-        try {
-            // Pre-create event bus manager
-            eventBusManager.getOrCreateBus('pre-warm');
-            console.log(`✅ Worker pre-warmed and ready`);
-        } catch (error) {
-            console.error('❌ Error pre-warming worker:', error);
-        }
-    });
-} else {
-    console.log(`✅ Worker ready for session ${workerData.sessionId}`);
-}
