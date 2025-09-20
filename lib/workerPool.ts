@@ -55,12 +55,12 @@ export class WorkerPool {
         } else {
             console.log('⚡ Using pre-warmed worker');
             // Update worker data for this session
-            // worker.postMessage({
-            //     command: 'update_session_data',
-            //     sessionId,
-            //     url,
-            //     data
-            // });
+            worker.postMessage({
+                command: 'update_session_data',
+                sessionId,
+                url,
+                data
+            });
         }
         
         // Create replacement worker for pool
