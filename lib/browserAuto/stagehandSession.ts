@@ -39,7 +39,21 @@ export default class StagehandSession extends Session<Page> {
                     apiKey: this.apiKey,
                 },
                 localBrowserLaunchOptions: {
-                    headless: headless
+                    headless: headless,
+                    args: [
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-gpu',
+                        '--disable-background-timer-throttling',
+                        '--disable-renderer-backgrounding',
+                        '--disable-backgrounding-occluded-windows',
+                        '--disable-features=CalculateNativeWinOcclusion',
+                        '--single-process', // Important for containers
+                        '--no-zygote', // Helps with permission issues
+                        '--disable-extensions',
+                        '--disable-web-security'
+                    ]
                 }
             });
         } catch (error) {
