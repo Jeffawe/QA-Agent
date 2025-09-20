@@ -182,6 +182,49 @@ export class RedisEventBridge {
         await this.publishMessage(type, data);
     }
 
+    public async cleanup(): Promise<void> {
+        try {
+            console.log(`🧹 Starting cleanup for Redis bridge session ${this.sessionId}`);
+
+            // 1. Remove all event listeners from the event bus to prevent memory leaks
+            this.eventBus.removeAllListeners();
+
+            // 2. Remove all Redis event listeners
+            this.redisPublisher.removeAllListeners('error');
+            this.redisPublisher.removeAllListeners('reconnecting');
+            this.redisPublisher.removeAllListeners('ready');
+
+            // 3. Mark as not ready to prevent any pending operations
+            this.isReady = false;
+
+            // 4. Send final cleanup message if still connected
+            if (this.redisPublisher.status === 'ready') {
+                await this.publishMessage('CONNECTION', {
+                    status: 'cleaning_up',
+                    message: 'Worker cleaning up Redis connection'
+                });
+            }
+
+            // 5. Wait a short time for any pending publish operations to complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 6. Disconnect from Redis
+            await this.disconnect();
+
+            console.log(`✅ Redis bridge cleanup completed for session ${this.sessionId}`);
+
+        } catch (error) {
+            console.error(`❌ Error during Redis bridge cleanup for session ${this.sessionId}:`, error);
+
+            // Force disconnect even if there was an error
+            try {
+                this.redisPublisher.disconnect();
+            } catch (disconnectError) {
+                console.error('❌ Force disconnect also failed:', disconnectError);
+            }
+        }
+    }
+
     // Graceful shutdown
     async disconnect(): Promise<void> {
         try {

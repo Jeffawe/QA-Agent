@@ -79,7 +79,7 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
         ];
 
         // Execute validator creation in parallel
-        await Promise.all(validatorPromises.map(createValidator => 
+        await Promise.all(validatorPromises.map(createValidator =>
             createValidator()
         ));
 
@@ -109,16 +109,16 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
 // Handle session data updates for pre-warmed workers
 const handleSessionDataUpdate = (sessionId: string, url: any, data: any) => {
     console.log(`🔄 Updating session data for pre-warmed worker: ${sessionId}`);
-    
+
     // Update worker data
     (workerData as any).sessionId = sessionId;
     (workerData as any).url = url;
     (workerData as any).data = data;
     (workerData as any).preWarmed = false; // No longer pre-warmed
-    
+
     // Update event bus for new session
     eventBus = eventBusManager.getOrCreateBus(sessionId);
-    
+
     // Update Redis bridge for new session
     if (redisBridge) {
         redisBridge = new RedisEventBridge(eventBus, sessionId);
@@ -146,7 +146,7 @@ if (parentPort) {
                 }
 
                 const workerEventBus = eventBusManager.getOrCreateBus(data.agentConfig.sessionId);
-                
+
                 // Load data memory only when needed
                 if (workerData.data && typeof workerData.data === 'object') {
                     dataMemory.loadData(workerData.data);
@@ -270,6 +270,7 @@ if (parentPort) {
 // Streamlined cleanup with parallel operations
 const cleanup = async () => {
     console.log(`🛑 Stopping agent ${workerData.sessionId}...`);
+    CrawlMap.finish();
 
     const cleanupPromises: Promise<void>[] = [];
 
@@ -288,14 +289,14 @@ const cleanup = async () => {
             logManagers.clear();
         }),
         Promise.resolve().then(() => {
-            CrawlMap.finish();
-        }),
-        Promise.resolve().then(() => {
             PageMemory.clear();
         }),
         Promise.resolve().then(() => {
             dataMemory.clear();
-        })
+        }),
+        Promise.resolve().then(() => {
+            redisBridge?.cleanup();
+        }),
     );
 
     // Execute all cleanup operations in parallel
