@@ -29,7 +29,7 @@ RUN groupadd -r appuser && useradd -r -g appuser -G audio,video appuser \
 USER appuser
 
 # Expose port
-EXPOSE 3000
+EXPOSE 3001
 
 # Start the application
 CMD ["npm", "start"]
