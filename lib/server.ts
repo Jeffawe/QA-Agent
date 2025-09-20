@@ -656,13 +656,12 @@ process.on('SIGINT', () => {
 
 const memoryCheck = setInterval(() => {
     const mem = process.memoryUsage();
-    console.log(`Memory: ${Math.round(mem.heapUsed / 1024 / 1024)}MB`);
     
     if (mem.heapUsed > 450 * 1024 * 1024) {
         console.error('Memory limit reached - restarting');
         process.exit(1); // Let Render restart the instance
     }
-}, 10000);
+}, 100000);
 
 process.on('SIGTERM', () => {
     console.log('\n🛑 SIGTERM received, shutting down...');
