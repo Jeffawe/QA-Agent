@@ -19,7 +19,7 @@ export default class StagehandSession extends Session<Page> {
             if (!key || key.startsWith('TEST')) {
                 const errorMessage = "API_KEY environment variable is not set or is a test key. Please set a valid API key.";
                 this.logManager.error(errorMessage, State.ERROR, true)
-                const eventBus = eventBusManager.getBusIfExists(sessionId);
+                const eventBus = eventBusManager.getBusIfExists();
                 eventBus?.emit({
                     ts: Date.now(),
                     type: "stop",
@@ -31,6 +31,7 @@ export default class StagehandSession extends Session<Page> {
 
             const isProduction = process.env.NODE_ENV === 'production';
             const headless = isProduction ? true : String(process.env.HEADLESS).toLowerCase() === 'true';
+            console.log(`🌐 Initializing Stagehand (headless=${headless}) for session ${sessionId}...`);
             this.apiKey = key;
             this.stagehand = new Stagehand({
                 env: "LOCAL",
@@ -49,10 +50,14 @@ export default class StagehandSession extends Session<Page> {
                         '--disable-renderer-backgrounding',
                         '--disable-backgrounding-occluded-windows',
                         '--disable-features=CalculateNativeWinOcclusion',
-                        '--single-process', // Important for containers
-                        '--no-zygote', // Helps with permission issues
+                        '--single-process',
+                        '--no-zygote',
                         '--disable-extensions',
-                        '--disable-web-security'
+                        '--disable-web-security',
+                        '--no-first-run',           // Skip first run tasks
+                        '--disable-default-apps',   // Don't install default apps
+                        '--no-default-browser-check', // Skip default browser check
+                        '--disable-sync'            // Disable Chrome sync
                     ]
                 }
             });

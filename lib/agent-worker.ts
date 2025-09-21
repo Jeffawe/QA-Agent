@@ -20,6 +20,31 @@ let agent: BossAgent | null = null;
 let isInitialized = false;
 let redisBridge: RedisEventBridge | null = null;
 let eventBus: any = null;
+const workerId = Math.random().toString(36).substring(7); // NEW: Unique worker ID
+let isActive = false;
+let currentSessionId: string | null = null;
+
+// Handle pre-warmed worker initialization
+if (workerData?.preWarmed) {
+    console.log(`🔥 Initializing pre-warmed worker ${workerId}...`);
+
+    // Initialize infrastructure without session
+    eventBus = eventBusManager.getOrCreateBus();
+    redisBridge = new RedisEventBridge(eventBus); // No sessionId for prewarmed
+
+    redisBridge.waitForReady().then(() => {
+        console.log(`✅ Pre-warmed worker ${workerId} ready`);
+
+        // Signal to parent that worker is ready
+        parentPort?.postMessage({
+            type: 'prewarmed_ready',
+            workerId: workerId
+        });
+    }).catch((error) => {
+        console.error(`❌ Error initializing pre-warmed worker ${workerId}:`, error);
+        process.exit(1);
+    });
+}
 
 // Pre-initialize common resources for pre-warmed workers
 const initializeWorker = async () => {
@@ -65,7 +90,7 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
 
         // Reuse existing event bus if available (for pre-warmed workers)
         if (!eventBus) {
-            eventBus = eventBusManager.getOrCreateBus(sessionId);
+            eventBus = eventBusManager.getOrCreateBus();
         }
 
         // Create validators in parallel batches
@@ -89,6 +114,9 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
         if (!redisBridge) {
             console.log(`🌐 Setting up Redis event bridge...`);
             redisBridge = new RedisEventBridge(eventBus, sessionId);
+
+            await redisBridge.waitForReady();
+            console.log(`✅ Redis event bridge connected`);
         }
 
         const port = parseInt(process.env.PORT ?? '3001');
@@ -102,28 +130,42 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
 };
 
 // Handle session data updates for pre-warmed workers
-const handleSessionDataUpdate = (sessionId: string, url: any, data: any) => {
-    console.log(`🔄 Updating session data for pre-warmed worker: ${sessionId}`);
+const activateSession = async (sessionId: string, url: any, data: any) => {
+    try {
+        console.log(`🚀 Activating session ${sessionId} on worker ${workerId}`);
 
-    // Update worker data
-    (workerData as any).sessionId = sessionId;
-    (workerData as any).url = url;
-    (workerData as any).data = data;
-    (workerData as any).preWarmed = false; // No longer pre-warmed
+        if (!redisBridge) {
+            throw new Error('Redis bridge not initialized');
+        }
 
-    // Update Redis bridge for new session
-    if (redisBridge) {
-        redisBridge = new RedisEventBridge(eventBus, sessionId);
+        // Update worker data
+        (workerData as any).sessionId = sessionId;
+        (workerData as any).url = url;
+        (workerData as any).data = data;
+        (workerData as any).preWarmed = false;
+
+        // Activate the session on Redis bridge
+        await redisBridge.activateSession(sessionId);
+
+        currentSessionId = sessionId;
+        isActive = true;
+
+        console.log(`✅ Session ${sessionId} activated on worker ${workerId}`);
+
+    } catch (error) {
+        console.error(`❌ Error activating session ${sessionId}:`, error);
+        parentPort?.postMessage({
+            type: 'error',
+            sessionId,
+            error: error instanceof Error ? error.message : String(error)
+        });
     }
-
-    console.log(`✅ Session data updated for pre-warmed worker: ${sessionId}`);
 };
 
 if (parentPort) {
     parentPort.on('message', async (data) => {
-        if (data.command === 'update_session_data') {
-            // Handle session data update for pre-warmed workers
-            handleSessionDataUpdate(data.sessionId, data.url, data.data);
+        if (data.command === 'activate_session') {
+            await activateSession(data.sessionId, data.url, data.data);
             return;
         }
 
@@ -139,7 +181,9 @@ if (parentPort) {
                     return;
                 }
 
-                const workerEventBus = eventBusManager.getOrCreateBus(data.agentConfig.sessionId);
+                if (!eventBus) {
+                    eventBus = eventBusManager.getOrCreateBus();
+                }
 
                 // Load data memory only when needed
                 if (workerData.data && typeof workerData.data === 'object') {
@@ -172,13 +216,13 @@ if (parentPort) {
                             error: error instanceof Error ? error.message : String(error)
                         });
                     } finally {
-                        workerEventBus.off('stop', stopHandler);
+                        eventBus.off('stop', stopHandler);
                         console.log(`✅ Agent stopped, terminating worker...`);
                         process.exit(0);
                     }
                 };
 
-                workerEventBus.on('stop', stopHandler);
+                eventBus.on('stop', stopHandler);
 
                 // Parallel agent config processing
                 const fullAgentConfigs: Set<AgentConfig> = new Set(
@@ -196,7 +240,7 @@ if (parentPort) {
                 const agentCreationPromise = new Promise<BossAgent>((resolve) => {
                     const newAgent = new BossAgent({
                         sessionId: data.agentConfig.sessionId,
-                        eventBus: workerEventBus,
+                        eventBus: eventBus,
                         goalValue: data.agentConfig.goalValue,
                         agentConfigs: fullAgentConfigs,
                     });
@@ -212,6 +256,7 @@ if (parentPort) {
                 agent = newAgent;
 
                 // Start agent with minimal delay
+                console.log(`🚀 Starting agent for session ${data.agentConfig.sessionId}...`);
                 await agent.start(workerData.url);
 
                 console.log(`✅ Agent completed for session ${data.agentConfig.sessionId}`);

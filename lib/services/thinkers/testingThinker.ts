@@ -16,7 +16,7 @@ export class TestingThinker extends Thinker {
         super();
         this.modelClient = new GeminiLLm(sessionId);
         this.logManager = logManagers.getOrCreateManager(sessionId);
-        this.eventBus = eventBusManager.getOrCreateBus(sessionId);
+        this.eventBus = eventBusManager.getOrCreateBus();
     }
 
     think(nextActionContext: GetNextActionContext, imageData: ImageData, extraInfo: string, agentName: Namespaces, recurrent?: boolean): Promise<ThinkResult> {

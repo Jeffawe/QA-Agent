@@ -39,7 +39,7 @@ export class GeminiLLm extends LLM {
 
         this.apiKey = key;
 
-        this.eventBus = eventBusManager.getOrCreateBus(sessionId);
+        this.eventBus = eventBusManager.getOrCreateBus();
 
         if (!this.apiKey?.startsWith('TEST')) {
             try {

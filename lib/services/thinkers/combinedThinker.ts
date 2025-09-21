@@ -16,7 +16,7 @@ export class CombinedThinker extends Thinker {
         super();
         this.modelClient = new GeminiLLm(sessionId);
         this.logManager = logManagers.getOrCreateManager(sessionId);
-        this.eventBus = eventBusManager.getOrCreateBus(sessionId);
+        this.eventBus = eventBusManager.getOrCreateBus();
     }
 
     async think(nextActionContext: GetNextActionContext, imageData: ImageData, extraInfo: string, agentName: Namespaces, recurrent: boolean = false): Promise<ThinkResult> {

@@ -172,7 +172,7 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
             if (errorListener) worker.removeListener('error', errorListener);
         };
 
-        // REDUCED TIMEOUT: 15s instead of 50s for faster feedback
+        // Set up timeout
         const timeout = setTimeout(() => {
             if (!resolved) {
                 resolved = true;
@@ -180,7 +180,7 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
                 console.error(`❌ Worker initialization timeout for session ${sessionId}`);
                 reject(new Error('Worker initialization timeout'));
             }
-        }, 50000);
+        }, 80000);
 
         const resolveOnce = (port: number) => {
             if (!resolved) {

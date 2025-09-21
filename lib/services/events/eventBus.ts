@@ -1,36 +1,28 @@
 import { EventBus, LocalEventBus } from "./event.js";
 
 export class EventBusManager {
-    private buses = new Map<string, EventBus>();
+    private bus: EventBus | null = null;
 
-    getOrCreateBus(sessionId: string): EventBus {
-        if (!this.buses.has(sessionId)) {
-            this.buses.set(sessionId, new LocalEventBus());
+    getOrCreateBus(): EventBus {
+        if (!this.bus) {
+            this.bus = new LocalEventBus();
         }
-        return this.buses.get(sessionId)!;
+        return this.bus;
     }
 
-    getBusIfExists(sessionId: string): EventBus | undefined {
-        return this.buses.get(sessionId);
+    getBusIfExists(): EventBus | undefined {
+        return this.bus || undefined;
     }
 
-    removeBus(sessionId: string) {
-        const bus = this.buses.get(sessionId);
-        if (bus) {
-            bus.removeAllListeners();
-            this.buses.delete(sessionId);
+    removeBus(): void {
+        if (this.bus) {
+            this.bus.removeAllListeners();
+            this.bus = null;
         }
-    }
-
-    getAllActiveSessions(): string[] {
-        return Array.from(this.buses.keys());
     }
 
     clear() {
-        for (const bus of this.buses.values()) {
-            bus.removeAllListeners();
-        }
-        this.buses.clear();
+        this.removeBus();
     }
 }
 

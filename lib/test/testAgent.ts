@@ -28,7 +28,7 @@ router.get("/test-agent", async (req, res) => {
             return;
         }
 
-        const eventBus = eventBusManager.getOrCreateBus(sessionId);
+        const eventBus = eventBusManager.getOrCreateBus();
         const thinker = new TestingThinker(sessionId);
         const actionService = new AutoActionService(session);
 

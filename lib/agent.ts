@@ -348,7 +348,7 @@ export default class BossAgent {
     this.agentRegistry.clear();
     //clearAllImages();
     this.sessions.clear();
-    eventBusManager.removeBus(this.sessionId);
+    eventBusManager.removeBus();
     //this.logManager.deleteLogFile();
     logManagers.removeManager(this.sessionId);
   }

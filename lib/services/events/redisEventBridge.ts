@@ -7,17 +7,24 @@ import { ConnectionData, FirstConnectionData, RedisMessage, WebSocketData } from
 
 export class RedisEventBridge {
     private redisPublisher: Redis;
-    private logManager: LogManager;
+    private logManager: LogManager | null = null;
     private isReady: boolean = false;
     private readyPromise: Promise<void>;
     private readonly channelName: string = 'websocket_events';
+    private currentSessionId: string | null = null; // Track current session
+    private isActive: boolean = false; // Track if actively serving a session
 
     constructor(
         private eventBus: EventBus,
-        private sessionId: string
+        initialSessionId?: string // Make optional for prewarmed workers
     ) {
         this.eventBus = eventBus;
-        this.logManager = logManagers.getOrCreateManager(sessionId);
+        this.currentSessionId = initialSessionId || null;
+        
+        // Only create log manager if we have a session ID
+        if (this.currentSessionId) {
+            this.logManager = logManagers.getOrCreateManager(this.currentSessionId);
+        }
 
         const redisConfig = {
             connectTimeout: 2000,
@@ -29,17 +36,97 @@ export class RedisEventBridge {
         };
 
         try {
-            // Initialize Redis subscriber
+            // Initialize Redis connection (but don't send session-specific messages yet)
             this.redisPublisher = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL, redisConfig) : new Redis(redisConfig);
         } catch (error) {
             console.error('❌ Redis connection error:', error);
             throw error;
         }
 
-        // Create a promise that resolves when Redis is ready
+        // Always initialize Redis connection
         this.readyPromise = this.initializeRedis();
-
         this.setupEventListeners();
+    }
+
+    // Enhanced session update method
+    public async activateSession(newSessionId: string): Promise<void> {
+        if (this.currentSessionId === newSessionId && this.isActive) {
+            return; // Already serving this session
+        }
+
+        console.log(`🔄 Activating session ${newSessionId} (previous: ${this.currentSessionId})`);
+
+        // Wait for Redis to be ready first
+        await this.waitForReady();
+
+        // Clean up previous session if exists
+        if (this.isActive && this.currentSessionId) {
+            await this.deactivateCurrentSession();
+        }
+
+        // Set new session
+        this.currentSessionId = newSessionId;
+        this.logManager = logManagers.getOrCreateManager(newSessionId);
+        this.isActive = true;
+
+        // Send session-specific initialization messages
+        await this.initializeSession();
+    }
+
+    // Deactivate current session (for session switching or cleanup)
+    public async deactivateCurrentSession(): Promise<void> {
+        if (!this.isActive || !this.currentSessionId) {
+            return;
+        }
+
+        console.log(`🛑 Deactivating session ${this.currentSessionId}`);
+
+        try {
+            // Send session end message
+            await this.publishMessage('CONNECTION', {
+                status: 'session_ended',
+                message: 'Session deactivated, worker available for reuse'
+            });
+
+            this.isActive = false;
+            // Keep currentSessionId for reference but mark as inactive
+        } catch (error) {
+            console.error('❌ Error deactivating session:', error);
+        }
+    }
+
+    // Initialize session-specific data
+    private async initializeSession(): Promise<void> {
+        if (!this.isActive || !this.currentSessionId) {
+            return;
+        }
+
+        try {
+            // Send initial connection message
+            await this.publishMessage('CONNECTION', {
+                status: 'connected',
+                message: 'Worker connected and activated for session'
+            });
+
+            // Send initial data for the new session
+            await this.publishMessage('INITIAL_DATA', {
+                messages: this.logManager?.getLogs(),
+                pages: PageMemory.getAllPages(),
+                timestamp: Date.now()
+            });
+
+            console.log(`✅ Session ${this.currentSessionId} activated and initialized`);
+        } catch (error) {
+            console.error('❌ Error initializing session:', error);
+        }
+    }
+
+    // Legacy method for backward compatibility
+    public updateSessionId(newSessionId: string) {
+        // Delegate to the new activate method
+        this.activateSession(newSessionId).catch(error => {
+            console.error('❌ Error in updateSessionId:', error);
+        });
     }
 
     private async initializeRedis(): Promise<void> {
@@ -65,21 +152,13 @@ export class RedisEventBridge {
                 this.redisPublisher.once('error', onError);
             });
 
-            console.log(`🚀 Redis publisher connected for session ${this.sessionId}`);
+            console.log(`🚀 Redis publisher connected (session: ${this.currentSessionId || 'prewarmed'})`);
             this.isReady = true;
 
-            // Send initial connection message
-            await this.publishMessage('CONNECTION', {
-                status: 'connected',
-                message: 'Worker connected to Redis'
-            });
-
-            // Send initial data
-            await this.publishMessage('INITIAL_DATA', {
-                messages: this.logManager.getLogs(),
-                pages: PageMemory.getAllPages(),
-                timestamp: Date.now()
-            });
+            // Only send session-specific messages if we have an active session
+            if (this.isActive && this.currentSessionId) {
+                await this.initializeSession();
+            }
 
         } catch (error) {
             console.error('❌ Redis connection error:', error);
@@ -103,77 +182,95 @@ export class RedisEventBridge {
         });
     }
 
-    // Method to wait for Redis to be ready
     async waitForReady(): Promise<void> {
         await this.readyPromise;
     }
 
     isConnected(): boolean {
         const connected = this.isReady && this.redisPublisher.status === 'ready';
-        console.log(`Redis connection check: isReady=${this.isReady}, status=${this.redisPublisher.status}, connected=${connected}`);
+        // Only log if we have an active session to reduce noise
+        if (this.isActive) {
+            console.log(`Redis connection check: isReady=${this.isReady}, status=${this.redisPublisher.status}, connected=${connected}`);
+        }
         return connected;
     }
 
     setupEventListeners() {
-        // Listen for logs
+        // Listen for logs (only process if we have an active session)
         this.eventBus.on('new_log', async (evt) => {
-            await this.publishMessage('LOG', {
-                message: evt.message,
-                timestamp: evt.ts
-            });
+            if (this.isActive) {
+                await this.publishMessage('LOG', {
+                    message: evt.message,
+                    timestamp: evt.ts
+                });
+            }
         });
 
         this.eventBus.on('issue', async (evt) => {
-            await this.publishMessage('ISSUE', {
-                message: evt.message,
-                timestamp: evt.ts
-            });
+            if (this.isActive) {
+                await this.publishMessage('ISSUE', {
+                    message: evt.message,
+                    timestamp: evt.ts
+                });
+            }
         });
 
         this.eventBus.on('stop', async (evt) => {
-            await this.publishMessage('STOP_WARNING', {
-                message: evt.message,
-                timestamp: evt.ts
-            });
+            if (this.isActive) {
+                await this.publishMessage('STOP_WARNING', {
+                    message: evt.message,
+                    timestamp: evt.ts
+                });
+            }
         });
 
-        // Listen for crawl map updates
         this.eventBus.on('crawl_map_updated', async (evt) => {
-            console.log('🗺️ Crawl map updated:', evt.page.url);
-            await this.publishMessage('CRAWL_MAP_UPDATE', {
-                page: evt.page,
-                timestamp: evt.ts
-            });
+            if (this.isActive) {
+                console.log('🗺️ Crawl map updated:', evt.page.url);
+                await this.publishMessage('CRAWL_MAP_UPDATE', {
+                    page: evt.page,
+                    timestamp: evt.ts
+                });
+            }
         });
 
         this.eventBus.on('done', async (evt) => {
-            await this.publishMessage('DONE', {
-                message: evt.message,
-                timestamp: evt.ts
-            });
+            if (this.isActive) {
+                await this.publishMessage('DONE', {
+                    message: evt.message,
+                    timestamp: evt.ts
+                });
+            }
         });
     }
 
-    // Publish message to Redis channel
+    // Enhanced publish message with session validation
     private async publishMessage(
         type: string,
         data: WebSocketData | ConnectionData | FirstConnectionData
     ): Promise<void> {
         if (!this.isConnected()) {
-            console.warn(`⚠️ Redis not connected. Status: ${this.redisPublisher.status} skipping message:`, type);
+            if (this.isActive) { // Only warn if we're actively serving a session
+                console.warn(`⚠️ Redis not connected. Status: ${this.redisPublisher.status} skipping message:`, type);
+            }
+            return;
+        }
+
+        // Only publish if we have an active session (except for internal connection messages)
+        if (!this.isActive && !['CONNECTION'].includes(type)) {
             return;
         }
 
         const message: RedisMessage = {
             type: type,
-            sessionId: this.sessionId,
+            sessionId: this.currentSessionId || 'unknown',
             data: data,
             timestamp: new Date().toISOString()
         };
 
         try {
             const messageStr = JSON.stringify(message);
-            const subscriberCount = await this.redisPublisher.publish(this.channelName, messageStr);
+            await this.redisPublisher.publish(this.channelName, messageStr);
         } catch (error) {
             console.error('❌ Failed to publish message:', error);
         }
@@ -181,34 +278,46 @@ export class RedisEventBridge {
 
     // Method to send a custom message (for external use)
     async sendMessage(type: string, data: WebSocketData): Promise<void> {
+        if (!this.isActive) {
+            console.warn('⚠️ No active session, skipping message:', type);
+            return;
+        }
+        
         if (!this.isConnected()) {
             console.warn('⚠️ Redis not connected, skipping message:', type);
             return;
         }
+        
         await this.publishMessage(type, data);
     }
 
     public async cleanup(): Promise<void> {
         try {
-            console.log(`🧹 Starting cleanup for Redis bridge session ${this.sessionId}`);
+            console.log(`🧹 Starting cleanup for Redis bridge session ${this.currentSessionId || 'prewarmed'}`);
+
+            // Deactivate current session first
+            if (this.isActive) {
+                await this.deactivateCurrentSession();
+            }
 
             await this.publishMessage('STOP_WARNING', {
                 message: "Worker is shutting down. Stopping session. Click 'Stop Session' if session doesn't end automatically",
                 timestamp: Date.now()
             });
 
-            // 1. Remove all event listeners from the event bus to prevent memory leaks
+            // Remove all event listeners from the event bus
             this.eventBus.removeAllListeners();
 
-            // 2. Remove all Redis event listeners
+            // Remove Redis event listeners
             this.redisPublisher.removeAllListeners('error');
             this.redisPublisher.removeAllListeners('reconnecting');
             this.redisPublisher.removeAllListeners('ready');
 
-            // 3. Mark as not ready to prevent any pending operations
+            // Mark as not ready
             this.isReady = false;
+            this.isActive = false;
 
-            // 4. Send final cleanup message if still connected
+            // Send final cleanup message if still connected
             if (this.redisPublisher.status === 'ready') {
                 await this.publishMessage('CONNECTION', {
                     status: 'cleaning_up',
@@ -216,18 +325,17 @@ export class RedisEventBridge {
                 });
             }
 
-            // 5. Wait a short time for any pending publish operations to complete
+            // Wait for pending operations
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // 6. Disconnect from Redis
+            // Disconnect from Redis
             await this.disconnect();
 
-            console.log(`✅ Redis bridge cleanup completed for session ${this.sessionId}`);
+            console.log(`✅ Redis bridge cleanup completed for session ${this.currentSessionId || 'prewarmed'}`);
 
         } catch (error) {
-            console.error(`❌ Error during Redis bridge cleanup for session ${this.sessionId}:`, error);
+            console.error(`❌ Error during Redis bridge cleanup:`, error);
 
-            // Force disconnect even if there was an error
             try {
                 this.redisPublisher.disconnect();
             } catch (disconnectError) {
@@ -236,29 +344,38 @@ export class RedisEventBridge {
         }
     }
 
-    // Graceful shutdown
     async disconnect(): Promise<void> {
         try {
-            // Send disconnect message
-            await this.publishMessage('CONNECTION', {
-                status: 'disconnected',
-                message: 'Worker disconnecting from Redis'
-            });
+            // Only send disconnect message if we were active
+            if (this.isActive && this.currentSessionId) {
+                await this.publishMessage('CONNECTION', {
+                    status: 'disconnected',
+                    message: 'Worker disconnecting from Redis'
+                });
+            }
 
             await this.redisPublisher.disconnect();
-            console.log(`👋 Redis publisher disconnected for session ${this.sessionId}`);
+            console.log(`👋 Redis publisher disconnected for session ${this.currentSessionId || 'prewarmed'}`);
         } catch (error) {
             console.error('❌ Error during Redis disconnect:', error);
         }
     }
 
-    // Get session ID (useful for debugging)
-    getSessionId(): string {
-        return this.sessionId;
+    // Utility methods
+    getSessionId(): string | null {
+        return this.currentSessionId;
     }
 
-    // Get channel name (useful for parent server setup)
     getChannelName(): string {
         return this.channelName;
+    }
+
+    isActiveSession(): boolean {
+        return this.isActive;
+    }
+
+    // Method for prewarmed workers to check if they're ready to accept a session
+    isReadyForSession(): boolean {
+        return this.isReady && !this.isActive;
     }
 }

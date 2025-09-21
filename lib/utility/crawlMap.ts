@@ -41,7 +41,7 @@ export class CrawlMap {
   static recordPage(page: PageDetails, sessionId: string) {
     try {
       if (!this.initialised) this.init();
-      const eventBus = eventBusManager.getOrCreateBus(sessionId);
+      const eventBus = eventBusManager.getOrCreateBus();
       eventBus.emit({ ts: Date.now(), type: "crawl_map_updated", page });
       if (!PageMemory.hasPage(page.url ?? page.uniqueID)) {
         const url = PageMemory.addPageWithURL(page.url ?? page.uniqueID);
