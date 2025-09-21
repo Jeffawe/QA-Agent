@@ -7,8 +7,6 @@ import slowDown from 'express-slow-down';
 import compression from 'compression';
 import helmet from 'helmet';
 import { Worker } from 'worker_threads';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
 import { MiniAgentConfig } from './types.js';
 import { checkUserKey } from './externalCall.js';
@@ -23,9 +21,6 @@ import testRoutes from './test/testAgent.js'
 import { WorkerPool } from './workerPool.js';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const app = express();
 const server = createServer(app);
@@ -47,6 +42,9 @@ const validateReferer = (req: Request, res: Response, next: express.NextFunction
 
     // Allow no-origin requests in dev
     if (!requestOrigin && process.env.NODE_ENV !== 'production') {
+        res.header('Access-Control-Allow-Origin', '*');
+        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
         return next();
     }
 
