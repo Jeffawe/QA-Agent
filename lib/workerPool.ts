@@ -9,8 +9,16 @@ export class WorkerPool {
     private static instance: WorkerPool;
     private availableWorkers: Worker[] = [];
     private readonly poolSize = parseInt(process.env.WORKER_POOL_SIZE || "2");
-    
+    private readyWorkers = 0; // Track ready workers
+    private poolReadyPromise: Promise<void>; // Promise for pool readiness
+    private resolvePoolReady: (() => void) | null = null;
+
     private constructor() {
+        // Create promise that resolves when pool is ready
+        this.poolReadyPromise = new Promise<void>((resolve) => {
+            this.resolvePoolReady = resolve;
+        });
+
         this.preWarmPool();
     }
 
@@ -29,18 +37,17 @@ export class WorkerPool {
     }
 
     private createPrewarmedWorker(): Worker {
-        if (this.availableWorkers.length >= this.poolSize) {
-            return null as any; // Pool is full
+        if( this.readyWorkers >= this.poolSize ) {
+            return null as unknown as Worker; // Pool is full
         }
 
+        console.log(`♨️ Spinning up pre-warmed worker (${this.readyWorkers + 1}/${this.poolSize})...`);
         const worker = new Worker(join(__dirname, 'agent-worker.js'), {
-            workerData: { 
+            workerData: {
                 preWarmed: true,
-                // Don't pass sessionId for prewarmed workers
             }
         });
 
-        // Set up error handling
         worker.on('error', (error) => {
             console.error('❌ Pre-warmed worker error:', error);
             this.replaceWorker(worker);
@@ -51,13 +58,21 @@ export class WorkerPool {
             if (message.type === 'prewarmed_ready') {
                 console.log(`✅ Pre-warmed worker ${message.workerId} ready`);
                 this.availableWorkers.push(worker);
+                this.readyWorkers++;
+
+                // Check if pool is ready (at least 1 worker ready)
+                if (this.readyWorkers >= 1 && this.resolvePoolReady) {
+                    console.log(`🏊 Worker pool ready! (${this.readyWorkers}/${this.poolSize} workers)`);
+                    this.resolvePoolReady();
+                    this.resolvePoolReady = null; // Prevent multiple calls
+                }
             }
         });
 
-        // Handle unexpected exit
         worker.on('exit', (code) => {
             if (code !== 0) {
                 console.error(`❌ Pre-warmed worker exited with code ${code}`);
+                this.readyWorkers = Math.max(0, this.readyWorkers - 1);
                 this.replaceWorker(worker);
             }
         });
@@ -66,28 +81,35 @@ export class WorkerPool {
     }
 
     private replaceWorker(failedWorker: Worker) {
-        // Remove failed worker from pool
         this.availableWorkers = this.availableWorkers.filter(w => w !== failedWorker);
-        
-        // Create replacement
+
         setTimeout(() => {
             this.createPrewarmedWorker();
-        }, 1000); // Small delay to avoid rapid recreation
+        }, 1000);
+    }
+
+    // NEW: Wait for pool to be ready
+    async waitForPoolReady(): Promise<void> {
+        await this.poolReadyPromise;
+    }
+
+    // NEW: Check if pool has ready workers
+    hasReadyWorkers(): boolean {
+        return this.availableWorkers.length > 0;
     }
 
     getWorker(sessionId: string, url: any, data: any): Worker {
         let worker = this.availableWorkers.pop();
-        
+
         if (!worker) {
             console.log('🏭 No pre-warmed worker available, creating new one');
-            // Create worker with session data immediately
             worker = new Worker(join(__dirname, 'agent-worker.js'), {
                 workerData: { sessionId, url, data, preWarmed: false }
             });
         } else {
             console.log('⚡ Using pre-warmed worker for session:', sessionId);
-            
-            // Activate the prewarmed worker with session data
+            this.readyWorkers--;
+
             worker.postMessage({
                 command: 'activate_session',
                 sessionId,
@@ -96,7 +118,7 @@ export class WorkerPool {
             });
         }
 
-        // Create replacement worker for pool (async)
+        // Create replacement worker
         setTimeout(() => {
             this.createPrewarmedWorker();
         }, 100);
@@ -104,15 +126,24 @@ export class WorkerPool {
         return worker;
     }
 
+    // NEW: Get pool stats for debugging
+    getStats() {
+        return {
+            poolSize: this.poolSize,
+            availableWorkers: this.availableWorkers.length,
+            readyWorkers: this.readyWorkers
+        };
+    }
+
     // Method to gracefully shutdown all workers
     public async shutdown() {
         console.log('🛑 Shutting down worker pool...');
-        
+
         const shutdownPromises = this.availableWorkers.map(worker => {
             return new Promise<void>((resolve) => {
                 worker.postMessage({ command: 'shutdown' });
                 worker.once('exit', () => resolve());
-                
+
                 // Force terminate after timeout
                 setTimeout(() => {
                     worker.terminate();

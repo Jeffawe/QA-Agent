@@ -35,7 +35,7 @@ export default class StagehandSession extends Session<Page> {
             this.apiKey = key;
             this.stagehand = new Stagehand({
                 env: "LOCAL",
-                modelName: "google/gemini-2.5-flash",
+                modelName: "gemini-1.5-flash",
                 modelClientOptions: {
                     apiKey: this.apiKey,
                 },
@@ -46,18 +46,11 @@ export default class StagehandSession extends Session<Page> {
                         '--disable-setuid-sandbox',
                         '--disable-dev-shm-usage',
                         '--disable-gpu',
-                        '--disable-background-timer-throttling',
-                        '--disable-renderer-backgrounding',
-                        '--disable-backgrounding-occluded-windows',
-                        '--disable-features=CalculateNativeWinOcclusion',
-                        '--single-process',
+                        '--single-process', // CRITICAL: Prevents multi-process conflicts
                         '--no-zygote',
-                        '--disable-extensions',
                         '--disable-web-security',
-                        '--no-first-run',           // Skip first run tasks
-                        '--disable-default-apps',   // Don't install default apps
-                        '--no-default-browser-check', // Skip default browser check
-                        '--disable-sync'            // Disable Chrome sync
+                        '--memory-pressure-off', // Add this
+                        '--max_old_space_size=4096' // Add memory limit
                     ]
                 }
             });
