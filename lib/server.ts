@@ -29,6 +29,9 @@ const server = createServer(app);
 const validateReferer = (req: Request, res: Response, next: express.NextFunction): void => {
     console.log('🔥 MIDDLEWARE HIT:', req.method, req.path);
     if (req.path === '/health') {
+        res.header('Access-Control-Allow-Origin', '*');
+        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
         return next();
     }
 
