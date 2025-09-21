@@ -29,6 +29,10 @@ export class WorkerPool {
     }
 
     private createPrewarmedWorker(): Worker {
+        if (this.availableWorkers.length >= this.poolSize) {
+            return null as any; // Pool is full
+        }
+
         const worker = new Worker(join(__dirname, 'agent-worker.js'), {
             workerData: { 
                 preWarmed: true,
@@ -101,7 +105,7 @@ export class WorkerPool {
     }
 
     // Method to gracefully shutdown all workers
-    async shutdown() {
+    public async shutdown() {
         console.log('🛑 Shutting down worker pool...');
         
         const shutdownPromises = this.availableWorkers.map(worker => {

@@ -657,6 +657,7 @@ server.listen(PORT, '0.0.0.0', async () => {
 process.on('SIGINT', () => {
     console.log('\n🛑 Shutting down...');
     cleanup();
+    WorkerPool.getInstance().shutdown();
     process.exit(0);
 });
 
@@ -665,6 +666,8 @@ const memoryCheck = setInterval(() => {
 
     if (mem.heapUsed > 450 * 1024 * 1024) {
         console.error('Memory limit reached - restarting');
+        cleanup();
+        WorkerPool.getInstance().shutdown();
         process.exit(1); // Let Render restart the instance
     }
 }, 100000);
@@ -672,6 +675,7 @@ const memoryCheck = setInterval(() => {
 process.on('SIGTERM', () => {
     console.log('\n🛑 SIGTERM received, shutting down...');
     cleanup();
+    WorkerPool.getInstance().shutdown();
     process.exit(0);
 });
 
