@@ -44,7 +44,33 @@ export default class StagehandSession extends Session<Page> {
                     args: [
                         '--no-sandbox',
                         '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage'
+                        '--disable-dev-shm-usage',
+
+                        // Memory reduction flags
+                        '--memory-pressure-off',
+                        '--max_old_space_size=512',
+                        '--aggressive-cache-discard',
+                        '--disable-background-timer-throttling',
+                        '--disable-renderer-backgrounding',
+                        '--disable-backgrounding-occluded-windows',
+                        '--disable-ipc-flooding-protection',
+                        '--disable-background-networking',
+                        '--disable-features=TranslateUI,BlinkGenPropertyTrees',
+                        '--disable-extensions',
+                        '--disable-plugins',
+
+                        // Reduce tab/process limits
+                        '--renderer-process-limit=1',
+                        '--max-gum-fps=5',
+
+                        // Disable GPU acceleration (saves GPU memory)
+                        '--disable-gpu',
+                        '--disable-software-rasterizer',
+
+                        // Reduce cache sizes
+                        '--disk-cache-size=1',
+                        '--media-cache-size=1',
+                        '--aggressive-cache-discard'
                     ]
                 }
             });
