@@ -44,13 +44,7 @@ export default class StagehandSession extends Session<Page> {
                     args: [
                         '--no-sandbox',
                         '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                        '--disable-gpu',
-                        '--single-process', // CRITICAL: Prevents multi-process conflicts
-                        '--no-zygote',
-                        '--disable-web-security',
-                        '--memory-pressure-off', // Add this
-                        '--max_old_space_size=4096' // Add memory limit
+                        '--disable-dev-shm-usage'
                     ]
                 }
             });
