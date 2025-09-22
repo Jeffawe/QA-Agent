@@ -19,8 +19,6 @@ import { ParentWebSocketServer } from './services/events/parentWebSocket.js';
 import { createServer } from 'http';
 import testRoutes from './test/testAgent.js'
 import { WorkerPool } from './workerPool.js';
-import SegfaultHandler from 'segfault-handler';
-SegfaultHandler.registerHandler('crash.log');
 
 dotenv.config();
 
