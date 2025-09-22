@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { storeSessionApiKey } from './services/memory/apiMemory.js';
 
-const API_ENDPOINT = 'https://qa-node-backend.onrender.com';
+const API_ENDPOINT = process.env.BACKEND_URL || 'http://localhost:3000';
 
 interface GeminiCallOptions {
     prompt: string;
