@@ -20,7 +20,7 @@ export class RedisEventBridge {
     ) {
         this.eventBus = eventBus;
         this.currentSessionId = initialSessionId || null;
-        
+
         // Only create log manager if we have a session ID
         if (this.currentSessionId) {
             this.logManager = logManagers.getOrCreateManager(this.currentSessionId);
@@ -28,7 +28,7 @@ export class RedisEventBridge {
 
         const redisConfig = {
             connectTimeout: 2000,
-            lazyConnect: true,
+            lazyConnect: false,
             maxRetriesPerRequest: 1,
             retryDelayOnFailover: 50,
             keepAlive: 30000,
@@ -131,6 +131,9 @@ export class RedisEventBridge {
 
     private async initializeRedis(): Promise<void> {
         try {
+            // Send initial connection message
+            await this.redisPublisher.ping();
+
             // Wait for Redis to be actually ready
             await new Promise<void>((resolve, reject) => {
                 if (this.redisPublisher.status === 'ready') {
@@ -182,8 +185,23 @@ export class RedisEventBridge {
         });
     }
 
+    // async waitForReady(): Promise<void> {
+    //     await this.readyPromise;
+    // }
+
     async waitForReady(): Promise<void> {
-        await this.readyPromise;
+        const startTime = Date.now();
+        const logInterval = setInterval(() => {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.log(`Still waiting for Redis to be ready. It is at ${this.redisPublisher.status}. Elapsed (${elapsed}s)`);
+        }, 10000); // Log every 2 seconds
+
+        try {
+            await this.readyPromise;
+            console.log(`Redis ready after ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+        } finally {
+            clearInterval(logInterval);
+        }
     }
 
     isConnected(): boolean {
@@ -282,12 +300,12 @@ export class RedisEventBridge {
             console.warn('⚠️ No active session, skipping message:', type);
             return;
         }
-        
+
         if (!this.isConnected()) {
             console.warn('⚠️ Redis not connected, skipping message:', type);
             return;
         }
-        
+
         await this.publishMessage(type, data);
     }
 

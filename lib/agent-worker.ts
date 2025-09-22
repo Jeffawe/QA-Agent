@@ -28,36 +28,25 @@ let currentSessionId: string | null = null;
 if (workerData?.preWarmed) {
     console.log(`🔥 Initializing pre-warmed worker ${workerId}...`);
 
-    try {
-        console.log('STEP 1: Creating event bus');
-        eventBus = eventBusManager.getOrCreateBus();
-        console.log('STEP 1: Event bus created');
-
-        console.log('STEP 2: About to create Redis bridge');
-        // Comment this out first:
-        if (!redisBridge) {
-            redisBridge = new RedisEventBridge(eventBus);
-            console.log('STEP 2: Redis bridge created');
-        }
-
-        console.log('STEP 3: Signaling ready');
-        redisBridge.waitForReady().then(() => {
-            console.log("✅ Pre - warmed worker ${ workerId } ready");
-            // Signal to parent that worker is ready
-            parentPort?.postMessage({
-                type: 'prewarmed_ready',
-                workerId: workerId
-            });
-        }).catch((error) => {
-            console.error("❌ Error initializing pre-warmed worker", error);
-            process.exit(1);
-        });
-        console.log('STEP 3: Worker ready signal sent');
-
-    } catch (error) {
-        console.error('Error in prewarmed initialization:', error);
-        console.trace();
+    // Initialize infrastructure without session
+    if (!eventBus) eventBus = eventBusManager.getOrCreateBus();
+    if (!redisBridge) {
+        redisBridge = new RedisEventBridge(eventBus);
     }
+
+    redisBridge.waitForReady().then(() => {
+        console.log(`✅ Pre-warmed worker ${workerId} ready`);
+
+        // Signal to parent that worker is ready
+        parentPort?.postMessage({
+            type: 'prewarmed_ready',
+            workerId: workerId
+        });
+    }).catch((error) => {
+        console.error(`❌ Error initializing pre-warmed worker ${workerId}:`, error);
+        process.exit(1);
+    });
+    console.log(`♨️ Pre-warmed worker ${workerId} initialized, waiting for session and redis Bridge...`);
 }
 
 // Pre-initialize common resources for pre-warmed workers

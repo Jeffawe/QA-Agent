@@ -30,7 +30,7 @@ export class ParentWebSocketServer {
     ) {
         const redisConfig = {
             connectTimeout: 2000,
-            lazyConnect: true,
+            lazyConnect: false,
             maxRetriesPerRequest: 1,
             retryDelayOnFailover: 50,
             keepAlive: 30000,

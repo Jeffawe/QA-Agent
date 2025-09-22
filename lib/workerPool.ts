@@ -1,6 +1,7 @@
 import { Worker } from 'worker_threads';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,6 +13,8 @@ export class WorkerPool {
     private readyWorkers = 0; // Track ready workers
     private poolReadyPromise: Promise<void>; // Promise for pool readiness
     private resolvePoolReady: (() => void) | null = null;
+    private replaceAttempts = 0;
+    private maxReplaceAttempts = 5;
 
     private constructor() {
         // Create promise that resolves when pool is ready
@@ -37,15 +40,29 @@ export class WorkerPool {
     }
 
     private createPrewarmedWorker(): Worker {
-        if( this.readyWorkers >= this.poolSize ) {
+        if (this.readyWorkers >= this.poolSize) {
             return null as unknown as Worker; // Pool is full
         }
 
+        const possiblePaths = [
+            join(__dirname, 'agent-worker.js'),        // Same directory (most common)
+            join(process.cwd(), 'dist', 'agent-worker.js'),  // Built version
+            join(process.cwd(), 'lib', 'agent-worker.js'),   // Alternative build dir
+            join(process.cwd(), 'src', 'agent-worker.js')    // Development
+        ];
+
+        const workerPath = possiblePaths.find(path => existsSync(path));
+
+        console.log('worker path:', workerPath);
+
+        if (!workerPath) {
+            console.error('Searched for agent-worker.js in:', possiblePaths);
+            throw new Error(`Cannot find agent-worker.js in any expected location`);
+        }
+
         console.log(`♨️ Spinning up pre-warmed worker (${this.readyWorkers + 1}/${this.poolSize})...`);
-        const worker = new Worker(join(__dirname, 'agent-worker.js'), {
-            workerData: {
-                preWarmed: true,
-            }
+        const worker = new Worker(workerPath, {
+            workerData: { preWarmed: true }
         });
 
         worker.on('error', (error) => {
@@ -58,6 +75,7 @@ export class WorkerPool {
             if (message.type === 'prewarmed_ready') {
                 console.log(`✅ Pre-warmed worker ${message.workerId} ready`);
                 this.availableWorkers.push(worker);
+                this.replaceAttempts = 0;
                 this.readyWorkers++;
 
                 // Check if pool is ready (at least 1 worker ready)
@@ -81,6 +99,13 @@ export class WorkerPool {
     }
 
     private replaceWorker(failedWorker: Worker) {
+        if (this.replaceAttempts >= this.maxReplaceAttempts) {
+            console.error('❌ Max replace attempts reached. Not replacing worker.');
+            return;
+        }
+
+        this.replaceAttempts++;
+        console.log(`🔄 Replacing failed worker (attempt ${this.replaceAttempts}/${this.maxReplaceAttempts})...`);
         this.availableWorkers = this.availableWorkers.filter(w => w !== failedWorker);
 
         setTimeout(() => {
