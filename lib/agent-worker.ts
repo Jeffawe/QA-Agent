@@ -28,22 +28,36 @@ let currentSessionId: string | null = null;
 if (workerData?.preWarmed) {
     console.log(`🔥 Initializing pre-warmed worker ${workerId}...`);
 
-    // Initialize infrastructure without session
-    eventBus = eventBusManager.getOrCreateBus();
-    redisBridge = new RedisEventBridge(eventBus); // No sessionId for prewarmed
+    try {
+        console.log('STEP 1: Creating event bus');
+        eventBus = eventBusManager.getOrCreateBus();
+        console.log('STEP 1: Event bus created');
 
-    redisBridge.waitForReady().then(() => {
-        console.log(`✅ Pre-warmed worker ${workerId} ready`);
+        console.log('STEP 2: About to create Redis bridge');
+        // Comment this out first:
+        if (!redisBridge) {
+            redisBridge = new RedisEventBridge(eventBus);
+            console.log('STEP 2: Redis bridge created');
+        }
 
-        // Signal to parent that worker is ready
-        parentPort?.postMessage({
-            type: 'prewarmed_ready',
-            workerId: workerId
+        console.log('STEP 3: Signaling ready');
+        redisBridge.waitForReady().then(() => {
+            console.log("✅ Pre - warmed worker ${ workerId } ready");
+            // Signal to parent that worker is ready
+            parentPort?.postMessage({
+                type: 'prewarmed_ready',
+                workerId: workerId
+            });
+        }).catch((error) => {
+            console.error("❌ Error initializing pre-warmed worker", error);
+            process.exit(1);
         });
-    }).catch((error) => {
-        console.error(`❌ Error initializing pre-warmed worker ${workerId}:`, error);
-        process.exit(1);
-    });
+        console.log('STEP 3: Worker ready signal sent');
+
+    } catch (error) {
+        console.error('Error in prewarmed initialization:', error);
+        console.trace();
+    }
 }
 
 // Pre-initialize common resources for pre-warmed workers

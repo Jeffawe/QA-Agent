@@ -672,6 +672,12 @@ const memoryCheck = setInterval(() => {
     }
 }, 100000);
 
+process.on('SIGSEGV', () => {
+  console.error('SEGMENTATION FAULT DETECTED');
+  console.trace();
+  process.exit(1);
+});
+
 process.on('SIGTERM', () => {
     console.log('\n🛑 SIGTERM received, shutting down...');
     cleanup();
