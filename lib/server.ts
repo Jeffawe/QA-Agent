@@ -10,7 +10,7 @@ import { Worker } from 'worker_threads';
 
 import { MiniAgentConfig } from './types.js';
 import { checkUserKey } from './externalCall.js';
-import { getAgents } from './agentConfig.js';
+import { getAgentsFast, getAgentsKeywordOnly, initializeModel } from './agentConfig.js';
 
 import { clearSessions, deleteSession, getSession, getSessions, getSessionSize, hasSession, setSession } from './services/memory/sessionMemory.js';
 import { clearSessionApiKeys, deleteSessionApiKey, getApiKeyForAgent, storeSessionApiKey } from './services/memory/apiMemory.js';
@@ -19,6 +19,7 @@ import { ParentWebSocketServer } from './services/events/parentWebSocket.js';
 import { createServer } from 'http';
 import testRoutes from './test/testAgent.js'
 import { WorkerPool } from './workerPool.js';
+import { withTimeout } from './utility/functions.js';
 
 dotenv.config();
 
@@ -153,6 +154,7 @@ const cleanup = async () => {
         }
     }
 
+    agentConfigCache.clear();
     clearSessions();
     clearSessionApiKeys();
 
@@ -307,7 +309,25 @@ async function getCachedAgents(goal: string, detailed: boolean): Promise<MiniAge
         return agentConfigCache.get(cacheKey)!;
     }
 
-    const agents = await getAgents(goal, detailed);
+    let agents = [];
+
+    try {
+        // Try getAgentsFast with a 3-second timeout
+        console.log('🧠 Attempting AI agent selection...');
+        agents = await withTimeout(getAgentsFast(goal, detailed), 2000);
+        console.log('✅ AI agent selection completed');
+    } catch (error) {
+        console.log('⏱️ AI selection timed out or failed, falling back to keyword matching');
+        agents = getAgentsKeywordOnly(goal, detailed);
+        console.log('🔤 Using keyword-based selection');
+    }
+
+    // Fallback check (in case both somehow fail)
+    if (!agents || agents.length === 0) {
+        console.warn('⚠️ No agents found, this should not happen');
+        agents = getAgentsKeywordOnly(goal, detailed);
+    }
+
     const serializableConfigs: MiniAgentConfig[] = Array.from(agents).map(config => ({
         name: config.name,
         sessionType: config.sessionType,
@@ -317,6 +337,7 @@ async function getCachedAgents(goal: string, detailed: boolean): Promise<MiniAge
 
     agentConfigCache.set(cacheKey, serializableConfigs);
     console.log('💾 Agent configuration cached');
+
     return serializableConfigs;
 }
 
@@ -374,10 +395,7 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
 
         const detailed = data['detailed'] || false;
 
-        // PARALLEL EXECUTION: Start both operations simultaneously
-        const [serializableConfigs] = await Promise.all([
-            getCachedAgents(goal, detailed)
-        ]);
+        const serializableConfigs = await getCachedAgents(goal, detailed);
 
         console.log(`STEP 2: Retrieved ${serializableConfigs.length} agent configurations for session ${sessionId}`);
 
@@ -653,6 +671,10 @@ server.listen(PORT, '0.0.0.0', async () => {
             setupWSS(),
             Promise.resolve(WorkerPool.getInstance()) // Initialize worker pool
         ]);
+        initializeModel().catch(err => {
+            console.error("❌ Failed to load AI model in background:", err);
+            console.warn("⚠️  Will use keyword-only agent selection");
+        });
         console.log(`🚀 Server listening on port ${PORT} on all interfaces`);
     } catch (err) {
         console.error("❌ Failed to set up WSS:", err);
@@ -681,9 +703,9 @@ const memoryCheck = setInterval(() => {
 }, 100000);
 
 process.on('SIGSEGV', () => {
-  console.error('SEGMENTATION FAULT DETECTED');
-  console.trace();
-  process.exit(1);
+    console.error('SEGMENTATION FAULT DETECTED');
+    console.trace();
+    process.exit(1);
 });
 
 process.on('SIGTERM', () => {

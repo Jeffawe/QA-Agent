@@ -20,6 +20,7 @@ dist/python/
 dist/externalCall.js
 assets/
 agent-config.json
+generateEmbeddings.js
 
 # Exclude source maps and declaration maps
 *.js.map

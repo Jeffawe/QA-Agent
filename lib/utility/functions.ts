@@ -17,3 +17,12 @@ export async function fileExists(pathFromRoot: string): Promise<boolean> {
     return false;
   }
 }
+
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    return Promise.race([
+        promise,
+        new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout')), timeoutMs)
+        )
+    ]);
+}

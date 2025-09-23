@@ -1,5 +1,6 @@
 import { pipeline } from '@xenova/transformers';
 import { ExtractorOptions, MiniAgentConfig } from "./types.js";
+import { AGENT_EMBEDDINGS } from './embeddings/agentembeds.js';
 
 interface AgentConfigWithDescription extends MiniAgentConfig {
     description: string;
@@ -88,16 +89,44 @@ const getAllConfigs = (detailed: boolean) => [
     { name: "crawler", configs: getCrawlerConfig(detailed), description: "Comprehensive web crawling and data extraction" }
 ];
 
+// Cache for the pipeline (since it's still expensive to load)
+let cachedExtractor: any = null;
+let modelLoadingPromise: Promise<any> | null = null;
+
+export const initializeModel = async (): Promise<any> => {
+    if (cachedExtractor) {
+        return cachedExtractor;
+    }
+    
+    if (modelLoadingPromise) {
+        // Model is already being loaded, wait for it
+        return await modelLoadingPromise;
+    }
+    
+    // Start loading the model
+    console.log('🧠 Loading AI model for agent selection...');
+    modelLoadingPromise = pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    
+    try {
+        cachedExtractor = await modelLoadingPromise;
+        console.log('✅ AI model loaded successfully');
+        return cachedExtractor;
+    } catch (error) {
+        console.error('❌ Failed to load AI model:', error);
+        modelLoadingPromise = null; // Reset so we can try again later
+        throw error;
+    }
+}
 
 export const getAgents = async (goal: string, detailed: boolean = false): Promise<AgentConfigWithDescription[]> => {
     const options: ExtractorOptions = { pooling: 'mean', normalize: true };
-    const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    const extractor = await initializeModel();
 
     const allConfigs = getAllConfigs(detailed);
 
     // Get goal embedding
     const goalVec = await extractor(goal, options);
-    const goalArray = Array.from(goalVec.data);
+    const goalArray: number[] = Array.from(goalVec.data);
 
     const matches: ConfigMatch[] = [];
 
@@ -110,7 +139,7 @@ export const getAgents = async (goal: string, detailed: boolean = false): Promis
 
         // Get embedding for combined description
         const descVec = await extractor(combinedDescription, options);
-        const descArray = Array.from(descVec.data);
+        const descArray: number[] = Array.from(descVec.data);
 
         // Calculate normalized cosine similarity
         const similarity = normalizedCosineSimilarity(goalArray, descArray);
@@ -143,6 +172,28 @@ export const getAgents = async (goal: string, detailed: boolean = false): Promis
     return bestMatch.config;
 };
 
+export const getAgentsKeywordOnly = (goal: string, detailed: boolean = false): AgentConfigWithDescription[] => {
+    const goalLower = goal.toLowerCase();
+
+    // Use getAllConfigs here too for consistency
+    const allConfigs = getAllConfigs(detailed);
+
+    const matches = allConfigs.map(configGroup => {
+        const score = configGroup.configs.flatMap(c => c.keywords)
+            .reduce((score, keyword) =>
+                goalLower.includes(keyword.toLowerCase()) ? score + 1 : score, 0
+            );
+
+        return { configGroup, score };
+    });
+
+    matches.sort((a, b) => b.score - a.score);
+
+    console.log(`Keyword match: ${matches[0].configGroup.name} (score: ${matches[0].score})`);
+
+    return matches[0].configGroup.configs;
+};
+
 // Enhanced cosine similarity with proper normalization
 export const normalizedCosineSimilarity = (vecA: number[], vecB: number[]): number => {
     if (vecA.length !== vecB.length) {
@@ -160,63 +211,60 @@ export const normalizedCosineSimilarity = (vecA: number[], vecB: number[]): numb
     return dotProduct / (magnitudeA * magnitudeB);
 };
 
-// Alternative: Hybrid approach with multiple similarity methods
-export const getAgentsHybrid = async (goal: string, detailed: boolean = false): Promise<AgentConfigWithDescription[]> => {
+export const getAgentsFast = async (goal: string, detailed: boolean = false): Promise<AgentConfigWithDescription[]> => {
     const options: ExtractorOptions = { pooling: 'mean', normalize: true };
-    const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    
+    // Load model only once and cache it
+    const extractor = await initializeModel();
 
-    const goalVec = await extractor(goal, options);
-    const goalArray = Array.from(goalVec.data);
-
-    const allConfigs = getAllConfigs(detailed);
-
-    const matches: (ConfigMatch & {
-        semanticSim: number;
-        keywordSim: number;
-        combinedScore: number
-    })[] = [];
-
-    for (const configGroup of allConfigs) {
-        const combinedDescription = configGroup.configs
-            .map(c => c.description)
-            .join(' ') + ' ' + configGroup.description;
-
-        const descVec = await extractor(combinedDescription, options);
-        const descArray = Array.from(descVec.data);
-
-        // Semantic similarity
-        const semanticSim = normalizedCosineSimilarity(goalArray, descArray);
-
-        // Keyword similarity (Jaccard-like)
-        const goalWords = new Set(goal.toLowerCase().split(/\s+/));
-        const allKeywords = new Set(
-            configGroup.configs.flatMap(c => c.keywords.map(k => k.toLowerCase()))
-        );
-
-        const intersection = new Set([...goalWords].filter(word => allKeywords.has(word)));
-        const union = new Set([...goalWords, ...allKeywords]);
-        const keywordSim = intersection.size / union.size;
-
-        // Combine scores (weighted)
-        const combinedScore = (semanticSim * 0.7) + (keywordSim * 0.3);
-
-        const matchedKeywords = [...intersection];
-
-        matches.push({
-            config: configGroup.configs,
-            similarity: combinedScore,
-            semanticSim,
-            keywordSim,
-            combinedScore,
-            matchedKeywords
-        });
+    if (!extractor) {
+        throw new Error("Model not initialized");
     }
-
-    matches.sort((a, b) => b.combinedScore - a.combinedScore);
+    
+    // Generate embedding only for the user's goal
+    const goalVec = await extractor(goal, options);
+    const goalArray: number[] = Array.from(goalVec.data);
+    
+    // Get all config groups using your original function
+    const allConfigs = getAllConfigs(detailed);
+    
+    const matches = allConfigs.map(configGroup => {
+        // Get the pre-computed embedding for this config group
+        const configEmbedding = AGENT_EMBEDDINGS[configGroup.name as keyof typeof AGENT_EMBEDDINGS];
+        
+        if (!configEmbedding || configEmbedding.length === 0) {
+            console.warn(`No embedding found for ${configGroup.name}`);
+            return { configGroup, similarity: 0, semanticSim: 0, matchedKeywords: [] };
+        }
+        
+        // Calculate semantic similarity
+        const semanticSim = normalizedCosineSimilarity(goalArray, configEmbedding);
+        
+        // Calculate keyword matches (same as before)
+        const goalLower = goal.toLowerCase();
+        const allKeywords = configGroup.configs.flatMap(c => c.keywords);
+        const matchedKeywords = allKeywords.filter(keyword =>
+            goalLower.includes(keyword.toLowerCase())
+        );
+        
+        // Combine similarity and keyword matching
+        const keywordBonus = Math.min(matchedKeywords.length * 0.1, 0.3);
+        const finalScore = semanticSim + keywordBonus;
+        
+        return {
+            configGroup,
+            similarity: finalScore,
+            semanticSim,
+            matchedKeywords
+        };
+    });
+    
+    // Sort by similarity and return best match
+    matches.sort((a, b) => b.similarity - a.similarity);
     const bestMatch = matches[0];
-
-    console.log(`Hybrid match: ${bestMatch.config[0].name} group`);
-    console.log(`Semantic: ${bestMatch.semanticSim.toFixed(3)}, Keyword: ${bestMatch.keywordSim.toFixed(3)}, Combined: ${bestMatch.combinedScore.toFixed(3)}`);
-
-    return bestMatch.config;
+    
+    console.log(`Fast match: ${bestMatch.configGroup.name} (similarity: ${bestMatch.similarity.toFixed(3)})`);
+    console.log(`Semantic: ${bestMatch.semanticSim.toFixed(3)}, Keywords: ${bestMatch.matchedKeywords.join(', ')}`);
+    
+    return bestMatch.configGroup.configs;
 };
