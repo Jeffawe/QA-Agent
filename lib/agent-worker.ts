@@ -27,7 +27,6 @@ let isShuttingDown = false;
 let cleanupTimeout: NodeJS.Timeout | null = null;
 const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const WORKER_IDLE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
-let healthCheckInterval: NodeJS.Timeout;
 
 const checkHealth = () => {
     const memUsage = process.memoryUsage();
@@ -102,7 +101,7 @@ const setupProcessHandlers = () => {
         if (!isShuttingDown) {
             checkHealth();
         }
-    }, 300000); // 5 minutes
+    }, HEALTH_CHECK_INTERVAL); // 5 minutes
 }
 
 // Handle pre-warmed worker initialization
@@ -258,10 +257,14 @@ if (parentPort) {
 
         if (data.command === 'start') {
             try {
+                console.log(`STEP 6: Starting agent for session ${workerData.sessionId} on worker ${workerId}...`);
+
                 // Skip initialization for pre-warmed workers that are already initialized
                 if (!isInitialized) {
                     await initializeWorker();
                 }
+
+                console.log(`STEP 7: Worker ${workerId} initialized, proceeding to start agent for session ${workerData.sessionId}...`);
 
                 if (agent) {
                     console.warn(`Agent already running for session ${workerData.sessionId}`);
@@ -319,6 +322,8 @@ if (parentPort) {
                     }))
                 );
 
+                console.log(`STEP 8: Full agent configs prepared:`);
+
                 // Store API key in parallel with agent creation
                 const apiKeyPromise = Promise.resolve(
                     storeSessionApiKey(data.agentConfig.sessionId, data.agentConfig.apiKey)
@@ -339,6 +344,8 @@ if (parentPort) {
                     agentCreationPromise,
                     apiKeyPromise
                 ]);
+
+                console.log(`STEP 9: Agent creation promise created for session ${data.agentConfig.sessionId}`);
 
                 agent = newAgent;
 

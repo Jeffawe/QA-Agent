@@ -161,6 +161,7 @@ const cleanup = async () => {
 
 // Sets up the worker events and returns the websocket port
 const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, serializableConfigs: MiniAgentConfig[]): Promise<number> => {
+    console.log(`STEP 3: Setting up worker events for session ${sessionId}`);
     return new Promise((resolve, reject) => {
         let resolved = false;
         let messageListener: ((message: any) => void) | null = null;
@@ -259,6 +260,8 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
             rejectOnce(new Error('No API key available for session'));
             return;
         }
+
+        console.log(`STEP 4: Sending start command to worker for session ${sessionId}`);
 
         if (!serializableConfigs || serializableConfigs.length === 0) {
             rejectOnce(new Error('No agent configurations provided'));
@@ -364,6 +367,7 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
     }
 
     try {
+        console.log(`STEP 1: Starting session ${sessionId} with goal: ${goal}`);
         if (!parentWSS) {
             throw new Error('WebSocket server not initialized');
         }
@@ -374,6 +378,8 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
         const [serializableConfigs] = await Promise.all([
             getCachedAgents(goal, detailed)
         ]);
+
+        console.log(`STEP 2: Retrieved ${serializableConfigs.length} agent configurations for session ${sessionId}`);
 
         // Use worker pool for faster startup
         const workerPool = WorkerPool.getInstance();
@@ -393,6 +399,8 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
         });
 
         console.log(`⚡ Session ${sessionId} started successfully in optimized mode!`);
+
+        console.log(`Step 5: Sending response for session ${sessionId}`);
 
         res.json({
             message: `Session ${sessionId} started successfully!`,
