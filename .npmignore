@@ -6,6 +6,7 @@ tsconfig.tsbuildinfo
 nodemon.json
 images/
 logs/
+downloads/
 .github/
 .env
 .gitignore

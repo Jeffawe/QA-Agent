@@ -10,6 +10,7 @@ package-lock.json
 .pnpm-debug.log
 agentConfig.json
 agent-config.json
+downloads/
 
 # ----------------------------------------
 # Environment Variables

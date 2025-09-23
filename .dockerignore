@@ -1,15 +1,60 @@
+# Dependencies
 node_modules
 npm-debug.log
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Git
 .git
 .gitignore
-README.md
+
+# Environment and secrets
 .env
+.env.local
+.env.*.local
+
+# Testing and coverage
 .nyc_output
 coverage
-.nyc_output
-agentConfig.json
 dist/test
+
+# Development files
 generateEmbeddings.js
+README.md
+
+# Build artifacts (if not needed)
 dist/python
 dist/webCode.js
 dist/webCode.js.map
+
+# Runtime directories
+downloads/
+logs/
+images/
+train/
+
+# Cache directories
+.npm
+.yarn
+.cache
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+agentConfig.json
+
+# Docker files (optional - include if you don't want them in the image)
+Dockerfile*
+docker-compose*
+.dockerignore
