@@ -13,6 +13,7 @@ package-lock.json
 .env
 .env.local
 .env.*.local
+deploy.sh
 
 # Testing and coverage
 .nyc_output

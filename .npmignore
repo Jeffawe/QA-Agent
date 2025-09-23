@@ -22,6 +22,7 @@ dist/externalCall.js
 assets/
 agent-config.json
 generateEmbeddings.js
+deploy.sh
 
 # Exclude source maps and declaration maps
 *.js.map
