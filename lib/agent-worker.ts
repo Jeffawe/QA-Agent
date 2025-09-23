@@ -23,6 +23,87 @@ let eventBus: any = null;
 const workerId = Math.random().toString(36).substring(7); // NEW: Unique worker ID
 let isActive = false;
 let currentSessionId: string | null = null;
+let isShuttingDown = false;
+let cleanupTimeout: NodeJS.Timeout | null = null;
+const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const WORKER_IDLE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+let healthCheckInterval: NodeJS.Timeout;
+
+const checkHealth = () => {
+    const memUsage = process.memoryUsage();
+    const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+
+    console.log(`📊 [Worker ${workerId}] Health check:`, {
+        heapUsed: `${heapUsedMB}MB`,
+        isActive: isActive,
+        sessionId: currentSessionId,
+        hasAgent: !!agent
+    });
+
+    // Force cleanup if memory usage is too high
+    if (heapUsedMB > 1000) { // 1GB threshold
+        console.warn(`⚠️ [Worker ${workerId}] High memory usage, forcing cleanup`);
+        forceShutdown();
+    }
+}
+
+const forceShutdown = async () => {
+    if (isShuttingDown) return;
+
+    console.log(`🛑 [Worker ${workerId}] Force shutdown initiated`);
+    isShuttingDown = true;
+
+    if (cleanupTimeout) {
+        clearTimeout(cleanupTimeout);
+        cleanupTimeout = null;
+    }
+
+    try {
+        await cleanup();
+    } catch (error) {
+        console.error(`❌ [Worker ${workerId}] Force shutdown error:`, error);
+    } finally {
+        process.exit(0);
+    }
+}
+
+const emergencyShutdown = () => {
+    console.log(`🚨 [Worker ${workerId}] Emergency shutdown`);
+    isShuttingDown = true;
+
+    if (cleanupTimeout) {
+        clearTimeout(cleanupTimeout);
+        cleanupTimeout = null;
+    }
+
+    // Skip cleanup and exit immediately
+    process.exit(1);
+}
+
+const setupProcessHandlers = () => {
+    // Graceful shutdown handlers
+    process.on('SIGTERM', forceShutdown.bind(this));
+    process.on('SIGINT', forceShutdown.bind(this));
+
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (error) => {
+        console.error(`💥 [Worker ${workerId}] Uncaught Exception:`, error);
+        emergencyShutdown();
+    });
+
+    // Handle unhandled rejections
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error(`💥 [Worker ${workerId}] Unhandled Rejection:`, reason);
+        emergencyShutdown();
+    });
+
+    // Prevent the worker from hanging
+    cleanupTimeout = setTimeout(() => {
+        if (!isShuttingDown) {
+            checkHealth();
+        }
+    }, 300000); // 5 minutes
+}
 
 // Handle pre-warmed worker initialization
 if (workerData?.preWarmed) {
@@ -46,6 +127,9 @@ if (workerData?.preWarmed) {
         console.error(`❌ Error initializing pre-warmed worker ${workerId}:`, error);
         process.exit(1);
     });
+
+    setupProcessHandlers();
+
     console.log(`♨️ Pre-warmed worker ${workerId} initialized, waiting for session and redis Bridge...`);
 }
 
@@ -288,22 +372,20 @@ if (parentPort) {
             parentPort?.postMessage({
                 type: 'session_cleanup',
                 sessionId: workerData.sessionId,
-                message: 'Worker completed cleanup, requesting parent cleanup'
+                message: 'Worker completed cleanup',
+                workerId: workerId
             });
 
-            // OPTIMIZATION 15: Reduced cleanup delay
-            await new Promise(resolve => setTimeout(resolve, 50));
-            console.log(`✅ Agent stopped, terminating worker...`);
         } catch (error) {
-            console.error('Error during cleanup:', error);
+            console.error(`❌ [Worker ${workerId}] Stop worker error:`, error);
 
             parentPort?.postMessage({
                 type: 'session_cleanup',
                 sessionId: workerData.sessionId,
-                error: error instanceof Error ? error.message : String(error)
+                error: error instanceof Error ? error.message : String(error),
+                workerId: workerId
             });
         } finally {
-            console.log(`✅ Agent stopped, terminating worker...`);
             process.exit(0);
         }
     };
@@ -311,37 +393,65 @@ if (parentPort) {
 
 // Streamlined cleanup with parallel operations
 const cleanup = async () => {
-    console.log(`🛑 Stopping agent ${workerData.sessionId}...`);
-    CrawlMap.finish();
-
-    const cleanupPromises: Promise<void>[] = [];
-
-    if (agent) {
-        cleanupPromises.push(agent.stop().then(() => {
-            agent = null;
-        }));
+    if (isShuttingDown) {
+        console.log(`⚠️ [Worker ${workerId}] Cleanup already in progress`);
+        return;
     }
 
-    // Parallel cleanup of memory systems
-    cleanupPromises.push(
-        Promise.resolve().then(() => {
-            eventBusManager.clear();
-        }),
-        Promise.resolve().then(() => {
-            logManagers.clear();
-        }),
-        Promise.resolve().then(() => {
-            PageMemory.clear();
-        }),
-        Promise.resolve().then(() => {
-            dataMemory.clear();
-        }),
-        Promise.resolve().then(() => {
-            redisBridge?.cleanup();
-        }),
-    );
+    try {
+        console.log(`🛑 Stopping agent ${workerData.sessionId}...`);
+        CrawlMap.finish();
 
-    // Execute all cleanup operations in parallel
-    await Promise.all(cleanupPromises);
-    console.log(`✅ Cleanup completed for ${workerData.sessionId}`);
+        const cleanupPromises: Promise<void>[] = [];
+
+        if (agent) {
+            cleanupPromises.push(agent.stop().then(() => {
+                agent = null;
+            }));
+        }
+
+        // Parallel cleanup of memory systems
+        cleanupPromises.push(
+            Promise.resolve().then(() => {
+                eventBusManager.clear();
+            }),
+            Promise.resolve().then(() => {
+                logManagers.clear();
+            }),
+            Promise.resolve().then(() => {
+                PageMemory.clear();
+            }),
+            Promise.resolve().then(() => {
+                dataMemory.clear();
+            }),
+            Promise.resolve().then(() => {
+                redisBridge?.cleanup();
+            }),
+        );
+
+        // Execute all cleanup operations in parallel
+        await Promise.all(cleanupPromises);
+        console.log(`✅ Cleanup completed for ${workerData.sessionId}`);
+    } catch (error) {
+        console.error(`❌ Cleanup error for ${workerData.sessionId}:`, error);
+        throw error;
+    } finally {
+        isActive = false;
+        currentSessionId = null;
+        isShuttingDown = false;
+        agent = null;
+
+        if (cleanupTimeout) {
+            clearTimeout(cleanupTimeout);
+            cleanupTimeout = null;
+        }
+
+        if (global.gc) {
+            try {
+                global.gc();
+            } catch (error) {
+                console.error(`❌ [Worker ${workerId}] GC error:`, error);
+            }
+        }
+    }
 };
