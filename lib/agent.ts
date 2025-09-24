@@ -64,6 +64,9 @@ export default class BossAgent {
     this.agentRegistry = new AgentRegistry();
     this.stopLoop = false;
 
+    this.logManager.initialize();
+    NavigationTree.initialize();
+
     this.initializeAgents(sessionId, agentConfigs);
   }
 
@@ -147,18 +150,26 @@ export default class BossAgent {
 
   public async start(url: string): Promise<void> {
     try {
-      this.logManager.initialize();
-      NavigationTree.initialize();
       const startTime = performance.now();
       CrawlMap.init(`logs/crawl_map_${this.sessionId}.md`);
 
+      console.log("STEP 1 AGENT: 🌟 Starting all sessions...");
+
       // Start all sessions
-      for (const [name, session] of this.sessions.entries()) {
+      const sessionPromises = Array.from(this.sessions.entries()).map(async ([name, session]) => {
         const started = await session.start(url);
         if (!started) {
-          this.logManager.error(`Failed to start session for agent: ${name}`, State.ERROR);
-          return;
+          throw new Error(`Failed to start session for agent: ${name}`);
         }
+        return { name, started };
+      });
+
+      try {
+        await Promise.all(sessionPromises);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this.logManager.error(errorMessage, State.ERROR);
+        return;
       }
 
       this.bus.on('stop', async (evt) => {
@@ -210,6 +221,8 @@ export default class BossAgent {
       for (const agent of agents) {
         agent.setBaseValues(url, this.goal);
       }
+
+      console.log(`STEP 2 AGENT: 🧠 Starting agents with goal: ${this.goal}`);
 
       let encounteredError = false;
       await this.loop(agents, encounteredError);

@@ -101,7 +101,7 @@ export default class StagehandSession extends Session<Page> {
             }
 
             await this.page.goto(url, {
-                timeout: 90000, // 90 seconds instead of 30
+                timeout: 50000, // 90 seconds instead of 30
                 waitUntil: 'domcontentloaded' // Less strict than 'load'
             });
 
