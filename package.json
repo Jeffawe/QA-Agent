@@ -11,7 +11,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node dist/server.js",
     "dev": "nodemon",
-    "build": "tsc --build --force && npx playwright install --with-deps chromium",
+    "build": "tsc --build --force && npx playwright install chromium",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
