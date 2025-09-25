@@ -25,17 +25,6 @@ function checkPort(port) {
   });
 }
 
-// Function to check multiple ports
-async function checkPorts(ports) {
-  const results = {};
-
-  for (const [name, port] of Object.entries(ports)) {
-    results[name] = await checkPort(port);
-  }
-
-  return results;
-}
-
 // Function to read and parse config file
 function readConfigFile(configPath) {
   try {
@@ -53,6 +42,64 @@ function readConfigFile(configPath) {
     console.error(`❌ Error reading config file: ${error.message}`);
     process.exit(1);
   }
+}
+
+function getPidUsingPort(portNumber) {
+  try {
+    if (process.platform === 'win32') {
+      // netstat output lines like: TCP    0.0.0.0:3001     0.0.0.0:0    LISTENING      1234
+      const out = execSync(`netstat -ano | findstr :${portNumber}`, { stdio: ['pipe', 'pipe', 'ignore'] }).toString();
+      const lines = out.split(/\r?\n/).filter(Boolean);
+      for (const line of lines) {
+        const m = line.trim().match(/(\d+)$/);
+        if (m) return m[1];
+      }
+      return null;
+    } else {
+      try {
+        // Prefer lsof
+        const out = execSync(`lsof -n -iTCP:${portNumber} -sTCP:LISTEN -Fp`, { stdio: ['pipe', 'pipe', 'ignore'] }).toString();
+        const m = out.match(/p(\d+)/);
+        if (m) return m[1];
+      } catch {
+        // fallback to ss (Linux)
+        try {
+          const out2 = execSync(`ss -ltnp 'sport = :${portNumber}'`, { stdio: ['pipe', 'pipe', 'ignore'] }).toString();
+          const m2 = out2.match(/pid=(\d+),/);
+          if (m2) return m2[1];
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+function getCmdlineForPid(pid) {
+  try {
+    if (process.platform === 'win32') {
+      // wmic may be available on older Windows; fallback to tasklist if needed
+      const out = execSync(`wmic process where ProcessId=${pid} get CommandLine 2>nul`, { stdio: ['pipe', 'pipe', 'ignore'] }).toString();
+      const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      // wmic prints header "CommandLine" then the value
+      if (lines.length >= 2) return lines.slice(1).join(' ');
+      // fallback: tasklist doesn't give cmdline; return empty
+      return '';
+    } else {
+      return execSync(`ps -p ${pid} -o args=`, { stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
+    }
+  } catch {
+    return '';
+  }
+}
+
+function isOurServerCommand(cmd) {
+  if (!cmd) return false;
+  const serverPath = path.join(PROJECT_ROOT, 'dist', 'server.js');
+  return cmd.includes('node') && (cmd.includes(serverPath) || cmd.includes('dist/server.js') || cmd.includes('server.js'));
 }
 
 // Function to make HTTP request
@@ -168,7 +215,6 @@ const goal = args.goal || config.goal || '';
 const port = args.port || config.port || 3001;
 const key = args.key || config.key || '';
 const url = args.url || config.url || '';
-const websocket = args.websocket || config.websocket || 3002;
 const testMode = args['test-mode'] || config['test-mode'] || false;
 const autoStart = args['auto-start'] || config['auto-start'] || true;
 const daemonMode = args.daemon || args.d || false;
@@ -176,6 +222,7 @@ const sessionid = args.sessionid || config.sessionid || null;
 const headless = args.headless || config.headless || false;
 const detailed = args.detailed || config.detailed || false;
 const data = config.data || {};
+const endpoint = args.endpoint || config.endpoint || false;
 
 if (args.help || args.h) {
   console.log(`
@@ -187,14 +234,14 @@ if (args.help || args.h) {
       --key            Google GenAI API key (required)  
       --url            Base URL (required)
       --port           Server port (default: 3001)
-      --websocket      WebSocket port (default: 3002)
       --test-mode      Enable test mode (default: false)
       --auto-start     Automatically start the agent (default: true)
       --help, -h       Show this help message
       --daemon, -d     Run in daemon mode
       --sessionId      Session ID
       --headless       Run browser in headless mode (default: false)
-      --detailed       Run in detailed mode. Tests every UI element in every page as well
+      --detailed       Run in detailed mode. Tests every UI element in every page as well (default: false)
+      --endpoint       Boolean value if what is being tested are API endpoints (default: false)
 
     Logs:
       agent-run logs            Show main agent log
@@ -211,10 +258,14 @@ if (args.help || args.h) {
         "key": "your-api-key",
         "url": "http://localhost:3000",
         "port": 3001,
-        "websocket": 3002,
         "test-mode": true,
         "auto-start": true,
-        "detailed": true
+        "detailed": true,
+        "headless": true,
+        "endpoint": false,
+        "data": {
+          "additional": "info"
+        }
       }
 
     Examples:
@@ -222,11 +273,6 @@ if (args.help || args.h) {
       agent-run --goal "Test login" --key "api-key" --url "http://localhost:3000"
   `);
   process.exit(0);
-}
-
-if (port === websocket) {
-  console.error('❌ Port and WebSocket port cannot be the same.');
-  process.exit(1);
 }
 
 if (subcommand === 'stop') {
@@ -277,43 +323,45 @@ if (!/^(https?:\/\/)/.test(url)) {
 // Check if ports are available
 console.log('🔍 Checking port availability...');
 
-const portStatus = await checkPorts({
-  main: port,
-  websocket: websocket
-});
+const portStatus = await checkPort(port).then(available => ({ main: available }));
 
 let hasPortIssues = false;
 
 if (!portStatus.main) {
-  console.error(`❌ Port ${port} is already in use. Please choose a different --port.`);
-  hasPortIssues = true;
-}
-
-if (!portStatus.websocket) {
-  console.error(`❌ WebSocket port ${websocket} is already in use. Please choose a different --websocket port.`);
-  hasPortIssues = true;
+  const pid = getPidUsingPort(port);
+  if (pid) {
+    const cmd = getCmdlineForPid(pid);
+    if (isOurServerCommand(cmd)) {
+      console.log(`ℹ️ Port ${port} is already used by agent server (PID: ${pid}). Will reuse existing server.`);
+      try { if (!fs.existsSync(pidFile)) fs.writeFileSync(pidFile, pid); } catch (e) { /* ignore */ }
+    } else {
+      console.error(`❌ Port ${port} is already in use by PID ${pid} (${cmd}). Please choose a different --port.`);
+      hasPortIssues = true;
+    }
+  } else {
+    console.error(`❌ Port ${port} is already in use. Please choose a different --port.`);
+    hasPortIssues = true;
+  }
 }
 
 if (hasPortIssues) {
   console.error('\n💡 Try running with different ports:');
-  console.error(`   agent-run --goal "${goal}" --key "${key}" --url "${url}" --port 3003 --websocket 3004`);
+  console.error(`   agent-run --goal "${goal}" --key "${key}" --url "${url}" --port 3003`);
   process.exit(1);
 }
 
-console.log(`✅ Ports ${port} and ${websocket} are available.`);
+console.log(`✅ Ports ${port} is available.`);
 
 
 // Set environment variables
 process.env.PORT = String(port);
 process.env.API_KEY = key;
-process.env.WEBSOCKET_PORT = String(websocket);
 process.env.NODE_ENV = 'development';
 process.env.HEADLESS = String(headless).toLowerCase();
-process.env.WORKER_POOL_SIZE="1"
+process.env.WORKER_POOL_SIZE = "1"
 
 console.log('🚀 Starting server...');
 console.log(`✅ Agent server running on http://localhost:${port}`);
-console.log(`✅ WebSocket server running on ws://localhost:${websocket}`);
 
 if (testMode) {
   if (!key.startsWith('TEST')) {
@@ -338,14 +386,42 @@ if (daemonMode) {
   const logDir = path.join(PROJECT_ROOT, 'logs');
   if (!fs.existsSync(logDir)) fs.mkdirSync(logDir);
 
-  const pidFile = path.join(logDir, 'daemon.pid');
-  execSync(
-    `node ${path.join(PROJECT_ROOT, 'dist', 'server.js')} > ${path.join(LOG_DIR, 'daemon.log')} 2>&1 & echo $! > ${pidFile}`
-  );
-  console.log(`✅ Daemon started (PID saved to ${pidFile})`);
-  process.exit(0);
+  // If a server is already listening and it's our server, skip starting
+  const existingPid = getPidUsingPort(port);
+  if (existingPid) {
+    const cmd = getCmdlineForPid(existingPid);
+    if (isOurServerCommand(cmd)) {
+      console.log(`ℹ️ Agent server already running (PID: ${existingPid}), skipping daemon start.`);
+      try { if (!fs.existsSync(pidFile)) fs.writeFileSync(pidFile, existingPid); } catch (e) { /* ignore */ }
+      // continue on to auto-start logic without exiting
+    } else {
+      console.log(`ℹ️ Port ${port} occupied by other process (PID: ${existingPid}). Attempting to start daemon may fail.`);
+      execSync(
+        `node ${path.join(PROJECT_ROOT, 'dist', 'server.js')} > ${path.join(LOG_DIR, 'daemon.log')} 2>&1 & echo $! > ${pidFile}`
+      );
+      console.log(`✅ Daemon started (PID saved to ${pidFile})`);
+      process.exit(0);
+    }
+  } else {
+    execSync(
+      `node ${path.join(PROJECT_ROOT, 'dist', 'server.js')} > ${path.join(LOG_DIR, 'daemon.log')} 2>&1 & echo $! > ${pidFile}`
+    );
+    console.log(`✅ Daemon started (PID saved to ${pidFile})`);
+    process.exit(0);
+  }
 } else {
-  await import('../dist/server.js');
+  // Non-daemon mode: if the port is already used by our server, skip importing to avoid double-start.
+  const existingPid = getPidUsingPort(port);
+  if (existingPid) {
+    const cmd = getCmdlineForPid(existingPid);
+    if (isOurServerCommand(cmd)) {
+      console.log(`ℹ️ Agent server already running (PID: ${existingPid}), skipping in-process start.`);
+    } else {
+      await import('../dist/server.js');
+    }
+  } else {
+    await import('../dist/server.js');
+  }
 }
 
 // Auto-start functionality
@@ -366,6 +442,7 @@ if (autoStart) {
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     data['detailed'] = detailed;
+    data['endpoint'] = endpoint;
 
     const requestBody = {
       goal: goal,

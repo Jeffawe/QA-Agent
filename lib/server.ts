@@ -10,7 +10,7 @@ import { Worker } from 'worker_threads';
 
 import { MiniAgentConfig } from './types.js';
 import { checkUserKey } from './externalCall.js';
-import { getAgentsFast, getAgentsKeywordOnly, initializeModel } from './agentConfig.js';
+import { getAgentsFast, getAgentsKeywordOnly, getEndpointConfig, initializeModel } from './agentConfig.js';
 
 import { clearSessions, deleteSession, getSession, getSessions, getSessionSize, hasSession, setSession } from './services/memory/sessionMemory.js';
 import { clearSessionApiKeys, deleteSessionApiKey, getApiKeyForAgent, storeSessionApiKey } from './services/memory/apiMemory.js';
@@ -301,8 +301,8 @@ const setupWSS = async (): Promise<ParentWebSocketServer> => {
     }
 };
 
-async function getCachedAgents(goal: string, detailed: boolean): Promise<MiniAgentConfig[]> {
-    const cacheKey = `${goal}_${detailed}`;
+async function getCachedAgents(goal: string, detailed: boolean, endpoint: boolean): Promise<MiniAgentConfig[]> {
+    const cacheKey = `${goal}_${detailed}_${endpoint}`;
 
     if (agentConfigCache.has(cacheKey)) {
         console.log('⚡ Using cached agent configuration');
@@ -311,21 +311,30 @@ async function getCachedAgents(goal: string, detailed: boolean): Promise<MiniAge
 
     let agents = [];
 
-    try {
-        // Try getAgentsFast with a 3-second timeout
-        console.log('🧠 Attempting AI agent selection...');
-        agents = await withTimeout(getAgentsFast(goal, detailed), 2000);
-        console.log('✅ AI agent selection completed');
-    } catch (error) {
-        console.log('⏱️ AI selection timed out or failed, falling back to keyword matching');
-        agents = getAgentsKeywordOnly(goal, detailed);
-        console.log('🔤 Using keyword-based selection');
+    if (endpoint) {
+        console.log('🔤 Endpoint testing mode - using endpoint agent configuration');
+        agents = getEndpointConfig();
+    } else {
+        try {
+            // Try getAgentsFast with a 3-second timeout
+            console.log('🧠 Attempting AI agent selection...');
+            agents = await withTimeout(getAgentsFast(goal, detailed), 2000);
+            console.log('✅ AI agent selection completed');
+        } catch (error) {
+            console.log('⏱️ AI selection timed out or failed, falling back to keyword matching');
+            agents = getAgentsKeywordOnly(goal, detailed);
+            console.log('🔤 Using keyword-based selection');
+        }
+
+        // Fallback check (in case both somehow fail)
+        if (!agents || agents.length === 0) {
+            console.warn('⚠️ No agents found, this should not happen');
+            agents = getAgentsKeywordOnly(goal, detailed);
+        }
     }
 
-    // Fallback check (in case both somehow fail)
     if (!agents || agents.length === 0) {
-        console.warn('⚠️ No agents found, this should not happen');
-        agents = getAgentsKeywordOnly(goal, detailed);
+        throw new Error('No agents found');
     }
 
     const serializableConfigs: MiniAgentConfig[] = Array.from(agents).map(config => ({
@@ -394,8 +403,9 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
         }
 
         const detailed = data['detailed'] || false;
+        const endpoint = data['endpoint'] || false;
 
-        const serializableConfigs = await getCachedAgents(goal, detailed);
+        const serializableConfigs = await getCachedAgents(goal, detailed, endpoint);
 
         console.log(`STEP 2: Retrieved ${serializableConfigs.length} agent configurations for session ${sessionId}`);
 
@@ -536,10 +546,11 @@ app.post('/test/:key', async (req: Request, res: Response) => {
         // PARALLEL EXECUTION: Run key validation and config loading simultaneously
         const getKey: boolean = process.env.NODE_ENV === 'production';
         const detailed = data['detailed'] || false;
+        const endpoint = data['endpoint'] || false;
 
         const [keyValidationSuccess, serializableConfigs] = await Promise.all([
             checkUserKey(sessionId, key, getKey).catch(() => false),
-            getCachedAgents(goal, detailed)
+            getCachedAgents(goal, detailed, endpoint)
         ]);
 
         if (!keyValidationSuccess) {

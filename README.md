@@ -42,7 +42,6 @@ agent-run --goal "Test all interactive elements" --url https://example.com --por
 | `--goal`       | Goal or task for the agent to perform    | ✅       |
 | `--url`        | Base URL of the site to test             | ✅       |
 | `--port`       | Local server port (default: 3001)        | ❌       |
-| `--websocket`  | Local server port (default: 3002)        | ❌       |
 | `--key`        | Google GenAI API Key                     | ✅       |
 
 ---

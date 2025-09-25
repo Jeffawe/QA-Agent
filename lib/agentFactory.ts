@@ -2,6 +2,7 @@ import Analyzer from './agent/analyzer.js';
 import AutoAnalyzer from './agent/autoanalyzer.js';
 import { AutoCrawler } from './agent/autocrawler.js';
 import { Crawler } from './agent/crawler.js';
+import EndPoints from './agent/endpoints.js';
 import { GoalAgent } from './agent/goalIntelliAgent.js';
 import ManualAnalyzer from './agent/manualAnalyzer.js';
 import ManualAutoAnalyzer from './agent/manualAutoAnalyzer.js';
@@ -28,6 +29,7 @@ export class AgentFactory {
         this.agentClasses.set('autocrawler', AutoCrawler);
         this.agentClasses.set('autoanalyzer', AutoAnalyzer);
         this.agentClasses.set('manualAutoanalyzer', ManualAutoAnalyzer);
+        this.agentClasses.set('endpointagent', EndPoints);
     }
 
     static getAgentClass(name: Namespaces): new (dependencies: BaseAgentDependencies) => Agent {

@@ -179,7 +179,7 @@ export class AutoCrawler extends Agent {
                         this.setState(State.START);
                         break;
                     }
-                    
+
                     const active = this.isCurrentPageVisited ? this.manualAnalyzer.activeLink : this.analyzer.activeLink;
                     if (active) {
                         PageMemory.markLinkVisited(this.currentUrl, active.description);
@@ -231,24 +231,16 @@ export class AutoCrawler extends Agent {
      * – Drops links that point to the current page
      */
     convertElementsToLinks(
-        links: StageHandObserveResult[]     // e.g. "https://example.com/foo/bar"
+        links: StageHandObserveResult[] // e.g. "https://example.com/foo/bar"
     ): LinkInfo[] {
-        const out: LinkInfo[] = [];
-
-        for (const el of links) {
-            const newLink: LinkInfo = {
-                description: el.description || "",
-                selector: el.selector,
-                method: el.method || "click",
-                href: this.normalise(el.selector, this.currentUrl),
-                arguments: el.arguments,
-                visited: false,
-            };
-
-            out.push(newLink);
-        }
-
-        return out;
+        return links.map(el => ({
+            description: el.description || "",
+            selector: el.selector,
+            method: el.method || "click",
+            href: this.normalise(el.selector, this.currentUrl),
+            arguments: el.arguments,
+            visited: false,
+        }));
     }
 
     /** Normalise a URL: resolve relative → absolute, strip hash, trim trailing “/” */

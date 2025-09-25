@@ -124,19 +124,61 @@ export default class Tester extends Agent {
                     break;
 
                 case State.ACT:
-                    await this.testTextInputs();
-                    await this.testSelects();
-                    await this.testCheckboxes();
-                    await this.testRadios();
-                    await this.testFileInputs();
-                    await this.testDateInputs();
-                    await this.testNumberInputs();
-                    await this.testOtherInputs();
-                    await this.testForms();
-                    await this.testLinks();
-                    await this.testButtons();
+                    // Store initial URL for navigation-heavy tests
+                    const initialUrl = this.currentUrl;
+
+                    // Clear existing results to avoid duplicates
+                    const existingResults = [...this.testResults];
+                    this.testResults = [];
+
+                    try {
+                        // Group 1: Safe parallel tests (no navigation, minimal side effects)
+                        const safeTestResults = await Promise.all([
+                            this.testTextInputs(),
+                            this.testSelects(),
+                            this.testCheckboxes(),
+                            this.testRadios(),
+                            this.testDateInputs(),
+                            this.testNumberInputs()
+                        ]);
+
+                        // Flatten and collect safe test results
+                        const flatSafeResults = safeTestResults.flat();
+
+                        // Group 2: Navigation-risky tests (run sequentially after safe tests)
+                        // Ensure we're on the right page before starting risky tests
+                        if (this.page!.url() !== initialUrl) {
+                            await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
+                            await this.page!.waitForTimeout(1000);
+                        }
+
+                        // Run navigation-heavy tests sequentially and collect their results
+                        const linksResults = await this.testLinks();
+                        const buttonsResults = await this.testButtons();
+                        const formsResults = await this.testForms();
+                        const fileInputsResults = await this.testFileInputs();
+                        const otherInputsResults = await this.testOtherInputs();
+
+                        // Combine all results in a single atomic operation
+                        this.testResults = [
+                            ...existingResults,
+                            ...flatSafeResults,
+                            ...linksResults,
+                            ...buttonsResults,
+                            ...formsResults,
+                            ...fileInputsResults,
+                            ...otherInputsResults
+                        ];
+
+                    } catch (error) {
+                        // Restore original results if something fails
+                        this.testResults = existingResults;
+                        throw error;
+                    }
+
                     this.setState(State.VALIDATE);
                     break;
+
 
                 case State.VALIDATE:
                     try {
@@ -211,17 +253,21 @@ export default class Tester extends Agent {
         }
     }
 
-    private async testButtons(): Promise<void> {
+    private async testButtons(): Promise<UITesterResult[]> {
         if (!this.groupedElements || this.groupedElements.buttons.length === 0) {
-            return;
+            return [];
         }
+
+        const testResults: UITesterResult[] = [];
 
         this.logManager.log(`Testing ${this.groupedElements.buttons.length} buttons`, this.buildState(), true);
 
         for (const button of this.groupedElements.buttons) {
             const testerResult = await quickTestButtonElement(this.page!, button);
-            this.testResults.push(testerResult);
+            testResults.push(testerResult);
         }
+
+        return testResults;
     }
 
     private async testButtonElement(button: UIElementInfo): Promise<void> {
@@ -348,30 +394,37 @@ export default class Tester extends Agent {
         }
     }
 
-    private async testTextInputs(): Promise<void> {
+    private async testTextInputs(): Promise<UITesterResult[]> {
         if (!this.groupedElements || this.groupedElements.textInputs.length === 0) {
-            return;
+            return [];
         }
 
+        const testResults: UITesterResult[] = [];
         this.logManager.log(`Testing ${this.groupedElements.textInputs.length} text inputs`, this.buildState(), true);
 
         // Batch process text inputs
-        const batchSize = this.maxBatchSize; // Can be higher for text inputs since they're non-destructive
+        const batchSize = this.maxBatchSize;
         for (let i = 0; i < this.groupedElements.textInputs.length; i += batchSize) {
             const batch = this.groupedElements.textInputs.slice(i, i + batchSize);
 
-            // Process batch in parallel
-            await Promise.all(batch.map(input => this.testTextInputElement(input)));
+            // Process batch in parallel and collect results
+            const batchResults = await Promise.all(batch.map(input => this.testTextInputElement(input)));
 
-            // Optional small delay between batches (can be removed for text inputs)
+            // Flatten and add batch results to main results array
+            testResults.push(...batchResults.flat());
+
+            // Optional small delay between batches
             if (i + batchSize < this.groupedElements.textInputs.length) {
-                await new Promise(resolve => setTimeout(resolve, 50)); // Very small delay
+                await new Promise(resolve => setTimeout(resolve, 50));
             }
         }
+
+        return testResults;
     }
 
-    private async testTextInputElement(input: UIElementInfo): Promise<void> {
+    private async testTextInputElement(input: UIElementInfo): Promise<UITesterResult[]> {
         const testData = this.generateTextInputTestData(input);
+        const testResults: UITesterResult[] = [];
 
         for (const testCase of testData) {
             try {
@@ -384,25 +437,27 @@ export default class Tester extends Agent {
                 // Trigger change event
                 await this.page!.dispatchEvent(input.selector, 'change');
 
-                this.testResults.push({
+                const testResult: UITesterResult = {
                     element: input,
                     testType: testCase.type,
                     testValue: testCase.value,
                     success: true,
                     response: `Input filled successfully with: ${testCase.value}`
-                });
+                };
 
                 this.logManager.log(`Text input test (${testCase.type}) passed: ${input.description}`, this.buildState(), false);
-
+                testResults.push(testResult);
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                this.testResults.push({
+                const testResult: UITesterResult = {
                     element: input,
                     testType: testCase.type,
                     testValue: testCase.value,
                     success: false,
                     error: String(errorMessage)
-                });
+                };
+
+                testResults.push(testResult);
 
                 this.logManager.error(`Text input test (${testCase.type}) failed: ${input.description} - ${error}`, this.buildState(), false);
             }
@@ -410,6 +465,8 @@ export default class Tester extends Agent {
             // Small delay between tests
             await this.page!.waitForTimeout(200);
         }
+
+        return testResults;
     }
 
     private generateTextInputTestData(input: UIElementInfo): Array<{ value: string, type: 'positive' | 'negative' }> {
@@ -450,19 +507,27 @@ export default class Tester extends Agent {
         return testCases;
     }
 
-    private async testSelects(): Promise<void> {
+    private async testSelects(): Promise<UITesterResult[]> {
         if (!this.groupedElements || this.groupedElements.selects.length === 0) {
-            return;
+            return [];
         }
+
+        const testResults: UITesterResult[] = [];
 
         this.logManager.log(`Testing ${this.groupedElements.selects.length} select elements`, this.buildState(), true);
 
         for (const select of this.groupedElements.selects) {
-            await this.testSelectElement(select);
+            const testResult = await this.testSelectElement(select);
+            if (testResult) {
+                testResults.push(...testResult);
+            }
         }
+
+        return testResults;
     }
 
-    private async testSelectElement(select: UIElementInfo): Promise<void> {
+    private async testSelectElement(select: UIElementInfo): Promise<UITesterResult[] | null> {
+        const testResults: UITesterResult[] = [];
         try {
             // Get all options
             const options = await this.page!.evaluate((selector) => {
@@ -477,7 +542,7 @@ export default class Tester extends Agent {
 
             if (options.length === 0) {
                 this.logManager.log(`Select element has no options: ${select.description}`, this.buildState(), false);
-                return;
+                return null;
             }
 
             // Positive test: Select each valid option
@@ -485,25 +550,27 @@ export default class Tester extends Agent {
                 try {
                     await this.page!.selectOption(select.selector, option.value);
 
-                    this.testResults.push({
+                    const testResult: UITesterResult = {
                         element: select,
                         testType: 'positive',
                         testValue: option.value,
                         success: true,
                         response: `Selected option: ${option.text}`
-                    });
+                    };
 
                     await this.page!.waitForTimeout(200);
+                    testResults.push(testResult);
 
                 } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : String(error);
-                    this.testResults.push({
+                    const testResult: UITesterResult = {
                         element: select,
                         testType: 'positive',
                         testValue: option.value,
                         success: false,
                         error: errorMessage
-                    });
+                    };
+                    testResults.push(testResult);
                 }
             }
 
@@ -511,192 +578,220 @@ export default class Tester extends Agent {
             try {
                 await this.page!.selectOption(select.selector, 'invalid-option-value');
 
-                this.testResults.push({
+                const testResult: UITesterResult = {
                     element: select,
                     testType: 'negative',
                     testValue: 'invalid-option-value',
                     success: false,
                     response: 'Should have failed but succeeded'
-                });
+                };
+                testResults.push(testResult);
 
             } catch (error) {
                 // This is expected to fail
-                this.testResults.push({
+                const testResult: UITesterResult = {
                     element: select,
                     testType: 'negative',
                     testValue: 'invalid-option-value',
                     success: true,
                     response: 'Correctly rejected invalid option'
-                });
+                };
+
+                testResults.push(testResult);
             }
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.testResults.push({
+            const testResult: UITesterResult = {
                 element: select,
                 testType: 'positive',
                 testValue: 'general',
                 success: false,
                 error: errorMessage
-            });
+            };
+            testResults.push(testResult);
         }
+
+        return testResults;
     }
 
-    private async testCheckboxes(): Promise<void> {
+    private async testCheckboxes(): Promise<UITesterResult[]> {
         if (!this.groupedElements || this.groupedElements.checkboxes.length === 0) {
-            return;
+            return [];
         }
+
+        const testResults: UITesterResult[] = [];
 
         this.logManager.log(`Testing ${this.groupedElements.checkboxes.length} checkboxes`, this.buildState(), true);
 
         for (const checkbox of this.groupedElements.checkboxes) {
-            await this.testCheckboxElement(checkbox);
+            const testResult = await this.testCheckboxElement(checkbox);
+            testResults.push(...testResult);
         }
+
+        return testResults;
     }
 
-    private async testCheckboxElement(checkbox: UIElementInfo): Promise<void> {
+    private async testCheckboxElement(checkbox: UIElementInfo): Promise<UITesterResult[]> {
+        const testResults: UITesterResult[] = [];
         try {
             // Test checking the checkbox
             await this.page!.check(checkbox.selector);
 
-            this.testResults.push({
+            const testResultPositive: UITesterResult = {
                 element: checkbox,
                 testType: 'positive',
                 testValue: true,
                 success: true,
                 response: 'Checkbox checked successfully'
-            });
+            };
 
             await this.page!.waitForTimeout(200);
 
             // Test unchecking the checkbox
             await this.page!.uncheck(checkbox.selector);
 
-            this.testResults.push({
+            const testResultNegative: UITesterResult = {
                 element: checkbox,
                 testType: 'positive',
                 testValue: false,
                 success: true,
                 response: 'Checkbox unchecked successfully'
-            });
+            };
+            testResults.push(testResultPositive, testResultNegative);
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.testResults.push({
+            const testResult: UITesterResult = {
                 element: checkbox,
                 testType: 'positive',
                 testValue: 'toggle',
                 success: false,
                 error: errorMessage
-            });
+            };
+            testResults.push(testResult);
         }
+
+        return testResults;
     }
 
-    private async testRadios(): Promise<void> {
+    private async testRadios(): Promise<UITesterResult[]> {
         if (!this.groupedElements || this.groupedElements.radios.length === 0) {
-            return;
+            return [];
         }
 
         this.logManager.log(`Testing ${this.groupedElements.radios.length} radio buttons`, this.buildState(), true);
 
+        const results: UITesterResult[] = [];
         for (const radio of this.groupedElements.radios) {
-            await this.testRadioElement(radio);
+            const radioResult = await this.testRadioElement(radio);
+            results.push(radioResult);
         }
+
+        return results;
     }
 
-    private async testRadioElement(radio: UIElementInfo): Promise<void> {
+    private async testRadioElement(radio: UIElementInfo): Promise<UITesterResult> {
         try {
             await this.page!.check(radio.selector);
 
-            this.testResults.push({
+            return {
                 element: radio,
                 testType: 'positive',
                 testValue: true,
                 success: true,
                 response: 'Radio button selected successfully'
-            });
-
+            };
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.testResults.push({
+            return {
                 element: radio,
                 testType: 'positive',
                 testValue: true,
                 success: false,
                 error: errorMessage
-            });
+            };
         }
     }
 
-    private async testForms(): Promise<void> {
+    private async testForms(): Promise<UITesterResult[]> {
         if (!this.groupedElements || this.groupedElements.forms.length === 0) {
-            return;
+            return [];
         }
 
         this.logManager.log(`Testing ${this.groupedElements.forms.length} forms`, this.buildState(), true);
 
+        const results: UITesterResult[] = [];
         for (const form of this.groupedElements.forms) {
-            const initialUrl = this.page!.url()
-            await this.testFormElement(form);
+            const initialUrl = this.page!.url();
+            const formResults = await this.testFormElement(form);
+            results.push(...formResults);
+
             await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
             await this.page!.waitForTimeout(1000);
-
         }
+
+        return results;
     }
 
-    private async testFormElement(form: FormElementInfo): Promise<void> {
+    private async testFormElement(form: FormElementInfo): Promise<UITesterResult[]> {
         try {
+            const results: UITesterResult[] = [];
+
             // Positive test: Fill form with valid data
-            await this.fillFormWithValidData(form);
+            const validResult = await this.fillFormWithValidData(form);
+            results.push(validResult);
 
             // Negative test: Fill form with invalid data
-            await this.fillFormWithInvalidData(form);
+            const invalidResult = await this.fillFormWithInvalidData(form);
+            results.push(invalidResult);
 
+            return results;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.testResults.push({
+            return [{
                 element: form,
                 testType: 'positive',
                 testValue: 'form_test',
                 success: false,
                 error: errorMessage
-            });
+            }];
         }
     }
 
-    private async fillFormWithValidData(form: FormElementInfo): Promise<void> {
+    private async fillFormWithValidData(form: FormElementInfo): Promise<UITesterResult> {
         // Implementation would fill each form element with appropriate valid data
         // This is a simplified version
-        this.testResults.push({
+        return {
             element: form,
             testType: 'positive',
             testValue: 'valid_form_data',
             success: true,
             response: 'Form filled with valid data'
-        });
+        };
     }
 
-    private async fillFormWithInvalidData(form: FormElementInfo): Promise<void> {
+    private async fillFormWithInvalidData(form: FormElementInfo): Promise<UITesterResult> {
         // Implementation would fill each form element with inappropriate data
         // This is a simplified version
-        this.testResults.push({
+        return {
             element: form,
             testType: 'negative',
             testValue: 'invalid_form_data',
             success: true,
             response: 'Form tested with invalid data'
-        });
+        };
     }
 
-    private async testLinks(): Promise<void> {
+    private async testLinks(): Promise<UITesterResult[]> {
         if (!this.groupedElements || this.groupedElements.links.length === 0) {
-            return;
+            return [];
         }
 
         this.logManager.log(`Testing ${this.groupedElements.links.length} links`, this.buildState(), true);
 
         const testResults = await batchTestElements(this.page!, this.groupedElements.links, this.maxBatchSize);
-        this.testResults.push(...testResults);
+        return testResults;
     }
 
     private async testLinkElement(link: UIElementInfo): Promise<void> {
@@ -771,47 +866,57 @@ export default class Tester extends Agent {
         }
     }
 
-    private async testFileInputs(): Promise<void> {
+    private async testFileInputs(): Promise<UITesterResult[]> {
         if (!this.groupedElements || this.groupedElements.fileInputs.length === 0) {
-            return;
+            return [];
         }
 
         this.logManager.log(`Testing ${this.groupedElements.fileInputs.length} file inputs`, this.buildState(), true);
 
+        const results: UITesterResult[] = [];
         for (const fileInput of this.groupedElements.fileInputs) {
-            const initialUrl = this.page!.url()
-            await this.testFileInputElement(fileInput);
+            const initialUrl = this.page!.url();
+            const fileResult = await this.testFileInputElement(fileInput);
+            results.push(fileResult);
+
             await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
             await this.page!.waitForTimeout(1000);
         }
+
+        return results;
     }
 
-    private async testFileInputElement(fileInput: UIElementInfo): Promise<void> {
+    private async testFileInputElement(fileInput: UIElementInfo): Promise<UITesterResult> {
         // File input testing would require actual file paths
         // This is a placeholder implementation
-        this.testResults.push({
+        return {
             element: fileInput,
             testType: 'positive',
             testValue: 'file_test',
             success: true,
             response: 'File input tested (placeholder)'
-        });
+        };
     }
 
-    private async testDateInputs(): Promise<void> {
+    private async testDateInputs(): Promise<UITesterResult[]> {
         if (!this.groupedElements || this.groupedElements.dateInputs.length === 0) {
-            return;
+            return [];
         }
 
         this.logManager.log(`Testing ${this.groupedElements.dateInputs.length} date inputs`, this.buildState(), true);
 
+        const results: UITesterResult[] = [];
         for (const dateInput of this.groupedElements.dateInputs) {
-            await this.testDateInputElement(dateInput);
+            const dateResults = await this.testDateInputElement(dateInput);
+            results.push(...dateResults);
             await this.page!.waitForTimeout(1000);
         }
+
+        return results;
     }
 
-    private async testDateInputElement(dateInput: UIElementInfo): Promise<void> {
+    private async testDateInputElement(dateInput: UIElementInfo): Promise<UITesterResult[]> {
+        const results: UITesterResult[] = [];
         const testDates = [
             { value: '2024-01-01', type: 'positive' as const },
             { value: '2024-12-31', type: 'positive' as const },
@@ -823,7 +928,7 @@ export default class Tester extends Agent {
             try {
                 await this.page!.fill(dateInput.selector, testCase.value);
 
-                this.testResults.push({
+                results.push({
                     element: dateInput,
                     testType: testCase.type,
                     testValue: testCase.value,
@@ -833,7 +938,7 @@ export default class Tester extends Agent {
 
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                this.testResults.push({
+                results.push({
                     element: dateInput,
                     testType: testCase.type,
                     testValue: testCase.value,
@@ -842,21 +947,28 @@ export default class Tester extends Agent {
                 });
             }
         }
+
+        return results;
     }
 
-    private async testNumberInputs(): Promise<void> {
+    private async testNumberInputs(): Promise<UITesterResult[]> {
         if (!this.groupedElements || this.groupedElements.numberInputs.length === 0) {
-            return;
+            return [];
         }
 
         this.logManager.log(`Testing ${this.groupedElements.numberInputs.length} number inputs`, this.buildState(), true);
 
+        const results: UITesterResult[] = [];
         for (const numberInput of this.groupedElements.numberInputs) {
-            await this.testNumberInputElement(numberInput);
+            const numberResults = await this.testNumberInputElement(numberInput);
+            results.push(...numberResults);
         }
+
+        return results;
     }
 
-    private async testNumberInputElement(numberInput: UIElementInfo): Promise<void> {
+    private async testNumberInputElement(numberInput: UIElementInfo): Promise<UITesterResult[]> {
+        const results: UITesterResult[] = [];
         const min = numberInput.elementDetails.min ? parseInt(numberInput.elementDetails.min) : -1000;
         const max = numberInput.elementDetails.max ? parseInt(numberInput.elementDetails.max) : 1000;
 
@@ -873,7 +985,7 @@ export default class Tester extends Agent {
             try {
                 await this.page!.fill(numberInput.selector, testCase.value);
 
-                this.testResults.push({
+                results.push({
                     element: numberInput,
                     testType: testCase.type,
                     testValue: testCase.value,
@@ -883,7 +995,7 @@ export default class Tester extends Agent {
 
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
-                this.testResults.push({
+                results.push({
                     element: numberInput,
                     testType: testCase.type,
                     testValue: testCase.value,
@@ -892,32 +1004,40 @@ export default class Tester extends Agent {
                 });
             }
         }
+
+        return results;
     }
 
-    private async testOtherInputs(): Promise<void> {
+    private async testOtherInputs(): Promise<UITesterResult[]> {
         if (!this.groupedElements || this.groupedElements.otherInputs.length === 0) {
-            return;
+            return [];
         }
 
         this.logManager.log(`Testing ${this.groupedElements.otherInputs.length} other inputs`, this.buildState(), true);
 
+        const results: UITesterResult[] = [];
         for (const otherInput of this.groupedElements.otherInputs) {
-            const initialUrl = this.page!.url()
-            await this.testOtherInputElement(otherInput);
+            const initialUrl = this.page!.url();
+            const otherResults = await this.testOtherInputElement(otherInput);
+            results.push(...otherResults);
+
             await this.page!.goto(initialUrl, { waitUntil: 'domcontentloaded' });
             await this.page!.waitForTimeout(1000);
         }
+
+        return results;
     }
 
-    private async testOtherInputElement(otherInput: UIElementInfo): Promise<void> {
-        // Handle color inputs, range inputs, etc.
+    private async testOtherInputElement(otherInput: UIElementInfo): Promise<UITesterResult[]> {
+        const results: UITesterResult[] = [];
+
         try {
             const testData = UIElementGrouper.generateTestData(otherInput.elementType, otherInput.elementDetails);
 
             for (const value of testData) {
                 await this.page!.fill(otherInput.selector, String(value));
 
-                this.testResults.push({
+                results.push({
                     element: otherInput,
                     testType: 'positive',
                     testValue: value,
@@ -930,7 +1050,7 @@ export default class Tester extends Agent {
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            this.testResults.push({
+            results.push({
                 element: otherInput,
                 testType: 'positive',
                 testValue: 'general',
@@ -938,6 +1058,8 @@ export default class Tester extends Agent {
                 error: errorMessage
             });
         }
+
+        return results;
     }
 
     async cleanup(): Promise<void> {

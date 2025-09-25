@@ -75,6 +75,14 @@ const testerConfig: AgentConfigWithDescription = {
     keywords: ["test", "validate", "verify", "check", "functionality", "behavior", "automatic"]
 };
 
+const endPointConfig: AgentConfigWithDescription = {
+    name: "endpointagent",
+    sessionType: "playwright",
+    dependent: false,
+    description: "Test functionality and validate API endpoints",
+    keywords: ["API", "endpoint", "test", "validate", "functionality", "response", "check"]
+};
+
 // Function to get crawler config based on detailed flag
 const getCrawlerConfig = (detailed: boolean): AgentConfigWithDescription[] => {
     if (detailed) {
@@ -116,6 +124,10 @@ export const initializeModel = async (): Promise<any> => {
         modelLoadingPromise = null; // Reset so we can try again later
         throw error;
     }
+}
+
+export const getEndpointConfig = (): AgentConfigWithDescription[] => {
+    return [endPointConfig];
 }
 
 export const getAgents = async (goal: string, detailed: boolean = false): Promise<AgentConfigWithDescription[]> => {

@@ -115,7 +115,7 @@ export enum State {
 }
 
 type StateValue = `${State}`;
-export type Namespaces = "crawler" | "autocrawler" | "tester" | "autoanalyzer" | "analyzer" | "goalagent" | "planneragent" | "manualanalyzer" | "manualAutoanalyzer"; // add more if needed
+export type Namespaces = "crawler" | "autocrawler" | "tester" | "autoanalyzer" | "analyzer" | "goalagent" | "planneragent" | "manualanalyzer" | "manualAutoanalyzer" | "endpointagent"; // add more if needed
 
 export type NamespacedState = `${Namespaces}.${StateValue}`;
 
@@ -144,6 +144,7 @@ export interface PageDetails {
     screenshot?: string;
     analysis?: Analysis;
     testResults?: UITesterResult[];
+    endpointResults?: EndPointTestResult[];
     description: string;
     visited: boolean;
     links: LinkInfo[];
@@ -254,6 +255,19 @@ export interface UITesterResult {
     response?: string;
 }
 
+export interface EndPointTestResult {
+    endpoint: string;           // "POST /users/{id}"
+    success: boolean;
+    error?: string;            // Error message if failed
+    response?: {               // Response if successful
+        status: number;          // HTTP status code
+        statusText: string;      // HTTP status text
+        headers: Record<string, string>;
+        data: any;              // Parsed response body (JSON or text)
+        responseTime: number;   // Time taken in milliseconds
+    };
+}
+
 export interface WebSocketData {
     message?: string;
     timestamp: number;
@@ -278,3 +292,4 @@ export interface RedisMessage {
     data: WebSocketData | ConnectionData | FirstConnectionData;
     timestamp: string;
 }
+
