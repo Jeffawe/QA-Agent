@@ -110,7 +110,6 @@ Each log may also be session-specific (e.g., `crawl_map_1.md`).
 - `agent-run logs` → View logs  
 - `agent-run crawl-map` → View crawl map  
 - `agent-run mission` → View mission log  
-- `agent-run navigation-tree` → View navigation tree  
 
 ---
 
