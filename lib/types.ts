@@ -257,9 +257,15 @@ export interface UITesterResult {
 
 export interface EndPointTestResult {
     endpoint: string;           // "POST /users/{id}"
+    request: {                  // Request details
+        method: string;           // HTTP method
+        headers: Record<string, string>;
+        body?: any;               // Request body (if applicable)
+    };
     success: boolean;
     error?: string;            // Error message if failed
     response?: {               // Response if successful
+        url: string;             // Full URL
         status: number;          // HTTP status code
         statusText: string;      // HTTP status text
         headers: Record<string, string>;

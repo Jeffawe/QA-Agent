@@ -250,6 +250,11 @@ export default class EndPoints extends Agent {
 
                 results.push({
                     endpoint: endpointName,
+                    request: {
+                        method: endpoint.method,
+                        headers: testData.headers,
+                        body: testData.body || undefined
+                    },
                     success: true,
                     response
                 });
@@ -257,6 +262,10 @@ export default class EndPoints extends Agent {
             } catch (error) {
                 results.push({
                     endpoint: endpointName,
+                    request: {
+                        method: endpoint.method,
+                        headers: {},
+                    },
                     success: false,
                     error: error instanceof Error ? error.message : String(error)
                 });
@@ -397,7 +406,8 @@ export default class EndPoints extends Agent {
             statusText: response.statusText,
             headers: responseHeaders,
             data: cleanedData,
-            responseTime: endTime - startTime
+            responseTime: endTime - startTime,
+            url
         };
     }
 

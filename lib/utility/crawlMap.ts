@@ -154,8 +154,31 @@ export class CrawlMap {
           md += `- ${statusIcon} **${endpoint.endpoint}**\n`;
 
           if (endpoint.success && endpoint.response) {
+            md += ` ↳ Endpoint: \`${endpoint.response.url} \`\n`;
             md += ` ↳ Status: \`${endpoint.response.status} ${endpoint.response.statusText}\`\n`;
             md += ` ↳ Response Time: \`${endpoint.response.responseTime}ms\`\n`;
+
+            if (endpoint.request.body) {
+              let requestData;
+              if (typeof endpoint.request.body === "object") {
+                // JSON → pretty print
+                requestData = JSON.stringify(endpoint.request.body, null, 2);
+              } else {
+                const strData = String(endpoint.request.body);
+                if (strData.includes("# HELP") || strData.includes("# TYPE")) {
+                  // Prometheus-like metrics: keep only first few lines
+                  const lines = strData.split("\n").slice(0, MAX_LINES);
+                  requestData = lines.join("\n") + "\n...";
+                } else {
+                  // Normal text → truncate by length
+                  requestData =
+                    strData.substring(0, MAX_STRING_LENGTH) +
+                    (strData.length > MAX_STRING_LENGTH ? "..." : "");
+                }
+              }
+
+              md += ` ↳ Request Data:\n\`\`\`\n${requestData}\n\`\`\`\n`;
+            }
 
             if (endpoint.response.data) {
               let responseData;
