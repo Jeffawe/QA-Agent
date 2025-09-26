@@ -1,4 +1,4 @@
-import { LinkInfo, PageDetails, UITesterResult } from '../../types.js';
+import { EndPointTestResult, LinkInfo, PageDetails, UITesterResult } from '../../types.js';
 import { CrawlMap } from '../../utility/crawlMap.js';
 
 export class PageMemory {
@@ -123,6 +123,15 @@ export class PageMemory {
         ...analysis
       };
       CrawlMap.recordPage(this.pages[url], sessionId);
+    }
+  }
+
+  static addEndpointResults(url: string, results: EndPointTestResult[]) {
+    url = PageMemory.cleanUrl(url);
+    if (this.pages[url]) {
+      this.pages[url].endpointResults = results;
+    }else{
+      console.warn(`Page not found in memory for URL: ${url}. Cannot add endpoint results.`);
     }
   }
 

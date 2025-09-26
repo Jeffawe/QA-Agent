@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import minimist from 'minimist';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import net from 'net';
 import fs from 'fs';
 import path from 'path';
@@ -98,8 +98,24 @@ function getCmdlineForPid(pid) {
 
 function isOurServerCommand(cmd) {
   if (!cmd) return false;
-  const serverPath = path.join(PROJECT_ROOT, 'dist', 'server.js');
-  return cmd.includes('node') && (cmd.includes(serverPath) || cmd.includes('dist/server.js') || cmd.includes('server.js'));
+  const lc = String(cmd).toLowerCase();
+
+  // explicit server entrypoint (built)
+  const serverPath = path.join(PROJECT_ROOT, 'dist', 'server.js').toLowerCase();
+
+  // accept a few other heuristics that indicate "our" process:
+  // - the agent-run wrapper
+  // - the project root (launched from this repo)
+  // - an agent config filename
+  const heuristics = [
+    serverPath,
+    'agent-run',
+    'qa-agent',
+    'agent-config.json',
+    PROJECT_ROOT.toLowerCase()
+  ];
+
+  return heuristics.some(h => !!h && lc.includes(h));
 }
 
 // Function to make HTTP request
@@ -151,6 +167,26 @@ async function waitForServer(port, maxAttempts = 20) {
   return false;
 }
 
+function openUrl(targetUrl) {
+  return new Promise((resolve) => {
+    try {
+      let child;
+      if (process.platform === 'darwin') {
+        child = spawn('open', [targetUrl], { detached: true, stdio: 'ignore' });
+      } else if (process.platform === 'win32') {
+        // use cmd start; empty title argument required
+        child = spawn('cmd', ['/c', 'start', '', targetUrl], { detached: true, stdio: 'ignore' });
+      } else {
+        child = spawn('xdg-open', [targetUrl], { detached: true, stdio: 'ignore' });
+      }
+      if (child && typeof child.unref === 'function') child.unref();
+      resolve(true);
+    } catch (e) {
+      resolve(false);
+    }
+  });
+}
+
 // Check Node.js availability
 try {
   execSync('node -v', { stdio: 'ignore' });
@@ -175,22 +211,34 @@ const logFiles = {
   'navigation-tree': 'navigation_tree.md'
 };
 
+const sessionForSubcommand = String(args.sessionid ?? args.sessionId ?? '1');
+
 if (subcommand === 'logs-dir') {
   console.log(`📂 Logs directory: ${LOG_DIR}`);
   process.exit(0);
 }
 
 if (subcommand && logFiles[subcommand]) {
-  const filePath = path.join(LOG_DIR, logFiles[subcommand]);
+  // For certain markdown logs we store per-session files like crawl_map_<session>.md
+  const sessionized = new Set(['crawl-map', 'logs', 'navigation-tree', 'mission']);
+
+  let filename = logFiles[subcommand];
+  if (sessionized.has(subcommand)) {
+    const ext = path.extname(filename);
+    const base = filename.slice(0, -ext.length);
+    filename = `${base}_${sessionForSubcommand}${ext}`;
+  }
+
+  const filePath = path.join(LOG_DIR, filename);
 
   if (!fs.existsSync(filePath)) {
-    console.error(`❌ File not found: ${logFiles[subcommand]}`);
+    console.error(`❌ File not found: ${filename}`);
     process.exit(1);
   }
 
   const content = fs.readFileSync(filePath, 'utf8');
 
-  console.log(`📄 ${logFiles[subcommand]}:\n`);
+  console.log(`📄 ${filename}:\n`);
   if (args.json) {
     console.log(JSON.stringify({ content }, null, 2));
   } else {
@@ -201,7 +249,7 @@ if (subcommand && logFiles[subcommand]) {
 }
 
 if (subcommand && !logFiles[subcommand] && subcommand !== 'run' && subcommand !== 'stop') {
-  console.error(`❌ Unknown subcommand: "${subcommand}"`);
+  console.error(`❌ Unknown subcommand: "${subcommand}". Run "agent-run --help" for usage.`);
   process.exit(1);
 }
 
@@ -223,6 +271,7 @@ const headless = args.headless || config.headless || false;
 const detailed = args.detailed || config.detailed || false;
 const data = config.data || {};
 const endpoint = args.endpoint || config.endpoint || false;
+const autoconnect = args.autoconnect !== undefined ? args.autoconnect : (config.autoconnect !== undefined ? config.autoconnect : true);
 
 if (args.help || args.h) {
   console.log(`
@@ -242,13 +291,13 @@ if (args.help || args.h) {
       --headless       Run browser in headless mode (default: false)
       --detailed       Run in detailed mode. Tests every UI element in every page as well (default: false)
       --endpoint       Boolean value if what is being tested are API endpoints (default: false)
+      --autoconnect    Automatically connect to the websocket if available (default: true)
 
     Logs:
       agent-run logs            Show main agent log
       agent-run logs --json     Show main agent log in JSON format
       agent-run mission         Show mission log in markdown
       agent-run crawl-map       Show crawl map in markdown. The crawl map shows detailed results of the agent's crawl
-      agent-run navigation-tree Show navigation tree in markdown
       agent-run logs-dir        Show logs directory
       agent-run stop            Stop all agents
 
@@ -301,17 +350,17 @@ if (subcommand === 'stop') {
 
 // Validate required arguments
 if (!goal) {
-  console.error('❌ Please provide a --goal argument.');
+  console.error('❌ Please provide a --goal argument. Example: agent-run --goal "Test login" --key "api-key" --url "http://localhost:3000"');
   process.exit(1);
 }
 
 if (!key) {
-  console.error('❌ Please provide a --key argument.');
+  console.error('❌ Please provide a --key argument. Example: agent-run --goal "Test login" --key "api-key" --url "http://localhost:3000"');
   process.exit(1);
 }
 
 if (!url) {
-  console.error('❌ Please provide a --url argument.');
+  console.error('❌ Please provide a --url argument. Example: agent-run --goal "Test login" --key "api-key" --url "http://localhost:3000"');
   process.exit(1);
 }
 
@@ -323,23 +372,44 @@ if (!/^(https?:\/\/)/.test(url)) {
 // Check if ports are available
 console.log('🔍 Checking port availability...');
 
-const portStatus = await checkPort(port).then(available => ({ main: available }));
-
+let existingPid = getPidUsingPort(port);
 let hasPortIssues = false;
 
-if (!portStatus.main) {
-  const pid = getPidUsingPort(port);
-  if (pid) {
-    const cmd = getCmdlineForPid(pid);
-    if (isOurServerCommand(cmd)) {
-      console.log(`ℹ️ Port ${port} is already used by agent server (PID: ${pid}). Will reuse existing server.`);
-      try { if (!fs.existsSync(pidFile)) fs.writeFileSync(pidFile, pid); } catch (e) { /* ignore */ }
-    } else {
-      console.error(`❌ Port ${port} is already in use by PID ${pid} (${cmd}). Please choose a different --port.`);
-      hasPortIssues = true;
-    }
+// const portStatus = await checkPort(port).then(available => ({ main: available }));
+
+// let hasPortIssues = false;
+
+// if (!portStatus.main) {
+//   const pid = getPidUsingPort(port);
+//   if (pid) {
+//     const cmd = getCmdlineForPid(pid);
+//     if (isOurServerCommand(cmd)) {
+//       console.log(`ℹ️ Port ${port} is already used by agent server (PID: ${pid}). Will reuse existing server.`);
+//       try { if (!fs.existsSync(pidFile)) fs.writeFileSync(pidFile, pid); } catch (e) { /* ignore */ }
+//     } else {
+//       console.error(`❌ Port ${port} is already in use by PID ${pid} (${cmd}). Please choose a different --port.`);
+//       hasPortIssues = true;
+//     }
+//   } else {
+//     console.error(`❌ Port ${port} is already in use. Please choose a different --port.`);
+//     hasPortIssues = true;
+//   }
+// }
+
+// if (hasPortIssues) {
+//   console.error('\n💡 Try running with different ports:');
+//   console.error(`   agent-run --goal "${goal}" --key "${key}" --url "${url}" --port 3003`);
+//   process.exit(1);
+// }
+
+// console.log(`✅ Ports ${port} is available.`);
+
+if (existingPid) {
+  const cmd = getCmdlineForPid(existingPid);
+  if (isOurServerCommand(cmd)) {
+    console.log(`ℹ️ Port ${port} is already used by agent server (PID: ${existingPid}). Will reuse existing server.`); try { if (!fs.existsSync(pidFile)) fs.writeFileSync(pidFile, existingPid); } catch (e) { /* ignore */ }
   } else {
-    console.error(`❌ Port ${port} is already in use. Please choose a different --port.`);
+    console.error(`❌ Port ${port} is already in use by PID ${existingPid} (${cmd}). Please choose a different --port.`);
     hasPortIssues = true;
   }
 }
@@ -350,7 +420,11 @@ if (hasPortIssues) {
   process.exit(1);
 }
 
-console.log(`✅ Ports ${port} is available.`);
+if (!existingPid) {
+  console.log(`✅ Port ${port} is available.`);
+} else {
+  console.log(`✅ Will reuse server on port ${port}.`);
+}
 
 
 // Set environment variables
@@ -361,7 +435,6 @@ process.env.HEADLESS = String(headless).toLowerCase();
 process.env.WORKER_POOL_SIZE = "1"
 
 console.log('🚀 Starting server...');
-console.log(`✅ Agent server running on http://localhost:${port}`);
 
 if (testMode) {
   if (!key.startsWith('TEST')) {
@@ -411,16 +484,22 @@ if (daemonMode) {
   }
 } else {
   // Non-daemon mode: if the port is already used by our server, skip importing to avoid double-start.
-  const existingPid = getPidUsingPort(port);
+  // we already computed existingPid above; re-evaluate only if you want freshest info.
   if (existingPid) {
     const cmd = getCmdlineForPid(existingPid);
     if (isOurServerCommand(cmd)) {
-      console.log(`ℹ️ Agent server already running (PID: ${existingPid}), skipping in-process start.`);
+      console.log(`✅ Reusing existing agent server (PID: ${existingPid}) on http://localhost:${port}`);
+      // don't import/start — continue to auto-start logic to call /start or /test
     } else {
+      // port is occupied by another process (this branch should have exited earlier), attempt to start otherwise
+      console.log('🚀 Starting server (in-process)...');
       await import('../dist/server.js');
+      console.log(`✅ Agent server running on http://localhost:${port}`);
     }
   } else {
+    console.log('🚀 Starting server (in-process)...');
     await import('../dist/server.js');
+    console.log(`✅ Agent server running on http://localhost:${port}`);
   }
 }
 
@@ -435,7 +514,7 @@ if (autoStart) {
 
     const sessionId = sessionid ?? '1';
 
-    const endpoint = testMode ? `/test/${key}` : `/start/${sessionId}`;
+    const finalEndpoint = testMode ? `/test/${key}` : `/start/${sessionId}`;
     const baseUrl = `http://localhost:${port}`;
 
     // Wait a bit more to ensure server is fully initialized
@@ -453,7 +532,21 @@ if (autoStart) {
     const body = JSON.stringify(requestBody);
     const headers = { 'Content-Type': 'application/json' };
 
-    await makeRequest(baseUrl, endpoint, { body, headers });
+    await makeRequest(baseUrl, finalEndpoint, { body, headers });
+    const updatesUrl = `https://www.qa-agent.site/updates/#tab=local&port=${port}`;
+
+    if (autoconnect) {
+      try {
+        const opened = await openUrl(updatesUrl);
+        if (!opened) {
+          console.log(`🔗 Could not open browser automatically. Please visit: ${updatesUrl}`);
+        }
+      } catch (e) {
+        console.log(`🔗 Could not open browser automatically. Please visit: ${updatesUrl}`);
+      }
+    } else {
+      console.log(`🔗 To monitor progress, visit: ${updatesUrl}`);
+    }
   } catch (error) {
     console.error('❌ Server failed to start within expected time.');
     process.exit(1);

@@ -31,7 +31,8 @@ export default class StagehandSession extends Session<Page> {
 
             console.log('NODE_ENV:', process.env.NODE_ENV);
             const isDevelopment = process.env.NODE_ENV === 'development';
-            const headless = isDevelopment ? false : true;
+            const isheadless = process.env.HEADLESS === 'true' || process.env.HEADLESS === '1' || false;
+            const headless = isDevelopment ? isheadless : true;
             console.log(`🌐 Initializing Stagehand (headless=${headless}) for session ${sessionId}...`);
             this.apiKey = key;
             this.stagehand = new Stagehand({

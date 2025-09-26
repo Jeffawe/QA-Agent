@@ -4,6 +4,8 @@ import { EndpointInfo, EndpointMap, getEndpointMap, ParameterInfo, RequestBodyIn
 import { dataMemory } from "../services/memory/dataMemory.js";
 import PlaywrightSession from "../browserAuto/playWrightSession.js";
 import ManualActionService from "../services/actions/actionService.js";
+import { PageMemory } from "../services/memory/pageMemory.js";
+import { CrawlMap } from "../utility/crawlMap.js";
 
 interface TestData {
     pathParams: Record<string, any>;
@@ -15,7 +17,7 @@ interface TestData {
 export default class EndPoints extends Agent {
     private mainGoal: string;
     private warning: string = "";
-    private goal: string = "";
+    private finalUrl: string = "";
     public endpointMap: EndpointMap | null = null;
     public results: EndPointTestResult[] = [];
 
@@ -87,10 +89,10 @@ export default class EndPoints extends Agent {
                         this.setState(State.DONE);
                         return;
                     }
-                    const finalBaseUrl = this.baseUrl + (this.endpointMap.baseUrl || "");
+                    this.finalUrl = this.baseUrl + (this.endpointMap.baseUrl || "");
                     this.results = await this.runBaseTesting(
                         this.endpointMap.endpoints,
-                        finalBaseUrl,
+                        this.finalUrl,
                         new Map(Object.entries(data))
                     );
                     this.setState(State.VALIDATE);
@@ -102,7 +104,13 @@ export default class EndPoints extends Agent {
                     this.logManager.log(`Endpoint testing completed in ${duration} seconds.`, this.buildState());
                     if (this.results.length === 0) {
                         this.logManager.log("No endpoints were tested.", this.buildState());
+                        this.setState(State.DONE);
+                        break;
                     }
+                    PageMemory.addPageWithURL(this.finalUrl);
+                    PageMemory.addEndpointResults(this.finalUrl, this.results);
+                    CrawlMap.addPageWithURL(this.finalUrl);
+                    this.logManager.log(`✅ Tested ${this.results.length} endpoints for ${this.finalUrl}`, this.buildState());
                     this.setState(State.DONE);
                     break;
 

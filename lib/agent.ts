@@ -4,8 +4,6 @@ import { EventBus } from "./services/events/event.js";
 import { AgentConfig, Namespaces, State } from "./types.js";
 import { CombinedThinker } from "./services/thinkers/combinedThinker.js";
 
-import NavigationTree from "./utility/navigationTree.js";
-
 import { Agent } from "./utility/abstract.js";
 import { CrawlMap } from './utility/crawlMap.js';
 import { clearAllImages } from './services/imageProcessor.js';
@@ -65,7 +63,6 @@ export default class BossAgent {
     this.stopLoop = false;
 
     this.logManager.initialize();
-    NavigationTree.initialize();
 
     this.initializeAgents(sessionId, agentConfigs);
   }

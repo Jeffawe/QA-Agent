@@ -8,6 +8,7 @@ import { eventBusManager } from "../services/events/eventBus.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 
 export interface Edge { from: string; to: string }
+const MAX_STRING_LENGTH = 300; 
 
 /** Pretty, page-centric crawl map for debugging */
 export class CrawlMap {
@@ -35,6 +36,22 @@ export class CrawlMap {
 
     this.initialised = true;
     this.write();        // create / clear file
+    this.finished = false;
+    console.log(`CrawlMap: initialized at ${this.file}`);
+  }
+
+  static addPageWithURL(url: string): string {
+    const eventBus = eventBusManager.getOrCreateBus();
+    if (!this.navOrder.has(url)) {
+      this.navOrder.add(url);
+      const page = PageMemory.getPage(url);
+      if (page) {
+        eventBus.emit({ ts: Date.now(), type: "crawl_map_updated", page });
+      }
+      this.navOrder.add(url);
+      this.write();
+    }
+    return url;
   }
 
   /** Register page details (call as soon as PageDetails is ready) */
@@ -65,14 +82,15 @@ export class CrawlMap {
     // we *don’t* write() here; recordPage will write soon anyway
   }
 
+  public static writetoFile() { this.write(); }
+
   /* ───── markdown writer ───── */
 
   private static write() {
     if (this.navOrder.size === 0) return;
     if (this.finished) return; // prevent late writes
     let md =
-      `# Crawl Map  \n_Auto-generated – refresh to see the latest state_\n\n`;
-
+      `# Crawl Map \n_Auto-generated – refresh to see the latest state_\n\n`;
     /* ---------- quick overview ---------- */
     md += "## Quick overview\n\n";
     for (const url of this.navOrder) {
@@ -80,19 +98,15 @@ export class CrawlMap {
       md += `| - ${title}\n`;
     }
     md += "\n---\n";
-
     /* ---------- per-page blocks ---------- */
     this.navOrder.forEach((url, idx) => {
       const page = PageMemory.getPage(url);
       if (!page) return;
-
-      const heading = `### ${idx + 1}. ${page.title || "(untitled)"}  \n`;
-      const sub = page.url ? `**URL:** ${page.url}  \n` : "";
+      const heading = `### ${idx + 1}. ${page.title || "(untitled)"} \n`;
+      const sub = page.url ? `**URL:** ${page.url} \n` : "";
       const desc = page.description ? `${page.description}\n` : "";
       const shot = page.screenshot ? `![screenshot](${page.screenshot})\n\n` : "";
-
       md += `${heading}${sub}${desc}${shot}`;
-
       /* ----- links ----- */
       md += "**Links:**\n\n";
       if (page.links.length === 0) {
@@ -105,11 +119,9 @@ export class CrawlMap {
         }
         md += "\n";
       }
-
       /* ----- test results ----- */
       if (page.testResults && page.testResults.length > 0) {
         md += "**Test Results:**\n\n";
-
         for (const test of page.testResults) {
           const statusIcon = test.success ? "✅" : "❌";
           const testTypeLabel = test.testType === 'positive' ? "Positive" : "Negative";
@@ -117,59 +129,69 @@ export class CrawlMap {
           const testValue = typeof test.testValue === 'object'
             ? JSON.stringify(test.testValue)
             : String(test.testValue);
-
           md += `- ${statusIcon} **${testTypeLabel} Test** (${elementType})\n`;
-          md += `  ↳ Element: \`${test.element.selector}\`\n`;
-          md += `  ↳ Description: ${test.element.description}\n`;
-          md += `  ↳ Test Value: \`${testValue}\`\n`;
-
+          md += ` ↳ Element: \`${test.element.selector}\`\n`;
+          md += ` ↳ Description: ${test.element.description}\n`;
+          md += ` ↳ Test Value: \`${testValue}\`\n`;
           if (test.ledTo) {
-            md += `  ↳ Led To: ${test.ledTo}\n`;
+            md += ` ↳ Led To: ${test.ledTo.substring(0, MAX_STRING_LENGTH) + (test.ledTo.length > MAX_STRING_LENGTH ? "..." : "")}\n`;
           }
-
           if (test.error) {
-            md += `  ↳ Error: ${test.error}\n`;
+            md += ` ↳ Error: ${test.error}\n`;
           }
-
           if (test.response) {
-            md += `  ↳ Response: ${test.response}\n`;
+            md += ` ↳ Response: ${test.response}\n`;
           }
-
           md += "\n";
         }
       }
-
+      /* ----- endpoint results ----- */
+      if (page.endpointResults && page.endpointResults.length > 0) {
+        md += "**Endpoint Results:**\n\n";
+        for (const endpoint of page.endpointResults) {
+          const statusIcon = endpoint.success ? "✅" : "❌";
+          md += `- ${statusIcon} **${endpoint.endpoint}**\n`;
+          if (endpoint.success && endpoint.response) {
+            md += ` ↳ Status: \`${endpoint.response.status} ${endpoint.response.statusText}\`\n`;
+            md += ` ↳ Response Time: \`${endpoint.response.responseTime}ms\`\n`;
+            if (endpoint.response.data) {
+              const responseData = typeof endpoint.response.data === 'object'
+                ? JSON.stringify(endpoint.response.data, null, 2)
+                : String(endpoint.response.data).substring(0, MAX_STRING_LENGTH) + (String(endpoint.response.data).length > MAX_STRING_LENGTH ? '...' : '');
+              md += ` ↳ Response Data: \`${responseData}\`\n`;
+            }
+          }
+          if (endpoint.error) {
+            md += ` ↳ Error: ${endpoint.error}\n`;
+          }
+          md += "\n";
+        }
+      }
       /* ----- analysis ----- */
       if (page.analysis) {
         md += "**Analysis:**\n\n";
-
         const { bugs, ui_issues, notes } = page.analysis;
-
         if (bugs.length) {
           md += "_Bugs_\n";
           bugs.forEach(b =>
-            md += `- **(${b.severity})** ${b.description}  \n  ↳ \`${b.selector}\`\n`
+            md += `- **(${b.severity})** ${b.description} \n ↳ \`${b.selector}\`\n`
           );
           md += "\n";
         }
-
         if (ui_issues.length) {
           md += "_UI issues_\n";
           ui_issues.forEach(u =>
-            md += `- **(${u.severity})** ${u.description}  \n  ↳ \`${u.selector}\`\n`
+            md += `- **(${u.severity})** ${u.description} \n ↳ \`${u.selector}\`\n`
           );
           md += "\n";
         }
-
         if (notes.trim()) {
           md += "_Notes_\n";
           md += `${this.indent(notes)}\n\n`;
         }
       }
-
       md += "---\n";
     });
-
     writeFileSync(this.file, md);
   }
 

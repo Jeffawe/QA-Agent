@@ -207,9 +207,9 @@ export class RedisEventBridge {
     isConnected(): boolean {
         const connected = this.isReady && this.redisPublisher.status === 'ready';
         // Only log if we have an active session to reduce noise
-        if (this.isActive) {
-            console.log(`Redis connection check: isReady=${this.isReady}, status=${this.redisPublisher.status}, connected=${connected}`);
-        }
+        // if (this.isActive) {
+        //     console.log(`Redis connection check: isReady=${this.isReady}, status=${this.redisPublisher.status}, connected=${connected}`);
+        // }
         return connected;
     }
 
