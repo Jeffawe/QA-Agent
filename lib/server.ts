@@ -35,38 +35,44 @@ const validateReferer = (req: Request, res: Response, next: express.NextFunction
         return next();
     }
 
-    const allowedOrigins =
-        process.env.NODE_ENV === 'production'
-            ? ['https://www.qa-agent.site', 'https://qa-agent.site'] // support both
-            : true;
+    try {
 
-    const referer = req.get('Referer');
-    const origin = req.get('Origin');
-    const requestOrigin = origin || (referer ? new URL(referer).origin : null);
+        const allowedOrigins =
+            process.env.NODE_ENV === 'production'
+                ? ['https://www.qa-agent.site', 'https://qa-agent.site'] // support both
+                : true;
 
-    // Allow no-origin requests in dev
-    if (!requestOrigin && process.env.NODE_ENV !== 'production') {
-        res.header('Access-Control-Allow-Origin', '*');
-        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-        return next();
-    }
+        const referer = req.get('Referer');
+        const origin = req.get('Origin');
+        const requestOrigin = origin || (referer ? new URL(referer).origin : null);
 
-    if (allowedOrigins === true || allowedOrigins.includes(requestOrigin || '')) {
-        res.header('Access-Control-Allow-Origin', requestOrigin || '*');
-        res.header('Access-Control-Allow-Credentials', 'true');
-        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-
-        if (req.method === 'OPTIONS') {
-            res.status(200).end();
-            return;
+        // Allow no-origin requests in dev
+        if (!requestOrigin && process.env.NODE_ENV !== 'production') {
+            res.header('Access-Control-Allow-Origin', '*');
+            res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+            res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+            return next();
         }
 
-        return next();
+        if (allowedOrigins === true || allowedOrigins.includes(requestOrigin || '')) {
+            res.header('Access-Control-Allow-Origin', requestOrigin || '*');
+            res.header('Access-Control-Allow-Credentials', 'true');
+            res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+            res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+
+            if (req.method === 'OPTIONS') {
+                res.status(200).end();
+                return;
+            }
+
+            return next();
+        }
+
+        console.log('❌ Access blocked:', requestOrigin);
+    } catch (error) {
+        console.error('Error in referer validation middleware:', error);
     }
 
-    console.log('❌ Access blocked:', requestOrigin);
     res.status(403).json({
         error: 'Access denied',
         message: 'Origin not allowed'
