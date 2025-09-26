@@ -7,6 +7,9 @@ import ManualActionService from "../services/actions/actionService.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 
+const MAX_CHARS = 1200; // safe limit for logs/results
+const MAX_LINES = 200; // also limit lines for extremely long newline-separated payloads
+
 interface TestData {
     pathParams: Record<string, any>;
     queryParams: Record<string, any>;
@@ -387,13 +390,48 @@ export default class EndPoints extends Agent {
             responseHeaders[key] = value;
         });
 
+        const cleanedData = this.cleanResponseData(data, contentType);
+
         return {
             status: response.status,
             statusText: response.statusText,
             headers: responseHeaders,
-            data,
+            data: cleanedData,
             responseTime: endTime - startTime
         };
+    }
+
+    private cleanResponseData(data: any, contentType: string): any {
+        // Preserve proper JSON objects/arrays untouched
+        if (data === null || data === undefined) return data;
+        if (typeof data === 'object') return data;
+
+        // Ensure we have a string to work with
+        let s = typeof data === 'string' ? data : String(data);
+        s = s.trim();
+
+        // If content-type is JSON-like but parsing failed earlier, attempt to parse again and return object if possible
+        if (!contentType.includes('application/json')) {
+            // heuristics: if string looks like JSON, try parse
+            if ((s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'))) {
+                try {
+                    return JSON.parse(s);
+                } catch {
+                    // fall through to truncation
+                }
+            }
+        }
+
+        if (s.length > MAX_CHARS) {
+            return s.slice(0, MAX_CHARS) + `\n... (truncated, original length=${s.length})`;
+        }
+
+        const lines = s.split(/\r?\n/);
+        if (lines.length > MAX_LINES) {
+            return lines.slice(0, MAX_LINES).join('\n') + `\n... (truncated lines, original lines=${lines.length})`;
+        }
+
+        return s;
     }
 
     generateRequestBody(requestBody: RequestBodyInfo, userMappings: Map<string, any>): any {

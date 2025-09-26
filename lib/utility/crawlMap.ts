@@ -8,7 +8,8 @@ import { eventBusManager } from "../services/events/eventBus.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 
 export interface Edge { from: string; to: string }
-const MAX_STRING_LENGTH = 300; 
+const MAX_STRING_LENGTH = 300;
+const MAX_LINES = 5;
 
 /** Pretty, page-centric crawl map for debugging */
 export class CrawlMap {
@@ -151,19 +152,39 @@ export class CrawlMap {
         for (const endpoint of page.endpointResults) {
           const statusIcon = endpoint.success ? "✅" : "❌";
           md += `- ${statusIcon} **${endpoint.endpoint}**\n`;
+
           if (endpoint.success && endpoint.response) {
             md += ` ↳ Status: \`${endpoint.response.status} ${endpoint.response.statusText}\`\n`;
             md += ` ↳ Response Time: \`${endpoint.response.responseTime}ms\`\n`;
+
             if (endpoint.response.data) {
-              const responseData = typeof endpoint.response.data === 'object'
-                ? JSON.stringify(endpoint.response.data, null, 2)
-                : String(endpoint.response.data).substring(0, MAX_STRING_LENGTH) + (String(endpoint.response.data).length > MAX_STRING_LENGTH ? '...' : '');
-              md += ` ↳ Response Data: \`${responseData}\`\n`;
+              let responseData;
+
+              if (typeof endpoint.response.data === "object") {
+                // JSON → pretty print
+                responseData = JSON.stringify(endpoint.response.data, null, 2);
+              } else {
+                const strData = String(endpoint.response.data);
+                if (strData.includes("# HELP") || strData.includes("# TYPE")) {
+                  // Prometheus-like metrics: keep only first few lines
+                  const lines = strData.split("\n").slice(0, MAX_LINES);
+                  responseData = lines.join("\n") + "\n...";
+                } else {
+                  // Normal text → truncate by length
+                  responseData =
+                    strData.substring(0, MAX_STRING_LENGTH) +
+                    (strData.length > MAX_STRING_LENGTH ? "..." : "");
+                }
+              }
+
+              md += ` ↳ Response Data:\n\`\`\`\n${responseData}\n\`\`\`\n`;
             }
           }
+
           if (endpoint.error) {
             md += ` ↳ Error: ${endpoint.error}\n`;
           }
+
           md += "\n";
         }
       }
