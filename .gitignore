@@ -11,6 +11,7 @@ package-lock.json
 agentConfig.json
 agent-config.json
 downloads/
+crawl_map.md
 
 # ----------------------------------------
 # Environment Variables
