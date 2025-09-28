@@ -9,6 +9,7 @@ import { TestingThinker } from "../services/thinkers/testingThinker.js";
 import EndPoints from "../agent/endpoints.js";
 import PlaywrightSession from "../browserAuto/playWrightSession.js";
 import ManualActionService from "../services/actions/actionService.js";
+import { dataMemory } from "../services/memory/dataMemory.js";
 
 const router = Router();
 
@@ -80,6 +81,8 @@ router.get("/test-agent2", async (req, res) => {
             return;
         }
 
+        dataMemory.setData("header:x-api-key", "YB4mNsCgX3zDJ4SnWWeX");
+
         const eventBus = eventBusManager.getOrCreateBus();
         const thinker = new TestingThinker(sessionId);
         const actionService = new ManualActionService(session);
@@ -101,6 +104,16 @@ router.get("/test-agent2", async (req, res) => {
         }
 
         console.log('✅ Full EndpointMap:');
+        const map = agent.endpointMap;
+        if (!map) {
+            res.status(500).send('No endpoint map found.');
+            return;
+        }
+        for (const [key, value] of Object.entries(map)) {
+            console.log(`Endpoint: ${key}`);
+            console.log(`Details: ${JSON.stringify(value, null, 2)}`);
+        }
+        console.log('✅ Full Results:');
         console.log(JSON.stringify(agent.results, null, 2));
 
         await session.close();

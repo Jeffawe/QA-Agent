@@ -334,7 +334,13 @@ export default class EndPoints extends Agent {
 
         // Replace path parameters
         for (const [key, value] of Object.entries(testData.pathParams)) {
-            url = url.replace(`{${key}}`, encodeURIComponent(String(value)));
+            if (typeof value === "boolean") {
+                url = url.replace(`{${key}}`, value ? "true" : "false");
+            } else if (typeof value === "number") {
+                url = url.replace(`{${key}}`, String(value));
+            } else {
+                url = url.replace(`{${key}}`, encodeURIComponent(String(value)));
+            }
         }
 
         // Add query parameters
@@ -342,12 +348,18 @@ export default class EndPoints extends Agent {
             const searchParams = new URLSearchParams();
             for (const [key, value] of Object.entries(testData.queryParams)) {
                 if (value !== null && value !== undefined) {
-                    searchParams.append(key, String(value));
+                    if (typeof value === "boolean") {
+                        searchParams.append(key, value ? "true" : "false");
+                    } else if (typeof value === "number") {
+                        searchParams.append(key, String(value));
+                    } else {
+                        searchParams.append(key, String(value));
+                    }
                 }
             }
             const queryString = searchParams.toString();
             if (queryString) {
-                url += '?' + queryString;
+                url += "?" + queryString;
             }
         }
 
