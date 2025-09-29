@@ -154,9 +154,16 @@ export class CrawlMap {
           md += `- ${statusIcon} **${endpoint.endpoint}**\n`;
 
           if (endpoint.success && endpoint.response) {
-            md += ` ↳ Endpoint: \`${endpoint.response.url} \`\n`;
+            md += ` ↳ Endpoint: \`${endpoint.response.url ?? endpoint.endpoint} \`\n`;
             md += ` ↳ Status: \`${endpoint.response.status} ${endpoint.response.statusText}\`\n`;
             md += ` ↳ Response Time: \`${endpoint.response.responseTime}ms\`\n`;
+
+            if (endpoint.request.headers) {
+              md += ` ↳ Request Headers:\n`;
+              for (const [key, value] of Object.entries(endpoint.response.headers)) {
+                md += `    - \`${key}: ${value}\`\n`;
+              }
+            }
 
             if (endpoint.request.body) {
               let requestData;

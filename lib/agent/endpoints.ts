@@ -17,6 +17,11 @@ interface TestData {
     body: any | null;
 }
 
+interface EndpointDataFull {
+    key: string;
+    endpoint: EndpointData;
+}
+
 export default class EndPoints extends Agent {
     private mainGoal: string;
     private warning: string = "";
@@ -200,14 +205,20 @@ export default class EndPoints extends Agent {
      * @param userEndpoints The user's provided endpoints
      * @returns The matching endpoint data or null if not found
      */
-    private findMemoryEndpoint(endpoint: EndpointInfo, userEndpoints: Map<string, EndpointData>): EndpointData | null {
+    private findMemoryEndpoint(
+        endpoint: EndpointInfo,
+        userEndpoints: Map<string, EndpointData>
+    ): EndpointDataFull | null {
         for (const [path, data] of userEndpoints) {
             // Turn "/create/{id}" into regex "/create/([^/]+)"
             const regexPath = endpoint.path.replace(/\{[^}]+\}/g, '([^/]+)');
             const regex = new RegExp(`^${regexPath}$`);
 
             if (regex.test(path)) {
-                return data;
+                return {
+                    key: path,
+                    endpoint: data
+                }
             }
         }
         return null;
@@ -219,7 +230,7 @@ export default class EndPoints extends Agent {
             pathParams: {},
             queryParams: {},
             headers: {},
-            body: null
+            body: null,
         };
 
         // Fill parameters
@@ -249,28 +260,52 @@ export default class EndPoints extends Agent {
 
     private buildTestDataFromMemory(
         endpoint: EndpointInfo,
-        memoryData: EndpointData,
+        memoryData: EndpointDataFull,
         userMappings: Map<string, any>,
     ): TestData {
         const testData: TestData = {
             pathParams: {},
             queryParams: {},
             headers: {},
-            body: null
+            body: null,
         };
 
         // Path params → generate normally (these come from OpenAPI definition)
         endpoint.parameters.forEach(param => {
             if (param.location === 'path') {
-                testData.pathParams[param.name] = this.generateTestValue(param, userMappings);
+                // Default: generate test value
+                let value = this.generateTestValue(param, userMappings);
+
+                // If testData.url exists, try to extract value from it
+                if (memoryData.key) {
+                    // Remove base URL if present
+                    let relativeUrl = memoryData.key.startsWith('http') ? new URL(memoryData.key).pathname : memoryData.key;
+
+                    // Convert endpoint path to regex with capture groups
+                    const regexStr = endpoint.path.replace(/\{[^}]+\}/g, '([^/]+)');
+                    const regex = new RegExp(`^${regexStr}$`);
+                    const match = relativeUrl.match(regex);
+
+                    if (match) {
+                        // Extract parameter names
+                        const paramNames = Array.from(endpoint.path.matchAll(/\{([^}]+)\}/g), m => m[1]);
+                        const index = paramNames.indexOf(param.name);
+                        if (index >= 0 && match[index + 1] !== undefined) {
+                            value = decodeURIComponent(match[index + 1]);
+                        }
+                    }
+                }
+
+                testData.pathParams[param.name] = value;
             }
         });
+
 
         // Query params → prefer memory, fallback to global data, then generate
         endpoint.parameters.forEach(param => {
             if (param.location === 'query') {
-                if (memoryData.query && (memoryData.query as any)[param.name] !== undefined) {
-                    testData.queryParams[param.name] = (memoryData.query as any)[param.name];
+                if (memoryData.endpoint.query && (memoryData.endpoint.query as any)[param.name] !== undefined) {
+                    testData.queryParams[param.name] = (memoryData.endpoint.query as any)[param.name];
                 } else if (dataMemory.hasData(param.name)) {
                     testData.queryParams[param.name] = dataMemory.getData(param.name);
                 } else {
@@ -282,8 +317,8 @@ export default class EndPoints extends Agent {
         // Headers → same priority order
         endpoint.parameters.forEach(param => {
             if (param.location === 'header') {
-                if (memoryData.headers && memoryData.headers[param.name] !== undefined) {
-                    testData.headers[param.name] = memoryData.headers[param.name];
+                if (memoryData.endpoint.headers && memoryData.endpoint.headers[param.name] !== undefined) {
+                    testData.headers[param.name] = memoryData.endpoint.headers[param.name];
                 } else if (dataMemory.hasData(param.name)) {
                     testData.headers[param.name] = dataMemory.getData(param.name) as string;
                 } else {
@@ -294,8 +329,8 @@ export default class EndPoints extends Agent {
 
         // Body → prefer memory body, else fallback to global data, else generate
         if (endpoint.requestBody?.required) {
-            if (memoryData.body) {
-                testData.body = memoryData.body;
+            if (memoryData.endpoint.body) {
+                testData.body = memoryData.endpoint.body;
             } else if (dataMemory.hasData("body")) {
                 testData.body = dataMemory.getData("body");
             } else {
@@ -329,6 +364,7 @@ export default class EndPoints extends Agent {
                 } else {
                     testData = this.testEndpointBase(endpoint, userMappings);
                 }
+
                 const headerData = this.extractHeaderData(userMappings);
                 testData.headers = {
                     ...testData.headers,
