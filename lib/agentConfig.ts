@@ -105,16 +105,16 @@ export const initializeModel = async (): Promise<any> => {
     if (cachedExtractor) {
         return cachedExtractor;
     }
-    
+
     if (modelLoadingPromise) {
         // Model is already being loaded, wait for it
         return await modelLoadingPromise;
     }
-    
+
     // Start loading the model
     console.log('🧠 Loading AI model for agent selection...');
     modelLoadingPromise = pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-    
+
     try {
         cachedExtractor = await modelLoadingPromise;
         console.log('✅ AI model loaded successfully');
@@ -130,7 +130,7 @@ export const getEndpointConfig = (): AgentConfigWithDescription[] => {
     return [endPointConfig];
 }
 
-export const getAgents = async (goal: string, detailed: boolean = false): Promise<AgentConfigWithDescription[]> => {
+export const getAgentsSlow = async (goal: string, detailed: boolean = false): Promise<AgentConfigWithDescription[]> => {
     const options: ExtractorOptions = { pooling: 'mean', normalize: true };
     const extractor = await initializeModel();
 
@@ -206,6 +206,64 @@ export const getAgentsKeywordOnly = (goal: string, detailed: boolean = false): A
     return matches[0].configGroup.configs;
 };
 
+export const getAgentsFast = async (goal: string, detailed: boolean = false): Promise<AgentConfigWithDescription[]> => {
+    const options: ExtractorOptions = { pooling: 'mean', normalize: true };
+
+    // Load model only once and cache it
+    const extractor = await initializeModel();
+
+    if (!extractor) {
+        throw new Error("Model not initialized");
+    }
+
+    // Generate embedding only for the user's goal
+    const goalVec = await extractor(goal, options);
+    const goalArray: number[] = Array.from(goalVec.data);
+
+    // Get all config groups using your original function
+    const allConfigs = getAllConfigs(detailed);
+
+    const matches = allConfigs.map(configGroup => {
+        // Get the pre-computed embedding for this config group
+        const configEmbedding = AGENT_EMBEDDINGS[configGroup.name as keyof typeof AGENT_EMBEDDINGS];
+
+        if (!configEmbedding || configEmbedding.length === 0) {
+            console.warn(`No embedding found for ${configGroup.name}`);
+            return { configGroup, similarity: 0, semanticSim: 0, matchedKeywords: [] };
+        }
+
+        // Calculate semantic similarity
+        const semanticSim = normalizedCosineSimilarity(goalArray, configEmbedding);
+
+        // Calculate keyword matches (same as before)
+        const goalLower = goal.toLowerCase();
+        const allKeywords = configGroup.configs.flatMap(c => c.keywords);
+        const matchedKeywords = allKeywords.filter(keyword =>
+            goalLower.includes(keyword.toLowerCase())
+        );
+
+        // Combine similarity and keyword matching
+        const keywordBonus = Math.min(matchedKeywords.length * 0.1, 0.3);
+        const finalScore = semanticSim + keywordBonus;
+
+        return {
+            configGroup,
+            similarity: finalScore,
+            semanticSim,
+            matchedKeywords
+        };
+    });
+
+    // Sort by similarity and return best match
+    matches.sort((a, b) => b.similarity - a.similarity);
+    const bestMatch = matches[0];
+
+    console.log(`Fast match: ${bestMatch.configGroup.name} (similarity: ${bestMatch.similarity.toFixed(3)})`);
+    console.log(`Semantic: ${bestMatch.semanticSim.toFixed(3)}, Keywords: ${bestMatch.matchedKeywords.join(', ')}`);
+
+    return bestMatch.configGroup.configs;
+};
+
 // Enhanced cosine similarity with proper normalization
 export const normalizedCosineSimilarity = (vecA: number[], vecB: number[]): number => {
     if (vecA.length !== vecB.length) {
@@ -221,62 +279,4 @@ export const normalizedCosineSimilarity = (vecA: number[], vecB: number[]): numb
     }
 
     return dotProduct / (magnitudeA * magnitudeB);
-};
-
-export const getAgentsFast = async (goal: string, detailed: boolean = false): Promise<AgentConfigWithDescription[]> => {
-    const options: ExtractorOptions = { pooling: 'mean', normalize: true };
-    
-    // Load model only once and cache it
-    const extractor = await initializeModel();
-
-    if (!extractor) {
-        throw new Error("Model not initialized");
-    }
-    
-    // Generate embedding only for the user's goal
-    const goalVec = await extractor(goal, options);
-    const goalArray: number[] = Array.from(goalVec.data);
-    
-    // Get all config groups using your original function
-    const allConfigs = getAllConfigs(detailed);
-    
-    const matches = allConfigs.map(configGroup => {
-        // Get the pre-computed embedding for this config group
-        const configEmbedding = AGENT_EMBEDDINGS[configGroup.name as keyof typeof AGENT_EMBEDDINGS];
-        
-        if (!configEmbedding || configEmbedding.length === 0) {
-            console.warn(`No embedding found for ${configGroup.name}`);
-            return { configGroup, similarity: 0, semanticSim: 0, matchedKeywords: [] };
-        }
-        
-        // Calculate semantic similarity
-        const semanticSim = normalizedCosineSimilarity(goalArray, configEmbedding);
-        
-        // Calculate keyword matches (same as before)
-        const goalLower = goal.toLowerCase();
-        const allKeywords = configGroup.configs.flatMap(c => c.keywords);
-        const matchedKeywords = allKeywords.filter(keyword =>
-            goalLower.includes(keyword.toLowerCase())
-        );
-        
-        // Combine similarity and keyword matching
-        const keywordBonus = Math.min(matchedKeywords.length * 0.1, 0.3);
-        const finalScore = semanticSim + keywordBonus;
-        
-        return {
-            configGroup,
-            similarity: finalScore,
-            semanticSim,
-            matchedKeywords
-        };
-    });
-    
-    // Sort by similarity and return best match
-    matches.sort((a, b) => b.similarity - a.similarity);
-    const bestMatch = matches[0];
-    
-    console.log(`Fast match: ${bestMatch.configGroup.name} (similarity: ${bestMatch.similarity.toFixed(3)})`);
-    console.log(`Semantic: ${bestMatch.semanticSim.toFixed(3)}, Keywords: ${bestMatch.matchedKeywords.join(', ')}`);
-    
-    return bestMatch.configGroup.configs;
 };

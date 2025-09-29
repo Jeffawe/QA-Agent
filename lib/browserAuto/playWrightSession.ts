@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { ClicKType, Rect, State } from '../types.js';
 import { Session } from '../utility/abstract.js';
-import { getBrowser } from '../browserManager.js';
+import { getBrowser } from './browserManager.js';
 
 export default class PlaywrightSession extends Session<Page> {
   private browser: Browser | null = null;

@@ -1,4 +1,4 @@
-import { EndPointTestResult, State } from "../types.js";
+import { EndpointData, EndPointTestResult, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { EndpointInfo, EndpointMap, getEndpointMap, ParameterInfo, RequestBodyInfo } from "../utility/endpoints/endpointsUtility.js";
 import { dataMemory } from "../services/memory/dataMemory.js";
@@ -193,6 +193,26 @@ export default class EndPoints extends Agent {
         }
     }
 
+    /**
+     * Finds an endpoint in the user's provided endpoints that matches the given endpoint path.
+     * The path is converted into a regex to allow for dynamic parameters (e.g. "/create/{id}" becomes "/create/([^/]+)")
+     * @param endpoint The endpoint to search for in the user's provided endpoints
+     * @param userEndpoints The user's provided endpoints
+     * @returns The matching endpoint data or null if not found
+     */
+    private findMemoryEndpoint(endpoint: EndpointInfo, userEndpoints: Map<string, EndpointData>): EndpointData | null {
+        for (const [path, data] of userEndpoints) {
+            // Turn "/create/{id}" into regex "/create/([^/]+)"
+            const regexPath = endpoint.path.replace(/\{[^}]+\}/g, '([^/]+)');
+            const regex = new RegExp(`^${regexPath}$`);
+
+            if (regex.test(path)) {
+                return data;
+            }
+        }
+        return null;
+    }
+
     // Test a single endpoint with base logic
     testEndpointBase(endpoint: EndpointInfo, userMappings: Map<string, any>) {
         const testData: TestData = {
@@ -227,6 +247,67 @@ export default class EndPoints extends Agent {
         return testData;
     }
 
+    private buildTestDataFromMemory(
+        endpoint: EndpointInfo,
+        memoryData: EndpointData,
+        userMappings: Map<string, any>,
+    ): TestData {
+        const testData: TestData = {
+            pathParams: {},
+            queryParams: {},
+            headers: {},
+            body: null
+        };
+
+        // Path params → generate normally (these come from OpenAPI definition)
+        endpoint.parameters.forEach(param => {
+            if (param.location === 'path') {
+                testData.pathParams[param.name] = this.generateTestValue(param, userMappings);
+            }
+        });
+
+        // Query params → prefer memory, fallback to global data, then generate
+        endpoint.parameters.forEach(param => {
+            if (param.location === 'query') {
+                if (memoryData.query && (memoryData.query as any)[param.name] !== undefined) {
+                    testData.queryParams[param.name] = (memoryData.query as any)[param.name];
+                } else if (dataMemory.hasData(param.name)) {
+                    testData.queryParams[param.name] = dataMemory.getData(param.name);
+                } else {
+                    testData.queryParams[param.name] = this.generateTestValue(param, userMappings);
+                }
+            }
+        });
+
+        // Headers → same priority order
+        endpoint.parameters.forEach(param => {
+            if (param.location === 'header') {
+                if (memoryData.headers && memoryData.headers[param.name] !== undefined) {
+                    testData.headers[param.name] = memoryData.headers[param.name];
+                } else if (dataMemory.hasData(param.name)) {
+                    testData.headers[param.name] = dataMemory.getData(param.name) as string;
+                } else {
+                    testData.headers[param.name] = this.generateTestValue(param, userMappings);
+                }
+            }
+        });
+
+        // Body → prefer memory body, else fallback to global data, else generate
+        if (endpoint.requestBody?.required) {
+            if (memoryData.body) {
+                testData.body = memoryData.body;
+            } else if (dataMemory.hasData("body")) {
+                testData.body = dataMemory.getData("body");
+            } else {
+                testData.body = this.generateRequestBody(endpoint.requestBody, userMappings);
+            }
+        }
+
+        return testData;
+    }
+
+
+
     async runBaseTesting(
         endpoints: EndpointInfo[],
         baseUrl: string,
@@ -240,7 +321,14 @@ export default class EndPoints extends Agent {
             const endpointName = `${endpoint.method} ${endpoint.path}`;
 
             try {
-                const testData: TestData = this.testEndpointBase(endpoint, userMappings);
+                const memoryData = this.findMemoryEndpoint(endpoint, dataMemory.getAllEndpointsMap());
+
+                let testData: TestData;
+                if (memoryData) {
+                    testData = this.buildTestDataFromMemory(endpoint, memoryData, userMappings);
+                } else {
+                    testData = this.testEndpointBase(endpoint, userMappings);
+                }
                 const headerData = this.extractHeaderData(userMappings);
                 testData.headers = {
                     ...testData.headers,

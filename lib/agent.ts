@@ -21,8 +21,6 @@ export interface AgentDependencies {
   agentConfigs: Set<AgentConfig>;
 }
 
-
-
 export default class BossAgent {
   private readonly thinker: Thinker;
   private readonly bus: EventBus;
@@ -62,6 +60,7 @@ export default class BossAgent {
     this.agentRegistry = new AgentRegistry();
     this.stopLoop = false;
 
+    // Ensure logManager is initialized
     this.logManager.initialize();
 
     this.initializeAgents(sessionId, agentConfigs);
@@ -132,6 +131,11 @@ export default class BossAgent {
     }
   }
 
+
+  /**
+   * Validate agent dependencies by checking if all dependent agents are present.
+   * If a dependent agent is not found, an error will be logged and an error will be thrown.
+   */
   private validateAgentDependencies(agentConfigs: Set<AgentConfig>): void {
     for (const config of agentConfigs) {
       if (config.agentDependencies) {
@@ -169,6 +173,7 @@ export default class BossAgent {
         return;
       }
 
+      // Event listeners
       this.bus.on('stop', async (evt) => {
         this.stopLoop = true;
         this.bus.emit({ ts: Date.now(), type: 'issue', message: `Agent stopped because of ${evt.message}` });
@@ -223,32 +228,6 @@ export default class BossAgent {
 
       let encounteredError = false;
       await this.loop(agents, encounteredError);
-      // while (agents.some(a => !a.isDone())) {
-      //   if (this.stopLoop) {
-      //     this.logManager.log("Stopping main loop as requested", State.INFO, true);
-      //     break;
-      //   }
-
-      //   if (agents.every(a => a.isPaused())) {
-      //     await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to avoid busy waiting
-      //     continue; // Skip this iteration if all agents are paused
-      //   }
-
-      //   for (const agent of agents) {
-      //     agent.nextTick();
-      //     if (!agent.isDone()) {
-      //       await agent.tick();
-      //     } else {
-      //       if (agent.getState() == State.ERROR) {
-      //         encounteredError = true
-      //         this.bus.emit({ ts: Date.now(), type: "stop", message: `There was an error with ${agent.name} agent`, sessionId: this.sessionId });
-      //         break;
-      //       }
-      //     }
-      //   }
-
-      //   if (encounteredError) break;
-      // }
 
       this.logManager.log("Done", State.DONE, true);
       const doneMessage = `Agent is done with task. Used ${this.logManager.getTokens()} tokens`;
@@ -265,6 +244,14 @@ export default class BossAgent {
     }
   }
 
+  /**
+   * Loops through all agents and processes them in order of dependency.
+   * First, all non-dependent agents are processed in parallel.
+   * Then, all dependent agents are processed sequentially.
+   * If any agent encounters an error, the loop will break and stop all agents.
+   * @param agents The agents to loop through
+   * @param encounteredError Whether an error has been encountered in the loop
+   */
   private async loop(agents: Agent[], encounteredError: boolean) {
     while (agents.some(a => !a.isDone())) {
       if (this.stopLoop) {
@@ -368,6 +355,7 @@ export default class BossAgent {
     return this.agentRegistry.getAgent<T>(name);
   }
 
+  // Public API to pause all agents
   public pauseAllAgents(): void {
     const agents = this.agentRegistry.getAllAgents();
     for (const agent of agents) {
@@ -376,6 +364,7 @@ export default class BossAgent {
     this.logManager.log("All agents paused", State.PAUSE, true);
   }
 
+  // Public API to resume all agents
   public resumeAllAgents(): void {
     const agents = this.agentRegistry.getAllAgents();
     for (const agent of agents) {

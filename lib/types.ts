@@ -115,7 +115,7 @@ export enum State {
 }
 
 type StateValue = `${State}`;
-export type Namespaces = "crawler" | "autocrawler" | "tester" | "autoanalyzer" | "analyzer" | "goalagent" | "planneragent" | "manualanalyzer" | "manualAutoanalyzer" | "endpointagent"; // add more if needed
+export type Namespaces = "crawler" | "autocrawler" | "tester" | "autoanalyzer" | "analyzer" | "goalagent" | "planneragent" | "manualanalyzer" | "manualAutoanalyzer" | `${string}agent`; // add more if needed
 
 export type NamespacedState = `${Namespaces}.${StateValue}`;
 
@@ -273,6 +273,20 @@ export interface EndPointTestResult {
         responseTime: number;   // Time taken in milliseconds
     };
 }
+
+export interface EndpointData {
+    query?: Record<string, string | number | boolean | null>;
+    headers?: Record<string, string>;
+    body?: JsonValue;
+}
+
+export type JsonValue =
+    | string
+    | number
+    | boolean
+    | null
+    | JsonValue[]
+    | { [key: string]: JsonValue };
 
 export interface WebSocketData {
     message?: string;

@@ -13,56 +13,89 @@ import { dataMemory } from "../services/memory/dataMemory.js";
 
 const router = Router();
 
-// GET /test/
-router.get("/test-agent", async (req, res) => {
+router.get("/test-data", async (req, res) => {
     try {
-        console.log('Starting test session...');
-        const sessionId = "test_session"
-        const url = 'https://forms.gle/C5wE2k9fpHtC4561A';
-
-        const session = new StagehandSession(sessionId);
-        const started = await session.start(url);
-
-        if (!started) {
-            res.status(500).send('Failed to start session.');
-            return;
+        const data = {
+            "header:x-api-key": "YB4mNsCgX3zDJ4SnWWeX",
+            "/meta/adset/1345/create": {
+                "query:campaign_id": "1345",
+                "name": "Fall Clearance Sale",
+                "main_goal": "sales",
+                "start_date": "2025-10-01",
+                "end_date": "2025-10-15",
+                "expected_sales": 500,
+                "expected_aov": 75,
+                "daily_campaign_budget": 200,
+                "location": [
+                    "United States",
+                    "Canada"
+                ],
+                "creative_notes": "Highlight urgency with limited-time discount messaging and warm autumn colors.",
+                "landing_page_link": "https://example-store.com/fall-clearance",
+                "client_name": "Autumn Apparel Co.",
+                "image": "https://example-store.com/images/fall-campaign-banner.jpg",
+                "store_uniqueness": "Trendy, affordable seasonal fashion with eco-friendly materials.",
+                "why_choose_store": "Free shipping on all orders and a 30-day hassle-free return policy.",
+                "ideal_customers": "Young professionals, college students, and eco-conscious shoppers.",
+                "customer_problems_needs": "Affordable, stylish outfits for fall weather without compromising on sustainability.",
+                "store_tone_personality": "Warm, approachable, trendy, eco-conscious.",
+                "store_values_phrases": "Sustainable fashion for everyone, affordable style that lasts.",
+                "total_ad_budget": 3000,
+                "audience": [
+                    "Eco-conscious millennials",
+                    "College students",
+                    "Young professionals interested in fashion"
+                ],
+                "youtube_links": "https://youtube.com/watch?v=fallcollectionpromo"
+            },
+            "/meta/adset/11112/create": {
+                "query": {
+                    "campaign_id": "1345"
+                },
+                "body": {
+                    "name": "Fall Clearance Sale",
+                    "main_goal": "sales",
+                    "start_date": "2025-10-01",
+                    "end_date": "2025-10-15",
+                    "expected_sales": 500,
+                    "expected_aov": 75,
+                    "daily_campaign_budget": 200,
+                    "location": [
+                        "United States",
+                        "Canada"
+                    ],
+                    "creative_notes": "Highlight urgency with limited-time discount messaging and warm autumn colors.",
+                    "landing_page_link": "https://example-store.com/fall-clearance",
+                    "client_name": "Autumn Apparel Co.",
+                    "image": "https://example-store.com/images/fall-campaign-banner.jpg",
+                    "store_uniqueness": "Trendy, affordable seasonal fashion with eco-friendly materials.",
+                    "why_choose_store": "Free shipping on all orders and a 30-day hassle-free return policy.",
+                    "ideal_customers": "Young professionals, college students, and eco-conscious shoppers.",
+                    "customer_problems_needs": "Affordable, stylish outfits for fall weather without compromising on sustainability.",
+                    "store_tone_personality": "Warm, approachable, trendy, eco-conscious.",
+                    "store_values_phrases": "Sustainable fashion for everyone, affordable style that lasts.",
+                    "total_ad_budget": 3000,
+                    "audience": [
+                        "Eco-conscious millennials",
+                        "College students",
+                        "Young professionals interested in fashion"
+                    ],
+                    "youtube_links": "https://youtube.com/watch?v=fallcollectionpromo"
+                }
+            }
         }
-        if (!session.page) {
-            res.status(500).send('Failed to start session.');
-            return;
-        }
-
-        const eventBus = eventBusManager.getOrCreateBus();
-        const thinker = new TestingThinker(sessionId);
-        const actionService = new AutoActionService(session);
-
-        const dependencies: BaseAgentDependencies = {
-            eventBus: eventBus,
-            session: session,
-            agentRegistry: undefined,
-            dependent: false,
-            sessionId: sessionId,
-            thinker: thinker,
-            actionService: actionService
-        };
-
-        const agent = new Tester(dependencies);
-        agent.setBaseValues(url, 'Crawl the site');
-        while (!agent.isDone()) {
-            await agent.tick();
-        }
-
-        console.log(`✅ Results are:`, agent.testResults);
-
-        await session.close();
-        res.send('Test completed successfully!');
+        dataMemory.loadData(data);
+        console.log('Data loaded into memory');
+        console.log("Endpoints: " + JSON.stringify(dataMemory.getAllEndpoints(), null, 2));
+        console.log("Data: " + JSON.stringify(dataMemory.getAllData(), null, 2));
+        res.json({ message: "Data loaded into memory.", data: dataMemory.getAllData() });
     } catch (error) {
         console.error('Error starting session:', error);
         res.status(500).send('Failed to start session.');
     }
 });
 
-router.get("/test-agent2", async (req, res) => {
+router.get("/test-agent", async (req, res) => {
     try {
         console.log('Starting test session...');
         const sessionId = "test_session"
