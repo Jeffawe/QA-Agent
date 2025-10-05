@@ -362,6 +362,14 @@ const setupPermanentListener = (worker: Worker, sessionId: string) => {
                 worker.removeAllListeners('message');
                 worker.removeAllListeners('error');
                 worker.removeAllListeners('exit');
+                worker.terminate();
+                if (global.gc) {
+                    try {
+                        global.gc();
+                    } catch (error) {
+                        console.error(`❌ [Worker ${sessionId}] GC error:`, error);
+                    }
+                }
                 break;
 
             case 'error':
@@ -787,7 +795,7 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
 
         if (testKey && apiKey.startsWith('TEST') && testKey == process.env.TEST_KEY) {
             console.log('Test API key received');
-            if(!process.env.TEST_API_KEY) {
+            if (!process.env.TEST_API_KEY) {
                 res.status(400).json({ error: 'Test API key is required' });
                 return;
             }

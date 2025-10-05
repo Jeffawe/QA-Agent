@@ -441,13 +441,5 @@ const cleanup = async () => {
             clearTimeout(cleanupTimeout);
             cleanupTimeout = null;
         }
-
-        if (global.gc) {
-            try {
-                global.gc();
-            } catch (error) {
-                console.error(`❌ [Worker ${workerId}] GC error:`, error);
-            }
-        }
     }
 };
