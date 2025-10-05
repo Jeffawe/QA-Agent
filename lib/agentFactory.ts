@@ -12,8 +12,11 @@ import PlaywrightSession from './browserAuto/playWrightSession.js';
 import StagehandSession from './browserAuto/stagehandSession.js';
 import ManualActionService from './services/actions/actionService.js';
 import AutoActionService from './services/actions/autoActionService.js';
+import { CombinedThinker } from './services/thinkers/combinedThinker.js';
+import { DefaultThinker } from './services/thinkers/defaultThinker.js';
+import { TestingThinker } from './services/thinkers/testingThinker.js';
 import { Namespaces } from './types.js';
-import { ActionService, Agent, BaseAgentDependencies, Session } from './utility/abstract.js';
+import { ActionService, Agent, BaseAgentDependencies, Session, Thinker } from './utility/abstract.js';
 
 export class AgentFactory {
     private static agentClasses: Map<Namespaces, new (dependencies: BaseAgentDependencies) => Agent> = new Map();
@@ -52,6 +55,20 @@ export class SessionFactory {
                 return new StagehandSession(sessionId);
             default:
                 throw new Error(`Unknown session type: ${type}`);
+        }
+    }
+}
+
+// Thinker factory to create different types of thinkers
+export class ThinkerFactory {
+    static createThinker(type: string, sessionId: string): Thinker {
+        switch (type) {
+            case 'combined':
+                return new CombinedThinker(sessionId);
+            case 'testing':
+                return new TestingThinker(sessionId);
+            default:
+                return new DefaultThinker(sessionId);
         }
     }
 }

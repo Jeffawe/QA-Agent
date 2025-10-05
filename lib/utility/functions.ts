@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join, isAbsolute } from "node:path";
-import { LogManager } from "./logManager.js";      // adjust import path if needed
+import { LogManager } from "./logManager.js";
 
 /** Check whether a file exists under PROJECT_ROOT */
 export async function fileExists(pathFromRoot: string): Promise<boolean> {
@@ -18,6 +18,14 @@ export async function fileExists(pathFromRoot: string): Promise<boolean> {
   }
 }
 
+/**
+ * Wraps a promise with a timeout.
+ * If the promise resolves before the timeout, the wrapped promise resolves with the same value.
+ * If the promise does not resolve before the timeout, the wrapped promise rejects with an Error('Timeout').
+ * @param {Promise<T>} promise The promise to wrap.
+ * @param {number} timeoutMs The timeout in milliseconds.
+ * @returns {Promise<T>} The wrapped promise.
+ */
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
     return Promise.race([
         promise,

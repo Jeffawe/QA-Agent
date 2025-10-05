@@ -13,20 +13,19 @@ import { NewPageValidator } from './services/validators/newPageValidator.js';
 import { ValidatorWarningValidator } from './services/validators/validatorWarningValidator.js';
 import { PageMemory } from './services/memory/pageMemory.js';
 import { dataMemory } from './services/memory/dataMemory.js';
-import { RedisEventBridge } from './services/events/redisEventBridge.js';
+import { LocalEventBridge } from './services/events/localEventBridge.js';
 import { CrawlMap } from './utility/crawlMap.js';
 
 let agent: BossAgent | null = null;
 let isInitialized = false;
-let redisBridge: RedisEventBridge | null = null;
+let localBridge: LocalEventBridge | null = null;
 let eventBus: any = null;
-const workerId = Math.random().toString(36).substring(7); // NEW: Unique worker ID
+const workerId = Math.random().toString(36).substring(7); // Unique worker ID
 let isActive = false;
 let currentSessionId: string | null = null;
 let isShuttingDown = false;
 let cleanupTimeout: NodeJS.Timeout | null = null;
 const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const WORKER_IDLE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 
 const checkHealth = () => {
     const memUsage = process.memoryUsage();
@@ -110,26 +109,13 @@ if (workerData?.preWarmed) {
 
     // Initialize infrastructure without session
     if (!eventBus) eventBus = eventBusManager.getOrCreateBus();
-    if (!redisBridge) {
-        redisBridge = new RedisEventBridge(eventBus);
+    if (!localBridge) {
+        localBridge = new LocalEventBridge(eventBus);
     }
-
-    redisBridge.waitForReady().then(() => {
-        console.log(`✅ Pre-warmed worker ${workerId} ready`);
-
-        // Signal to parent that worker is ready
-        parentPort?.postMessage({
-            type: 'prewarmed_ready',
-            workerId: workerId
-        });
-    }).catch((error) => {
-        console.error(`❌ Error initializing pre-warmed worker ${workerId}:`, error);
-        process.exit(1);
-    });
 
     setupProcessHandlers();
 
-    console.log(`♨️ Pre-warmed worker ${workerId} initialized, waiting for session and redis Bridge...`);
+    console.log(`♨️ Pre-warmed worker ${workerId} initialized, waiting for session and local Bridge...`);
 }
 
 // Pre-initialize common resources for pre-warmed workers
@@ -151,12 +137,15 @@ const initializeWorker = async () => {
 
         isInitialized = true;
 
+        currentSessionId = sessionId;
+        isActive = true;
+
         parentPort?.postMessage({
             type: 'initialized',
             websocketPort: websocketPort
         });
 
-        console.log(`✅ Worker initialized for session ${sessionId} with WebSocket port ${websocketPort}`);
+        console.log(`✅ Worker initialized for session ${sessionId} with port ${websocketPort}`);
 
     } catch (error) {
         console.error('❌ Worker initialization error:', error);
@@ -196,13 +185,13 @@ const createValidatorsAsync = async (sessionId: string): Promise<number> => {
 
         console.log(`📋 All validators created successfully`);
 
-        // Reuse Redis bridge if available
-        if (!redisBridge) {
-            console.log(`🌐 Setting up Redis event bridge...`);
-            redisBridge = new RedisEventBridge(eventBus, sessionId);
+        // Reuse Local bridge if available
+        if (!localBridge) {
+            console.log(`🌐 Setting up Local event bridge...`);
+            localBridge = new LocalEventBridge(eventBus, sessionId);
+            await localBridge.activateSession(sessionId);
 
-            await redisBridge.waitForReady();
-            console.log(`✅ Redis event bridge connected`);
+            console.log(`✅ Local event bridge connected`);
         }
 
         const port = parseInt(process.env.PORT ?? '3001');
@@ -220,8 +209,8 @@ const activateSession = async (sessionId: string, url: any, data: any) => {
     try {
         console.log(`🚀 Activating session ${sessionId} on worker ${workerId}`);
 
-        if (!redisBridge) {
-            throw new Error('Redis bridge not initialized');
+        if (!localBridge) {
+            throw new Error('Local bridge not initialized');
         }
 
         // Update worker data
@@ -229,12 +218,6 @@ const activateSession = async (sessionId: string, url: any, data: any) => {
         (workerData as any).url = url;
         (workerData as any).data = data;
         (workerData as any).preWarmed = false;
-
-        // Activate the session on Redis bridge
-        await redisBridge.activateSession(sessionId);
-
-        currentSessionId = sessionId;
-        isActive = true;
 
         console.log(`✅ Session ${sessionId} activated on worker ${workerId}`);
 
@@ -275,9 +258,15 @@ if (parentPort) {
                     eventBus = eventBusManager.getOrCreateBus();
                 }
 
+                const apikey = data.agentConfig.apiKey ?? process.env.API_KEY ?? '';
+
                 // Load data memory only when needed
                 if (workerData.data && typeof workerData.data === 'object') {
                     dataMemory.loadData(workerData.data);
+
+                    if (apikey && apikey !== '' && dataMemory.getData('endpoint') === true) {
+                        dataMemory.setData('advanced_endpoint', true);
+                    }
                 }
 
                 const stopHandler = async (evt: any) => {
@@ -326,7 +315,7 @@ if (parentPort) {
 
                 // Store API key in parallel with agent creation
                 const apiKeyPromise = Promise.resolve(
-                    storeSessionApiKey(data.agentConfig.sessionId, data.agentConfig.apiKey)
+                    storeSessionApiKey(data.agentConfig.sessionId, apikey)
                 );
 
                 const agentCreationPromise = new Promise<BossAgent>((resolve) => {
@@ -432,7 +421,7 @@ const cleanup = async () => {
                 dataMemory.clear();
             }),
             Promise.resolve().then(() => {
-                redisBridge?.cleanup();
+                localBridge?.cleanup();
             }),
         );
 

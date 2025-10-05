@@ -35,8 +35,13 @@ export class PageMemory {
     return cleanUrl;
   }
 
-  // Check if a page exists
-  // @returns {boolean} true if page exists
+
+  /**
+   * Checks if a page with the given URL exists in memory.
+   *
+   * @param {string} url - URL of the page to check for.
+   * @returns {boolean} True if the page exists, false otherwise.
+   */
   static hasPage(url: string): boolean {
     url = PageMemory.cleanUrl(url);
     return !!this.pages[url];

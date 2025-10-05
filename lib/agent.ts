@@ -2,14 +2,13 @@ import { ActionService, AgentRegistry, BaseAgentDependencies, Session, Thinker }
 import { LogManager } from "./utility/logManager.js";
 import { EventBus } from "./services/events/event.js";
 import { AgentConfig, Namespaces, State } from "./types.js";
-import { CombinedThinker } from "./services/thinkers/combinedThinker.js";
 
 import { Agent } from "./utility/abstract.js";
 import { CrawlMap } from './utility/crawlMap.js';
 import { clearAllImages } from './services/imageProcessor.js';
 import { eventBusManager } from './services/events/eventBus.js';
 import { logManagers } from './services/memory/logMemory.js';
-import { ActionServiceFactory, SessionFactory } from "./agentFactory.js";
+import { ActionServiceFactory, SessionFactory, ThinkerFactory } from "./agentFactory.js";
 
 export interface AgentDependencies {
   sessionId: string;
@@ -22,21 +21,22 @@ export interface AgentDependencies {
 }
 
 export default class BossAgent {
-  private readonly thinker: Thinker;
   private readonly bus: EventBus;
+
+  /// registry of agents
   private readonly agentRegistry: AgentRegistry;
   private stopLoop: boolean = false;
   protected logManager: LogManager;
 
   public sessions: Map<string, Session> = new Map();
   public actionServices: Map<string, ActionService> = new Map();
+  public thinkers: Map<string, Thinker> = new Map();
   public sessionId: string = "1";
   public state: State = State.START;
   public goal: string = "";
 
   constructor({
     sessionId,
-    thinker,
     eventBus,
     goalValue,
     agentConfigs
@@ -49,12 +49,6 @@ export default class BossAgent {
   }) {
     this.sessionId = sessionId;
     this.logManager = logManagers.getOrCreateManager(sessionId);
-    try {
-      this.thinker = thinker ?? new CombinedThinker(sessionId);
-    } catch (error) {
-      this.logManager.error(`Failed to create thinker: ${(error as Error).message}`, State.ERROR, true);
-      throw error;
-    }
     this.bus = eventBus;
     this.goal = goalValue;
     this.agentRegistry = new AgentRegistry();
@@ -66,6 +60,14 @@ export default class BossAgent {
     this.initializeAgents(sessionId, agentConfigs);
   }
 
+  /**
+   * Initialize all agents without dependencies.
+   * This function will create agents and register them with the agent registry.
+   * It will also create sessions and action services for each agent.
+   * If the agent has a thinker type, it will create a thinker instance and register it with the thinker registry.
+   * @param sessionId - The session ID.
+   * @param agentConfigs - The set of agent configurations.
+   */
   private initializeAgents(sessionId: string, agentConfigs: Set<AgentConfig>): void {
     try {
       // First pass: Create all agents without dependencies
@@ -97,9 +99,20 @@ export default class BossAgent {
           // Retrieve existing or newly created action service
           const actionService = this.actionServices.get(config.actionServiceType)!;
 
+          if (!config.thinkerType) {
+            config.thinkerType = 'default';
+          }
+
+          if (!this.thinkers.has(config.thinkerType)) {
+            const thinker = ThinkerFactory.createThinker(config.thinkerType, sessionId);
+            this.thinkers.set(config.thinkerType, thinker);
+          }
+
+          const thinker = this.thinkers.get(config.thinkerType)!;
+
           const baseDependencies: BaseAgentDependencies = {
             session,
-            thinker: this.thinker,
+            thinker: thinker,
             sessionId,
             actionService,
             eventBus: this.bus,
@@ -226,6 +239,7 @@ export default class BossAgent {
 
       console.log(`STEP 2 AGENT: 🧠 Starting agents with goal: ${this.goal}`);
 
+      // default encountered error as false and use it to stop the agent if an error occurs during the loop
       let encounteredError = false;
       await this.loop(agents, encounteredError);
 
@@ -343,10 +357,12 @@ export default class BossAgent {
 
   cleanup() {
     this.agentRegistry.clear();
-    //clearAllImages();
+    clearAllImages();
     this.sessions.clear();
     eventBusManager.removeBus();
-    //this.logManager.deleteLogFile();
+    if(process.env.NODE_ENV !== 'development'){
+      this.logManager.deleteLogFile();
+    }
     logManagers.removeManager(this.sessionId);
   }
 

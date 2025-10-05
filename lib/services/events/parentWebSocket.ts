@@ -1,13 +1,6 @@
 import WebSocket, { WebSocketServer } from 'ws';
-import { Redis } from 'ioredis';
 import { deleteSession, getSession } from '../memory/sessionMemory.js';
-
-interface RedisMessage {
-    type: string;
-    sessionId: string;
-    data: any;
-    timestamp: string;
-}
+import { LocalMessage } from '../../types.js';
 
 interface ClientConnection {
     ws: WebSocket;
@@ -18,7 +11,6 @@ interface ClientConnection {
 export class ParentWebSocketServer {
     private clients: Map<string, ClientConnection> = new Map();
     private wss: WebSocketServer;
-    private redisSubscriber: Redis;
     private port: number;
     private readyPromise: Promise<void>;
     private isReady: boolean = false;
@@ -28,23 +20,7 @@ export class ParentWebSocketServer {
         server: any,
         port: number
     ) {
-        const redisConfig = {
-            connectTimeout: 2000,
-            lazyConnect: false,
-            maxRetriesPerRequest: 1,
-            retryDelayOnFailover: 50,
-            keepAlive: 30000,
-            family: 4
-        };
         this.port = port;
-        try {
-            // Initialize Redis subscriber
-            this.redisSubscriber = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL, redisConfig) : new Redis(redisConfig);
-        } catch (error) {
-            console.error('❌ Redis connection error:', error);
-            throw error;
-        }
-
         // Create WebSocket server
         this.wss = new WebSocketServer({
             server, // Use the same server
@@ -57,26 +33,6 @@ export class ParentWebSocketServer {
 
     private async initialize(): Promise<void> {
         try {
-            // Initialize Redis subscriber
-            await this.redisSubscriber.subscribe(this.channelName);
-            console.log(`🔔 Redis subscriber connected and subscribed to ${this.channelName}`);
-
-            // Set up Redis message handling
-            this.redisSubscriber.on('message', (channel: string, message: string) => {
-                if (channel === this.channelName) {
-                    this.handleRedisMessage(message);
-                }
-            });
-
-            // Handle Redis connection events
-            this.redisSubscriber.on('error', (error: Error) => {
-                console.error('❌ Redis subscriber error:', error);
-            });
-
-            this.redisSubscriber.on('reconnecting', () => {
-                console.log('🔄 Redis subscriber reconnecting...');
-            });
-
             // Set up WebSocket server - when using existing server, it's ready immediately
             console.log(`🚀 Parent WebSocket server attached to existing server on port ${this.port}`);
 
@@ -125,8 +81,7 @@ export class ParentWebSocketServer {
                 type: 'CONNECTION_ACK',
                 data: {
                     status: 'connected',
-                    message: `Connected to session ${sessionId}`,
-                    sessionId
+                    message: `Connected to session ${sessionId}`
                 },
                 timestamp: new Date().toISOString(),
                 sessionId
@@ -177,20 +132,13 @@ export class ParentWebSocketServer {
         });
     }
 
-    private handleRedisMessage(messageStr: string) {
-        try {
-            const message: RedisMessage = JSON.parse(messageStr);
-            const { sessionId } = message;
-
-            // Route message to the appropriate client
-            this.sendToClient(sessionId, message);
-
-        } catch (error) {
-            console.error('❌ Failed to parse Redis message:', error);
-        }
-    }
-
-    private sendToClient(sessionId: string, message: RedisMessage) {
+        /**
+         * Sends a message to the client with the given session id.
+         * If the client does not exist or the connection is closed, the method will clean up the dead connection.
+         * @param sessionId - The id of the session to send the message to.
+         * @param message - The message to send to the client.
+         */
+    public sendToClient(sessionId: string, message: LocalMessage) {
         const client = this.clients.get(sessionId);
 
         if (!client) {
@@ -199,7 +147,8 @@ export class ParentWebSocketServer {
 
         if (client.ws.readyState === WebSocket.OPEN) {
             try {
-                client.ws.send(JSON.stringify(message));
+                const payload = JSON.stringify(message);
+                client.ws.send(payload);
             } catch (error) {
                 console.error(`❌ Failed to send message to client ${sessionId}:`, error);
                 // Clean up dead connection
@@ -236,14 +185,14 @@ export class ParentWebSocketServer {
     }
 
     // Send a message to all clients (broadcast)
-    broadcast(message: Omit<RedisMessage, 'sessionId'>) {
+    broadcast(message: Omit<LocalMessage, 'sessionId'>) {
         this.clients.forEach((client, sessionId) => {
             this.sendToClient(sessionId, { ...message, sessionId });
         });
     }
 
     // Send message to specific session
-    sendToSession(sessionId: string, message: Omit<RedisMessage, 'sessionId'>) {
+    sendToSession(sessionId: string, message: Omit<LocalMessage, 'sessionId'>) {
         this.sendToClient(sessionId, { ...message, sessionId });
     }
 
@@ -262,9 +211,6 @@ export class ParentWebSocketServer {
 
             // Close WebSocket server
             this.wss.close();
-
-            // Disconnect from Redis
-            this.redisSubscriber.disconnect();
 
             console.log('✅ Parent WebSocket server shutdown complete');
         } catch (error) {

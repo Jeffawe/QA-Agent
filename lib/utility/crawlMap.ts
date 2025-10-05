@@ -27,18 +27,23 @@ export class CrawlMap {
 
   /** Call once at program start (optional custom path) */
   static init(filePath = "crawl_map.md") {
-    const full = isAbsolute(filePath)
-      ? filePath
-      : join(LogManager.PROJECT_ROOT, filePath);
-    this.file = full;
+    try {
+      const full = isAbsolute(filePath)
+        ? filePath
+        : join(LogManager.PROJECT_ROOT, filePath);
+      this.file = full;
 
-    const dir = dirname(full);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      const dir = dirname(full);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
-    this.initialised = true;
-    this.write();        // create / clear file
-    this.finished = false;
-    console.log(`CrawlMap: initialized at ${this.file}`);
+      this.initialised = true;
+      writeFileSync(this.file, "");        // create / clear file
+      this.finished = false;
+      console.log(`CrawlMap: initialized at ${this.file}`);
+    } catch (e) {
+      console.error("CrawlMap.init error:", e);
+      throw e;
+    }
   }
 
   static addPageWithURL(url: string): string {
@@ -61,7 +66,7 @@ export class CrawlMap {
       if (!this.initialised) this.init();
       const eventBus = eventBusManager.getOrCreateBus();
       eventBus.emit({ ts: Date.now(), type: "crawl_map_updated", page });
-      if (!PageMemory.hasPage(page.url ?? page.uniqueID)) {
+      if (!this.navOrder.has(page.url ?? page.uniqueID)) {
         const url = PageMemory.addPageWithURL(page.url ?? page.uniqueID);
         this.navOrder.add(url);
       }
@@ -76,7 +81,15 @@ export class CrawlMap {
     this.finished = true;
   }
 
-  /** Optional: keep edge list if you still need it elsewhere */
+  
+  /**
+   * Add an edge to the crawl map. This is typically used to
+   * represent a link between two pages.
+   * @param {string} from - the URL of the page that the link
+   * originates from.
+   * @param {string} to - the URL of the page that the link
+   * points to.
+   */
   static addEdge(from: string, to: string) {
     if (!this.initialised) this.init();
     this.edges.add(`${from}-->${to}`);

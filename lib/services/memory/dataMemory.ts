@@ -16,7 +16,7 @@ class DataMemory {
         this.data.set(key, value);
     }
 
-    getData(key: string) {
+    getData(key: string) : JsonValue | undefined {
         return this.data.get(key);
     }
 

@@ -171,6 +171,7 @@ export interface AgentConfig<T extends BaseAgentDependencies = BaseAgentDependen
     agentClass: new (dependencies: T) => Agent;
     sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
     actionServiceType?: 'manual' | 'auto';
+    thinkerType: 'combined' | 'testing' | 'default';
     dependent?: boolean; // If true, agent won't start until another agent triggers it
     dependencies?: Partial<T>; // Additional/override dependencies
     agentDependencies?: Namespaces[]; // Names of other agents this agent depends on
@@ -180,6 +181,7 @@ export interface MiniAgentConfig<T extends BaseAgentDependencies = BaseAgentDepe
     name: Namespaces;
     sessionType: 'puppeteer' | 'playwright' | 'selenium' | 'stagehand' | 'custom';
     actionServiceType?: 'manual' | 'auto';
+    thinkerType: 'combined' | 'testing' | 'default';
     dependent?: boolean; // If true, agent won't start until another agent triggers it
     dependencies?: Partial<T>; // Additional/override dependencies
     agentDependencies?: Namespaces[]; // Names of other agents this agent depends on
@@ -306,7 +308,7 @@ export interface FirstConnectionData {
 }
 
 // Enhanced message structure with sessionId
-export interface RedisMessage {
+export interface LocalMessage {
     type: string;
     sessionId: string;
     data: WebSocketData | ConnectionData | FirstConnectionData;

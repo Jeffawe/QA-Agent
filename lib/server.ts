@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import dotenv from 'dotenv';
+import dotenv, { decrypt } from 'dotenv';
 import bodyParser from 'body-parser';
 import { v4 as uuidv4 } from 'uuid';
 import rateLimit from 'express-rate-limit';
@@ -13,17 +13,25 @@ import { checkUserKey } from './externalCall.js';
 import { getAgentsFast, getAgentsKeywordOnly, getEndpointConfig, initializeModel } from './agentConfig.js';
 
 import { clearSessions, deleteSession, getSession, getSessions, getSessionSize, hasSession, setSession } from './services/memory/sessionMemory.js';
-import { clearSessionApiKeys, deleteSessionApiKey, getApiKeyForAgent, storeSessionApiKey } from './services/memory/apiMemory.js';
+import { clearSessionApiKeys, decryptApiKeyFromFrontend, deleteSessionApiKey, getApiKeyForAgent, storeSessionApiKey } from './services/memory/apiMemory.js';
 import { LogManager } from './utility/logManager.js';
 import { ParentWebSocketServer } from './services/events/parentWebSocket.js';
 import { createServer } from 'http';
 import testRoutes from './test/testAgent.js'
 import { WorkerPool } from './workerPool.js';
 import { withTimeout } from './utility/functions.js';
+import path, { dirname } from "path";
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+// Recreate __dirname in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 dotenv.config();
 
 const app = express();
+
 const server = createServer(app);
 
 // Referer validation middleware to replace CORS
@@ -99,6 +107,8 @@ app.use(helmet({
     }
 }));
 
+app.use('/public', express.static(path.join(__dirname, '..', 'public')));
+
 // Compression middleware
 app.use(compression());
 
@@ -142,6 +152,7 @@ const agentConfigCache = new Map<string, MiniAgentConfig[]>();
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+
 app.use("/testing", testRoutes);
 
 const cleanup = async () => {
@@ -152,6 +163,10 @@ const cleanup = async () => {
     for (const session of getSessions().values()) {
         if (session.worker) {
             session.worker.postMessage({ command: 'stop' });
+
+            session.worker.removeAllListeners('message');
+            session.worker.removeAllListeners('error');
+            session.worker.removeAllListeners('exit');
 
             // Force terminate after timeout
             setTimeout(() => {
@@ -167,16 +182,44 @@ const cleanup = async () => {
     console.log('All sessions stopped successfully.');
 }
 
-// Sets up the worker events and returns the websocket port
-const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, serializableConfigs: MiniAgentConfig[]): Promise<number> => {
+const loadKeys = () => {
+    const rootDir = path.join(__dirname, '..');
+    const privateKeyPath = path.join(rootDir, 'private.pem');
+    const publicKeyPath = path.join(rootDir, 'public.pem');
+
+    // Check if keys exist
+    if (!fs.existsSync(privateKeyPath) || !fs.existsSync(publicKeyPath)) {
+        throw new Error('Encryption keys not found. Please run key generation first.');
+    }
+
+    const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
+    const publicKey = fs.readFileSync(publicKeyPath, 'utf8');
+    return { privateKey, publicKey };
+}
+
+/**
+ * Sets up worker events for a session.
+ * @param {Worker} worker - The worker object to set up events for.
+ * @param {boolean} isEndpoint - Whether the worker is for an endpoint agent.
+ * @param {string} sessionId - The unique identifier for the session.
+ * @param {string} goal - The goal value for the agent to strive for.
+ * @param {MiniAgentConfig[]} serializableConfigs - The agent configurations to be sent to the worker.
+ * @returns {Promise<number>} A promise that resolves with the websocket port used by the worker.
+ * @description
+ * This function sets up the necessary events for a worker to communicate with the agent and the parent.
+ * It sets up an event listener for initial messages from the worker during initialization, and sets up a permanent listener for ongoing messages.
+ * It also sets up an error listener to catch any errors that occur on the worker.
+ * If the worker initialization times out, the promise is rejected with an error.
+ */
+const setUpWorkerEvents = (worker: Worker, isEndpoint: boolean, sessionId: string, goal: string, serializableConfigs: MiniAgentConfig[]): Promise<number> => {
     console.log(`STEP 3: Setting up worker events for session ${sessionId}`);
     return new Promise((resolve, reject) => {
         let resolved = false;
-        let messageListener: ((message: any) => void) | null = null;
+        let initMessageListener: ((message: any) => void) | null = null;
         let errorListener: ((error: Error) => void) | null = null;
 
         const cleanup = () => {
-            if (messageListener) worker.removeListener('message', messageListener);
+            if (initMessageListener) worker.removeListener('message', initMessageListener);
             if (errorListener) worker.removeListener('error', errorListener);
         };
 
@@ -194,7 +237,11 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
             if (!resolved) {
                 resolved = true;
                 clearTimeout(timeout);
-                cleanup();
+                cleanup(); // Clean up INIT listener only
+
+                // NOW set up permanent listener for ongoing messages
+                setupPermanentListener(worker, sessionId);
+
                 resolve(port);
             }
         };
@@ -208,7 +255,21 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
             }
         };
 
-        messageListener = (message: any) => {
+
+        /**
+         * Handle initial messages from the worker during initialization.
+         * @param {any} message - The message received from the worker.
+         * @description
+         * This function is used to handle the initial messages sent by the worker during initialization.
+         * It checks the type of the message and performs the appropriate action.
+         * If the message type is 'initialized', it checks if the message contains a valid websocket port.
+         * If the port is valid, it resolves the promise with the port.
+         * If the port is invalid, it rejects the promise with an error.
+         * If the message type is 'error', it logs the error and rejects the promise with an error.
+         * If the message type is 'websocket_message', it logs the message and does nothing.
+         * If the message type is 'log', it logs the log message and does nothing.
+         */
+        initMessageListener = (message: any) => {
             switch (message.type) {
                 case 'initialized':
                     if (message.websocketPort && typeof message.websocketPort === 'number') {
@@ -218,20 +279,18 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
                     }
                     break;
 
-                case 'session_cleanup':
-                    console.log(`🧹 Received cleanup request for session ${message.sessionId}`);
-                    deleteSession(message.sessionId);
-                    deleteSessionApiKey(message.sessionId);
-                    break;
-
                 case 'error':
                     const errorMsg = message.error || 'Unknown worker error';
                     console.error(`❌ Agent error for session ${sessionId}:`, errorMsg);
                     rejectOnce(new Error(`Worker initialization error: ${errorMsg}`));
                     break;
 
+                case 'websocket_message':
+                    if (parentWSS) parentWSS.sendToClient(sessionId, message.data);
+                    break;
+
                 case 'log':
-                    console.log(`🔍 Worker log for session ${sessionId}:`, message.message);
+                    console.log(`🔍 Worker log for session ${sessionId}:`, message.data);
                     break;
             }
         };
@@ -247,7 +306,7 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
             }
         };
 
-        worker.on('message', messageListener);
+        worker.on('message', initMessageListener);
         worker.on('error', errorListener);
 
         worker.on('exit', (code) => {
@@ -264,7 +323,7 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
 
         // Validate and send data
         const apiKey = getApiKeyForAgent(sessionId) ?? process.env.API_KEY;
-        if (!apiKey) {
+        if (!apiKey && !isEndpoint) {
             rejectOnce(new Error('No API key available for session'));
             return;
         }
@@ -292,6 +351,37 @@ const setUpWorkerEvents = (worker: Worker, sessionId: string, goal: string, seri
     });
 };
 
+// Permanent listener for ongoing worker messages
+const setupPermanentListener = (worker: Worker, sessionId: string) => {
+    const permanentListener = (message: any) => {
+        switch (message.type) {
+            case 'session_cleanup':
+                console.log(`🧹 Received cleanup request for session ${message.sessionId}`);
+                deleteSession(message.sessionId);
+                deleteSessionApiKey(message.sessionId);
+                worker.removeAllListeners('message');
+                worker.removeAllListeners('error');
+                worker.removeAllListeners('exit');
+                break;
+
+            case 'error':
+                console.error(`❌ Agent error for session ${sessionId}:`, message.error);
+                break;
+
+            case 'websocket_message':
+                if (parentWSS) parentWSS.sendToClient(message.sessionId, message.data);
+                break;
+
+            case 'log':
+                console.log(`🔍 Worker log for session ${sessionId}:`, message.data);
+                break;
+        }
+    };
+
+    worker.on('message', permanentListener);
+    console.log(`✅ Permanent message listener attached for session ${sessionId}`);
+}
+
 const setupWSS = async (): Promise<ParentWebSocketServer> => {
     try {
         if (parentWSS) return parentWSS; // reuse
@@ -307,6 +397,15 @@ const setupWSS = async (): Promise<ParentWebSocketServer> => {
     }
 };
 
+/**
+ * Attempts to retrieve agent configurations from the cache or generate them
+ * using AI or keyword matching. If no agents are found, throws an error.
+ *
+ * @param goal The user's goal or instruction
+ * @param detailed Whether to return detailed agent configurations
+ * @param endpoint Whether to use the endpoint agent configuration
+ * @returns A promise that resolves to an array of agent configurations
+ */
 async function getCachedAgents(goal: string, detailed: boolean, endpoint: boolean): Promise<MiniAgentConfig[]> {
     const cacheKey = `${goal}_${detailed}_${endpoint}`;
 
@@ -347,6 +446,9 @@ async function getCachedAgents(goal: string, detailed: boolean, endpoint: boolea
         name: config.name,
         sessionType: config.sessionType,
         dependent: config.dependent,
+        thinkerType: config.thinkerType,
+        actionServiceType: config.actionServiceType,
+        dependencies: config.dependencies,
         agentDependencies: config.agentDependencies,
     }));
 
@@ -358,6 +460,23 @@ async function getCachedAgents(goal: string, detailed: boolean, endpoint: boolea
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Welcome to QA-Agent! Go to https://www.qa-agent.site/ for more info.');
+});
+
+app.get('/monitor/:sessionId/:port', (req, res, next) => {
+    res.removeHeader('Content-Security-Policy');
+    next();
+}, (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'monitor.html'));
+});
+
+app.get('/public-key', (req, res) => {
+    try {
+        const { publicKey } = loadKeys();
+        res.json({ publicKey });
+    } catch (error) {
+        console.error('Error loading public key:', error);
+        res.status(500).json({ error: 'Failed to load public key' });
+    }
 });
 
 app.get('/health', (req: Request, res: Response) => {
@@ -420,7 +539,7 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
         const worker = workerPool.getWorker(sessionId, url, data);
 
         const websocketPort: number = await Promise.race([
-            setUpWorkerEvents(worker, sessionId, goal, serializableConfigs),
+            setUpWorkerEvents(worker, endpoint, sessionId, goal, serializableConfigs),
             new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error("Worker initialization timeout")), 30000)
             )
@@ -573,7 +692,7 @@ app.post('/test/:key', async (req: Request, res: Response) => {
         const worker = workerPool.getWorker(sessionId, url, data);
 
         const websocketPort: number = await Promise.race([
-            setUpWorkerEvents(worker, sessionId, goal, serializableConfigs),
+            setUpWorkerEvents(worker, endpoint, sessionId, goal, serializableConfigs),
             new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error("Worker initialization timeout")), 30000)
             )
@@ -645,8 +764,14 @@ app.get('/status/:sessionId', async (req: Request, res: Response) => {
 // Endpoint to receive and encrypt API key
 app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
     try {
-        const { apiKey, testKey } = req.body;
         const { sessionId } = req.params;
+        const { encryptedApiKey, testKey } = req.body;
+
+        // Load the private key
+        const { privateKey } = loadKeys();
+
+        // Decrypt the API key
+        const apiKey = decryptApiKeyFromFrontend(encryptedApiKey, privateKey);
 
         let newApiKey = apiKey;
 
@@ -662,6 +787,10 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
 
         if (testKey && apiKey.startsWith('TEST') && testKey == process.env.TEST_KEY) {
             console.log('Test API key received');
+            if(!process.env.TEST_API_KEY) {
+                res.status(400).json({ error: 'Test API key is required' });
+                return;
+            }
             newApiKey = process.env.TEST_API_KEY;
         }
 
@@ -708,6 +837,7 @@ process.on('SIGINT', () => {
     process.exit(0);
 });
 
+// Memory check
 const memoryCheck = setInterval(() => {
     const mem = process.memoryUsage();
 
@@ -731,7 +861,3 @@ process.on('SIGTERM', () => {
     WorkerPool.getInstance().shutdown();
     process.exit(0);
 });
-
-// Classify (fails?) → LLM Classify → Generate Test Data → Test Them
-//      ↓
-// Generate Test Data (fails?) → LLM Generate Test Data → Test Them

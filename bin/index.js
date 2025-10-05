@@ -208,7 +208,8 @@ const logFiles = {
   logs: 'agent.log',
   mission: 'mission_log.md',
   'crawl-map': 'crawl_map.md',
-  'navigation-tree': 'navigation_tree.md'
+  'navigation-tree': 'navigation_tree.md',
+  results: 'crawl_map.md'
 };
 
 const sessionForSubcommand = String(args.sessionid ?? args.sessionId ?? '1');
@@ -220,7 +221,7 @@ if (subcommand === 'logs-dir') {
 
 if (subcommand && logFiles[subcommand]) {
   // For certain markdown logs we store per-session files like crawl_map_<session>.md
-  const sessionized = new Set(['crawl-map', 'logs', 'navigation-tree', 'mission']);
+  const sessionized = new Set(['crawl-map', 'logs', 'results', 'navigation-tree', 'mission']);
 
   let filename = logFiles[subcommand];
   if (sessionized.has(subcommand)) {
@@ -300,6 +301,7 @@ if (args.help || args.h) {
       agent-run crawl-map       Show crawl map in markdown. The crawl map shows detailed results of the agent's crawl
       agent-run logs-dir        Show logs directory
       agent-run stop            Stop all agents
+      agent-run results         Show detailed results in markdown
 
     Config File Example:
       {
@@ -354,7 +356,7 @@ if (!goal) {
   process.exit(1);
 }
 
-if (!key) {
+if (!key && !endpoint) {
   console.error('❌ Please provide a --key argument. Example: agent-run --goal "Test login" --key "api-key" --url "http://localhost:3000"');
   process.exit(1);
 }
@@ -374,35 +376,6 @@ console.log('🔍 Checking port availability...');
 
 let existingPid = getPidUsingPort(port);
 let hasPortIssues = false;
-
-// const portStatus = await checkPort(port).then(available => ({ main: available }));
-
-// let hasPortIssues = false;
-
-// if (!portStatus.main) {
-//   const pid = getPidUsingPort(port);
-//   if (pid) {
-//     const cmd = getCmdlineForPid(pid);
-//     if (isOurServerCommand(cmd)) {
-//       console.log(`ℹ️ Port ${port} is already used by agent server (PID: ${pid}). Will reuse existing server.`);
-//       try { if (!fs.existsSync(pidFile)) fs.writeFileSync(pidFile, pid); } catch (e) { /* ignore */ }
-//     } else {
-//       console.error(`❌ Port ${port} is already in use by PID ${pid} (${cmd}). Please choose a different --port.`);
-//       hasPortIssues = true;
-//     }
-//   } else {
-//     console.error(`❌ Port ${port} is already in use. Please choose a different --port.`);
-//     hasPortIssues = true;
-//   }
-// }
-
-// if (hasPortIssues) {
-//   console.error('\n💡 Try running with different ports:');
-//   console.error(`   agent-run --goal "${goal}" --key "${key}" --url "${url}" --port 3003`);
-//   process.exit(1);
-// }
-
-// console.log(`✅ Ports ${port} is available.`);
 
 if (existingPid) {
   const cmd = getCmdlineForPid(existingPid);
@@ -533,7 +506,7 @@ if (autoStart) {
     const headers = { 'Content-Type': 'application/json' };
 
     await makeRequest(baseUrl, finalEndpoint, { body, headers });
-    const updatesUrl = `https://www.qa-agent.site/updates/#tab=local&port=${port}`;
+    const updatesUrl = `http://localhost:${port}/monitor/${sessionId}/${port}`;
 
     if (autoconnect) {
       try {

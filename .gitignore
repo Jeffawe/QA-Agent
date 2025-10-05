@@ -10,6 +10,7 @@ package-lock.json
 .pnpm-debug.log
 agentConfig.json
 agent-config.json
+agent-config2.json
 downloads/
 crawl_map.md
 
@@ -17,7 +18,9 @@ crawl_map.md
 # Environment Variables
 # ----------------------------------------
 .env
-.env.*          # For multiple envs like .env.production, .env.local
+.env.*        
+private.pem
+public.pem
 
 # ----------------------------------------
 # Build Artifacts

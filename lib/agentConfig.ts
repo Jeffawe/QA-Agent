@@ -19,6 +19,7 @@ export const goalConfigWithDesc: AgentConfigWithDescription[] = [
         name: "goalagent",
         sessionType: "stagehand",
         dependent: true,
+        thinkerType: "combined",
         description: "Accomplish specific tasks and objectives with intelligent planning",
         keywords: ["goal", "task", "objective", "accomplish", "achieve", "complete", "intelligent", "planning"]
     },
@@ -26,6 +27,7 @@ export const goalConfigWithDesc: AgentConfigWithDescription[] = [
         name: "planneragent",
         sessionType: "stagehand",
         dependent: false,
+        thinkerType: "combined",
         agentDependencies: ["goalagent"],
         description: "Create strategic plans and workflows for complex multi-step processes",
         keywords: ["plan", "strategy", "workflow", "steps", "process", "organize", "structure"]
@@ -37,6 +39,7 @@ export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
         name: "autoanalyzer",
         sessionType: "stagehand",
         dependent: true,
+        thinkerType: "combined",
         description: "Analyze and process extracted content for insights and patterns",
         keywords: ["analyze", "process", "insights", "patterns", "evaluate", "examine", "study"]
     },
@@ -52,6 +55,7 @@ export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
         sessionType: "stagehand",
         actionServiceType: "manual",
         dependent: true,
+        thinkerType: "combined",
         agentDependencies: [],
         description: "Perform manual testing and detailed analysis of specific components",
         keywords: ["manual", "test", "detailed", "analysis", "specific", "components", "examine"]
@@ -60,6 +64,7 @@ export const crawlerConfigWithDesc: AgentConfigWithDescription[] = [
         name: "autocrawler",
         sessionType: "stagehand",
         dependent: false,
+        thinkerType: "combined",
         agentDependencies: ["manualAutoanalyzer", "autoanalyzer"],
         description: "Crawl and navigate through entire websites to extract comprehensive data",
         keywords: ["crawl", "scrape", "navigate", "website", "data", "extract", "comprehensive", "entire", "all pages"]
@@ -71,6 +76,7 @@ const testerConfig: AgentConfigWithDescription = {
     name: "tester",
     sessionType: "stagehand",
     dependent: false,
+    thinkerType: "combined",
     description: "Test functionality and validate elements automatically",
     keywords: ["test", "validate", "verify", "check", "functionality", "behavior", "automatic"]
 };
@@ -79,6 +85,7 @@ const endPointConfig: AgentConfigWithDescription = {
     name: "endpointagent",
     sessionType: "playwright",
     dependent: false,
+    thinkerType: "default",
     description: "Test functionality and validate API endpoints",
     keywords: ["API", "endpoint", "test", "validate", "functionality", "response", "check"]
 };

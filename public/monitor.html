@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QA Agent - Local Monitor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e3e7ed 100%);
+      min-height: 100vh;
+      padding: 1rem;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .warning-box {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: start;
+      gap: 1rem;
+    }
+
+    .warning-icon {
+      flex-shrink: 0;
+      width: 2.5rem;
+      height: 2.5rem;
+      background: #ffc107;
+      border-radius: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #000;
+      font-size: 1.5rem;
+    }
+
+    .card {
+      background: white;
+      border-radius: 0.75rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: #1a202c;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 1rem;
+      width: 100%;
+    }
+
+    .status-connected {
+      background: #10b981;
+      color: white;
+    }
+
+    .status-disconnected {
+      background: #6b7280;
+      color: white;
+    }
+
+    .input-group {
+      margin-bottom: 1rem;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 0.5rem;
+    }
+
+    .input-group input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 0.5rem;
+      font-size: 1rem;
+    }
+
+    .input-group input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .button-group {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 0.5rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #2563eb;
+    }
+
+    .btn-success {
+      background: #10b981;
+      color: white;
+    }
+
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: #dc2626;
+    }
+
+    .logs-container {
+      background: #1a1a1a;
+      color: #10b981;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      height: 200px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    .log-entry {
+      margin-bottom: 0.5rem;
+      word-wrap: break-word;
+    }
+
+    .log-time {
+      color: #6b7280;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: #6b7280;
+    }
+
+    .empty-state svg {
+      width: 4rem;
+      height: 4rem;
+      margin: 0 auto 1rem;
+      opacity: 0.5;
+    }
+
+    .page-card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 0.75rem;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .page-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #1a202c;
+    }
+
+    .page-url {
+      font-size: 0.75rem;
+      color: #3b82f6;
+      word-break: break-all;
+    }
+
+    .badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .badge-success {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .section {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+    }
+
+    .section-title {
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    .bug-section {
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+    }
+
+    .bug-section .section-title {
+      color: #991b1b;
+    }
+
+    .issue-list {
+      list-style: none;
+    }
+
+    .issue-item {
+      padding: 0.5rem;
+      margin-bottom: 0.5rem;
+      background: white;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+    }
+
+    .severity {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-left: 0.5rem;
+    }
+
+    .severity-high {
+      background: #dc2626;
+      color: white;
+    }
+
+    .severity-medium {
+      background: #f59e0b;
+      color: white;
+    }
+
+    .severity-low {
+      background: #10b981;
+      color: white;
+    }
+
+    .toggle-link {
+      color: #3b82f6;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 0.875rem;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .toggle-link:hover {
+      color: #2563eb;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 0.5rem;
+      height: 0.5rem;
+      background: white;
+      border-radius: 50%;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.5;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="warning-box">
+      <div class="warning-icon">⚠️</div>
+      <div>
+        <strong>Beta Warning:</strong> QA Agent is currently in beta. Some features may not work as expected. We
+        appreciate your feedback!
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Local Agent Monitoring</h2>
+      <div id="status-badge" class="status-badge status-disconnected">Disconnected</div>
+
+      <div class="input-group">
+        <label for="port-input">WebSocket Port</label>
+        <input type="text" id="port-input" placeholder="3001" value="3001">
+      </div>
+
+      <div class="button-group">
+        <button id="connect-btn" class="btn btn-primary">Connect</button>
+        <button id="disconnect-btn" class="btn btn-danger" disabled>Stop Server</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 class="card-title" style="margin: 0;">Agent Logs</h2>
+        <button id="toggle-logs" class="toggle-link">Hide Logs</button>
+      </div>
+      <div id="logs-container" class="logs-container"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">Live Page Analysis</h2>
+      <div id="updates-container"></div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      let ws = null;
+      let connected = false;
+      const logs = [];
+      const updates = [];
+
+      // Extract sessionId and port from URL path
+      const pathParts = window.location.pathname.split('/');
+      const sessionId = pathParts[2] || '1';
+      const defaultPort = pathParts[3] || '3001';
+
+      const statusBadge = document.getElementById('status-badge');
+      const portInput = document.getElementById('port-input');
+      const connectBtn = document.getElementById('connect-btn');
+      const disconnectBtn = document.getElementById('disconnect-btn');
+      const logsContainer = document.getElementById('logs-container');
+      const updatesContainer = document.getElementById('updates-container');
+      const toggleLogsBtn = document.getElementById('toggle-logs');
+
+      // Set the port input to the URL parameter
+      portInput.value = defaultPort;
+
+      let showLogs = true;
+
+      toggleLogsBtn.addEventListener('click', () => {
+        showLogs = !showLogs;
+        logsContainer.style.display = showLogs ? 'block' : 'none';
+        toggleLogsBtn.textContent = showLogs ? 'Hide Logs' : 'Show Logs';
+      });
+
+      connectBtn.addEventListener('click', () => {
+        const port = portInput.value || defaultPort;
+        console.log(`Connecting to port ${port} with session ${sessionId}`);
+        connect(port);
+      });
+
+      disconnectBtn.addEventListener('click', () => {
+        disconnect();
+      });
+
+      function connect(port) {
+        const wsUrl = `ws://localhost:${port}/websocket?sessionId=${sessionId}`;
+
+        connectBtn.innerHTML = '<span class="loading-spinner"></span> Connecting...';
+        connectBtn.disabled = true;
+
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          connected = true;
+          updateConnectionStatus();
+          addLog(`WebSocket connection opened (Session: ${sessionId})`);
+          connectBtn.innerHTML = 'Connected';
+          connectBtn.classList.remove('btn-primary');
+          connectBtn.classList.add('btn-success');
+          disconnectBtn.disabled = false;
+        };
+
+        // ... rest of the WebSocket handlers remain the same ...
+        ws.onerror = (error) => {
+          connected = false;
+          updateConnectionStatus();
+          addLog('WebSocket error occurred');
+          alert('WebSocket connection error. Please check if the port is valid.');
+          connectBtn.innerHTML = 'Connect';
+          connectBtn.disabled = false;
+          connectBtn.classList.remove('btn-success');
+          connectBtn.classList.add('btn-primary');
+        };
+
+        ws.onclose = () => {
+          connected = false;
+          updateConnectionStatus();
+          addLog('WebSocket connection closed');
+          connectBtn.innerHTML = 'Connect';
+          connectBtn.disabled = false;
+          connectBtn.classList.remove('btn-success');
+          connectBtn.classList.add('btn-primary');
+          disconnectBtn.disabled = true;
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            handleMessage(message);
+          } catch (error) {
+            console.error('Error parsing message:', error);
+          }
+        };
+      }
+
+      // ... rest of your functions remain the same ...
+      function disconnect() {
+        if (ws) {
+          ws.close();
+          ws = null;
+        }
+        connected = false;
+        updateConnectionStatus();
+      }
+
+      function updateConnectionStatus() {
+        if (connected) {
+          statusBadge.textContent = `Connected (Session: ${sessionId})`;
+          statusBadge.classList.remove('status-disconnected');
+          statusBadge.classList.add('status-connected');
+        } else {
+          statusBadge.textContent = 'Disconnected';
+          statusBadge.classList.remove('status-connected');
+          statusBadge.classList.add('status-disconnected');
+        }
+      }
+
+      function handleMessage(message) {
+        switch (message.type) {
+          case 'CONNECTION':
+            alert(`🔗 Connection confirmed: ${message.data.message}`);
+            break;
+          case 'ISSUE':
+            alert(`❗Issue detected: ${message.data.message}`);
+            break;
+          case 'STOP_WARNING':
+            alert(`⚠️ ${message.data.message}`);
+            break;
+          case 'DONE':
+            alert('Agent is Done! Leave feedback on how it performed!');
+            break;
+          case 'INITIAL_DATA':
+            if (message.data.pages) {
+              updates.length = 0;
+              updates.push(...message.data.pages);
+              renderUpdates();
+            }
+            if (message.data.messages) {
+              logs.length = 0;
+              logs.push(...message.data.messages);
+              renderLogs();
+            }
+            break;
+          case 'LOG':
+            if (message.data.message) {
+              addLog(message.data.message);
+            }
+            break;
+          case 'CRAWL_MAP_UPDATE':
+            if (message.data.page) {
+              updatePage(message.data.page);
+            }
+            break;
+          default:
+            console.log('Unknown message type:', message.type);
+        }
+      }
+
+      function addLog(message) {
+        logs.push(message);
+        if (logs.length > 50) {
+          logs.shift();
+        }
+        renderLogs();
+      }
+
+      function renderLogs() {
+        if (logs.length === 0) {
+          logsContainer.innerHTML = '<div style="color: #6b7280; font-style: italic;">No logs yet. Connect to see live updates...</div>';
+          return;
+        }
+
+        logsContainer.innerHTML = logs.map(log => {
+          const time = new Date().toLocaleTimeString();
+          return `<div class="log-entry"><span class="log-time">[${time}]</span> ${escapeHtml(log)}</div>`;
+        }).join('');
+
+        logsContainer.scrollTop = logsContainer.scrollHeight;
+      }
+
+      function updatePage(page) {
+        const index = updates.findIndex(u => u.url === page.url);
+        if (index !== -1) {
+          updates[index] = { ...updates[index], ...page };
+        } else {
+          updates.push(page);
+          if (updates.length > 20) {
+            updates.shift();
+          }
+        }
+        renderUpdates();
+      }
+
+      function renderUpdates() {
+        if (updates.length === 0) {
+          updatesContainer.innerHTML = '<div class="empty-state"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg><p>No page analysis data yet.</p></div>';
+          return;
+        }
+
+        updatesContainer.innerHTML = updates.map(page => {
+          let html = `
+          <div class="page-card">
+            <div class="page-header">
+              <div style="flex: 1;">
+                <h3 class="page-title">${escapeHtml(page.title)}</h3>
+                <div class="page-url">${escapeHtml(page.url)}</div>
+              </div>
+              <span class="badge badge-success">Analyzed</span>
+            </div>
+            <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">${escapeHtml(page.description || '')}</p>
+        `;
+
+          if (page.analysis) {
+            if (page.analysis.bugs && page.analysis.bugs.length > 0) {
+              html += `
+              <div class="section bug-section">
+                <div class="section-title">🐛 Bugs Found (${page.analysis.bugs.length})</div>
+                <ul class="issue-list">
+                  ${page.analysis.bugs.map(bug => `
+                    <li class="issue-item">
+                      ${escapeHtml(bug.description)}
+                      <span class="severity severity-${bug.severity}">${bug.severity}</span>
+                    </li>
+                  `).join('')}
+                </ul>
+              </div>
+            `;
+            }
+
+            if (page.analysis.ui_issues && page.analysis.ui_issues.length > 0) {
+              html += `
+              <div class="section" style="background: #fef3c7; border: 1px solid #fbbf24;">
+                <div class="section-title" style="color: #92400e;">⚠️ UI Issues (${page.analysis.ui_issues.length})</div>
+                <ul class="issue-list">
+                  ${page.analysis.ui_issues.map(issue => `
+                    <li class="issue-item">
+                      ${escapeHtml(issue.description)}
+                      <span class="severity severity-${issue.severity}">${issue.severity}</span>
+                    </li>
+                  `).join('')}
+                </ul>
+              </div>
+            `;
+            }
+          }
+
+          html += '</div>';
+          return html;
+        }).join('');
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      renderLogs();
+      renderUpdates();
+    });
+  </script>
+</body>
+
+</html>

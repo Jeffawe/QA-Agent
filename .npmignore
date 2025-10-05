@@ -21,6 +21,7 @@ dist/python/
 dist/externalCall.js
 assets/
 agent-config.json
+agent-config2.json
 generateEmbeddings.js
 deploy.sh
 

@@ -1,6 +1,6 @@
 {
   "name": "qa-agent",
-  "version": "2.2.2-beta.0",
+  "version": "2.2.3-beta.0",
   "description": "AI-powered QA agent using LLM models for automated testing and web interaction",
   "main": "dist/server.js",
   "type": "module",
@@ -62,7 +62,6 @@
     "express-slow-down": "^3.0.0",
     "express-validator": "^7.2.1",
     "helmet": "^8.1.0",
-    "ioredis": "^5.7.0",
     "langchain": "^0.3.30",
     "minimist": "^1.2.8",
     "multer": "^2.0.2",
@@ -70,8 +69,7 @@
     "openai": "^5.8.2",
     "playwright": "^1.55.0",
     "uuid": "^11.1.0",
-    "ws": "^8.18.3",
-    "zod-to-json-schema": "^3.24.6"
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "ts-node": "^10.9.2",

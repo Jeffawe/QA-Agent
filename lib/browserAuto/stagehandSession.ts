@@ -37,7 +37,7 @@ export default class StagehandSession extends Session<Page> {
             this.apiKey = key;
             this.stagehand = new Stagehand({
                 env: "LOCAL",
-                modelName: "gemini-1.5-flash",
+                modelName: "gemini-2.0-flash",
                 modelClientOptions: {
                     apiKey: this.apiKey,
                 },

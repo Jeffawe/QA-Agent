@@ -126,7 +126,8 @@ export class LogManager {
     this.logs = [];
 
     try {
-      fs.writeFileSync(this.logFilePath, '');
+      fs.unlinkSync(this.logFilePath);
+      console.log('Log file cleared.');
     } catch (err) {
       console.error('Error clearing log file:', err);
     }

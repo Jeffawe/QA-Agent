@@ -45,6 +45,7 @@ export function storeImage(imagePath: string, outputDir: string = imageDir): str
     return outputPath;
 }
 
+// Clear all images in the output directory
 export function clearAllImages(outputDir: string = imageDir): void {
     fs.readdirSync(outputDir).forEach(file => {
         const filePath = path.join(outputDir, file);
@@ -52,6 +53,17 @@ export function clearAllImages(outputDir: string = imageDir): void {
     });
 }
 
+
+/**
+ * Annotate an image with interactive elements.
+ *
+ * @param {string} imagePath Path to the original image.
+ * @param {InteractiveElement[]} elements List of interactive elements to annotate.
+ * @param {string} outputPath Path to save the annotated image.
+ * @param {Partial<AnnotationOptions>} [options] Options for annotation.
+ *
+ * @returns {Promise<void>} Promise that resolves when the image is annotated.
+ */
 export async function annotateImage(
     imagePath: string,
     elements: InteractiveElement[],

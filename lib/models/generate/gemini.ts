@@ -24,6 +24,7 @@ export class GeminiLLm extends LLM {
     private model: ChatGoogleGenerativeAI | null = null;
     private eventBus: EventBus | null = null;
     private logManager: LogManager;
+    private modelName = "gemini-2.5-flash";
 
     constructor(sessionId: string) {
         super("gemini");
@@ -46,7 +47,7 @@ export class GeminiLLm extends LLM {
                 this.genAI = new GoogleGenAI({ apiKey: this.apiKey });
 
                 this.model = new ChatGoogleGenerativeAI({
-                    model: "gemini-2.5-flash",
+                    model: this.modelName,
                     temperature: 0,
                     apiKey: this.apiKey
                 });
@@ -161,7 +162,7 @@ export class GeminiLLm extends LLM {
                     }
 
                     response = await this.genAI?.models.generateContent({
-                        model: "gemini-2.5-flash",
+                        model: this.modelName,
                         contents: [
                             createUserContent([
                                 prompt,
@@ -195,7 +196,7 @@ export class GeminiLLm extends LLM {
                 this.eventBus?.emit({
                     ts: Date.now(),
                     type: "llm_call",
-                    model_name: "gemini-2.5-flash",
+                    model_name: this.modelName,
                     promptTokens: prompt.length, // approximate: 1 token ~ 4 characters
                     respTokens: content.length ?? 0, // approximate again
                 });
@@ -203,7 +204,7 @@ export class GeminiLLm extends LLM {
                 this.eventBus?.emit({
                     ts: Date.now(),
                     type: "llm_call",
-                    model_name: "gemini-2.5-flash",
+                    model_name: this.modelName,
                     promptTokens: prompt.length, // approximate: 1 token ~ 4 characters
                     respTokens: 0, // approximate again
                 });
@@ -299,7 +300,7 @@ export class GeminiLLm extends LLM {
             this.eventBus?.emit({
                 ts: Date.now(),
                 type: "llm_call",
-                model_name: "gemini-2.5-flash",
+                model_name: this.modelName,
                 promptTokens: tokenUsage.promptTokens, // approximate: 1 token ~ 4 characters
                 respTokens: tokenUsage.responseTokens ?? 0, // approximate again
             });

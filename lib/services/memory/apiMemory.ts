@@ -1,5 +1,3 @@
-// Due for change to Redis
-
 import crypto from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
@@ -111,6 +109,24 @@ const decrypt = (encryptedData: EncryptedData): string => {
         throw new Error('Failed to decrypt data - invalid key or corrupted data');
     }
 };
+
+export const decryptApiKeyFromFrontend = (encryptedApiKey: any, privateKey: any) => {
+  try {
+    const buffer = Buffer.from(encryptedApiKey, 'base64');
+    const decrypted = crypto.privateDecrypt(
+      {
+        key: privateKey,
+        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+        oaepHash: 'sha256',
+      },
+      buffer
+    );
+    return decrypted.toString('utf8');
+  } catch (error) {
+    console.error('Decryption failed:', error);
+    throw new Error('Failed to decrypt API key');
+  }
+}
 
 // Utility function to validate encryption secret
 const validateEncryptionSecret = (): void => {
