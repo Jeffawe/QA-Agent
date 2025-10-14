@@ -52,11 +52,6 @@ const validateReferer = (req: Request, res: Response, next: express.NextFunction
         const referer = req.get('Referer');
         const origin = req.get('Origin');
 
-        if (referer && !referer.startsWith('http')) {
-            // If it's just "127.0.0.1", make it valid
-            next();
-            return;
-        }
         const requestOrigin = origin || (referer ? new URL(referer).origin : null);
 
         // Allow no-origin requests in dev

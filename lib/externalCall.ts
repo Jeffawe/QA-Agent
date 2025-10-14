@@ -107,7 +107,7 @@ export const checkUserKey = async (sessionId: string, userKey: string, returnApi
             throw new Error(data.error || 'Failed to check user key');
         }
 
-        if (returnApiKey && process.env.TEST_API_KEY) {
+        if (returnApiKey && data.exists && process.env.TEST_API_KEY) {
             // Store encrypted key mapped to sessionId
             storeSessionApiKey(sessionId, process.env.TEST_API_KEY);
         }
