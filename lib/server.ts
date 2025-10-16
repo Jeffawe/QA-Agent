@@ -687,12 +687,13 @@ app.post('/test/:key', async (req: Request, res: Response) => {
         ]);
 
         if (!keyValidationSuccess) {
-            res.status(401).send('Unauthorized');
+            console.error('Unauthorized. Test Keys are not available for use in local environments if you are using the npm version. If not, try again with the api key.');
+            res.status(401).send('Unauthorized. Test Keys are not available for use in local environments if you are using the npm version. If not, try again with the api key.');
             return;
         }
 
         if (!goal) {
-            res.status(500).send('USER_GOAL is not set. Please set the USER_GOAL environment variable.');
+            res.status(500).send('USER_GOAL is not set. Please set the USER_GOAL (goal) variable.');
             return;
         }
 
