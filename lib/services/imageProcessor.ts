@@ -47,10 +47,14 @@ export function storeImage(imagePath: string, outputDir: string = imageDir): str
 
 // Clear all images in the output directory
 export function clearAllImages(outputDir: string = imageDir): void {
-    fs.readdirSync(outputDir).forEach(file => {
-        const filePath = path.join(outputDir, file);
-        fs.unlinkSync(filePath);
-    });
+    try {
+        fs.readdirSync(outputDir).forEach(file => {
+            const filePath = path.join(outputDir, file);
+            fs.unlinkSync(filePath);
+        });
+    } catch (e) { 
+        console.error(e);
+    }
 }
 
 
