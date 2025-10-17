@@ -6,10 +6,10 @@ import { GroupedUIElements, UIElementGrouper } from "../utility/links/linkGroupe
 import { Page } from "@browserbasehq/stagehand";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { TestingThinker } from "../services/thinkers/testingThinker.js";
-import { batchTestElements, quickTestButtonElement, validateLinkUrl } from "../utility/links/linktesterUtilities.js";
+import { batchTestElements, quickTestButtonElement } from "../utility/links/linktesterUtilities.js";
 
 export default class Tester extends Agent {
-    public nextLink: Omit<LinkInfo, 'visited'> | null = null;
+    public nextLink: LinkInfo | null = null;
 
     private queue: LinkInfo[] = [];
     private observedElements: StageHandObserveResult[] = [];
@@ -55,8 +55,6 @@ export default class Tester extends Agent {
             this.setState(State.ERROR);
             throw new Error('Page not initialized');
         }
-
-        this.page! = this.stagehandSession.page;
     }
 
     protected validateSessionType(): void {
@@ -84,7 +82,15 @@ export default class Tester extends Agent {
             return;
         }
 
-        this.currentUrl = this.stagehandSession.page!.url();
+        if(!this.page){
+            const page = await this.stagehandSession.getPage(this.uniqueId);
+            if(!page){
+                throw new Error("Page not initialized");
+            }
+            this.page = page;
+        }
+
+        this.currentUrl = this.page!.url();
 
         try {
             switch (this.state) {
@@ -102,7 +108,7 @@ export default class Tester extends Agent {
                 case State.OBSERVE:
                     try {
                         this.logManager.log(`Observing page: ${this.currentUrl}`, this.buildState());
-                        const rawObservedElements = await this.stagehandSession.observe();
+                        const rawObservedElements = await this.stagehandSession.observe(this.uniqueId);
 
                         // Filter out any elements that already exist in the queue
                         this.observedElements = rawObservedElements.filter(observedElement => {
@@ -218,7 +224,7 @@ export default class Tester extends Agent {
             return;
         }
 
-        this.groupedElements = await UIElementGrouper.groupUIElements(this.observedElements, this.stagehandSession.page!);
+        this.groupedElements = await UIElementGrouper.groupUIElements(this.observedElements, this.page!);
 
         const summary = UIElementGrouper.getElementSummary(this.groupedElements);
         this.logManager.log(`Grouped elements: ${JSON.stringify(summary)}`, this.buildState(), true);
@@ -1070,6 +1076,7 @@ export default class Tester extends Agent {
         this.groupedElements = null;
         this.observedElements = [];
         this.pagesSeen = [];
+        this.stagehandSession.closeAgentContext(this.uniqueId);
     }
 
     public getTestResults(): UITesterResult[] {

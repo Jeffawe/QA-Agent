@@ -79,7 +79,7 @@ export class PageMemory {
     }
   }
 
-  static addPage2(details: Omit<PageDetails, 'links'>, links: Omit<LinkInfo, 'visited'>[]) {
+  static addPageWithLinks(details: Omit<PageDetails, 'links'>, links: LinkInfo[]) {
     if (!details.url) return;
     const cleanUrl = PageMemory.cleanUrl(details.url);
     if (!this.pages[cleanUrl]) {
@@ -135,7 +135,7 @@ export class PageMemory {
     url = PageMemory.cleanUrl(url);
     if (this.pages[url]) {
       this.pages[url].endpointResults = results;
-    }else{
+    } else {
       console.warn(`Page not found in memory for URL: ${url}. Cannot add endpoint results.`);
     }
   }
@@ -146,6 +146,12 @@ export class PageMemory {
     return !!this.pages[url]?.screenshot;
   }
 
+  /**
+   * Marks a link as visited.
+   * If the page or link doesn't exist, does nothing.
+   * @param {string} url - URL of the page containing the link to mark as visited.
+   * @param {string} identifier - Description or absolute URL of the link to mark as visited.
+   */
   static markLinkVisited(url: string, identifier: string) {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
@@ -158,6 +164,12 @@ export class PageMemory {
     }
   }
 
+  /**
+   * Finds the next unvisited link on a page.
+   * If the page doesn't exist or all links have been visited, returns null.
+   * @param {string} url - URL of the page to search for unvisited links.
+   * @returns {LinkInfo | null} The next unvisited link on the page, or null if none.
+   */
   static getNextUnvisitedLink(url: string): LinkInfo | null {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
@@ -170,6 +182,12 @@ export class PageMemory {
     return !!this.pages[url];
   }
 
+  /**
+   * Check if all links on a page have been visited.
+   * If the page doesn't exist, returns true.
+   * @param {string} url - URL of the page
+   * @returns {boolean} true if all links are visited, false if not
+   */
   static isFullyExplored(url: string): boolean {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
@@ -177,6 +195,12 @@ export class PageMemory {
     return page.links.every(link => link.visited);
   }
 
+  /**
+   * Removes a link from the page memory
+   * If the page doesn't exist, does nothing
+   * @param {string} url - URL of the page containing the link to remove
+   * @param {string} identifier - Description or absolute URL of the link to remove
+   */
   static removeLink(url: string, identifier: string) {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
@@ -184,6 +208,12 @@ export class PageMemory {
     page.links = page.links.filter(link => link.description !== identifier);
   }
 
+  /**
+   * Gets all unvisited links on a page
+   * If the page doesn't exist, returns an empty array
+   * @param {string} url - URL of the page
+   * @returns {LinkInfo[]} Unvisited links on the page
+   */
   static getAllUnvisitedLinks(url: string): LinkInfo[] {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
@@ -209,10 +239,23 @@ export class PageMemory {
     page.links.forEach(link => link.visited = true);
   }
 
+  /**
+   * Pushes a URL onto the navigation stack.
+   * If the URL is the same as the last one on the stack, it is not pushed.
+   * @param {string} url - URL to push onto the stack
+   */
   static pushToStack(url: string) {
-    this.navStack.push(url);
+    const last = this.navStack[this.navStack.length - 1];
+    if (last !== url) {
+      this.navStack.push(url);
+    }
   }
 
+  /**
+   * Pops the last URL from the navigation stack.
+   * If the stack is empty, returns undefined.
+   * @returns {string | undefined} The last URL on the stack, or undefined if the stack is empty.
+   */
   static popFromStack(): string | undefined {
     if (this.navStack.length === 0) return undefined;
     return this.navStack.pop();
@@ -222,6 +265,12 @@ export class PageMemory {
     return this.navStack.length > 0;
   }
 
+  /**
+   * Checks if a page with the given URL has been visited before.
+   * Returns true if the page has been visited, false otherwise.
+   * @param {string} url - URL of the page to check for
+   * @returns {boolean} True if the page has been visited, false otherwise
+   */
   static isPageVisited(url: string): boolean {
     url = PageMemory.cleanUrl(url);
     return this.pages[url]?.visited || false;

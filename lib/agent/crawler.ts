@@ -91,7 +91,7 @@ export class Crawler extends Agent {
                             visited: false,
                             screenshot: '',
                         };
-                        PageMemory.addPage2(pageDetails, links);
+                        PageMemory.addPageWithLinks(pageDetails, links);
                         CrawlMap.recordPage({ ...pageDetails, links }, this.sessionId);
                     }
                     this.setState(State.EVALUATE);
@@ -159,7 +159,7 @@ export class Crawler extends Agent {
 
                 /*────────── 4. ACT → (START | DONE) ─*/
                 case State.ACT: {
-                    if (!this.isCurrentPageVisited && !this.analyzer.noErrors) {
+                    if (!this.isCurrentPageVisited && !this.analyzer.analyzerStatus) {
                         this.logManager.error("Analyzer did not see the page", this.buildState());
                         this.setState(State.START);
                         break;

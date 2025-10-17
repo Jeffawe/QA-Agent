@@ -9,6 +9,7 @@ import { getApiKeyForAgent } from "../services/memory/apiMemory.js";
 export default class StagehandSession extends Session<Page> {
     public stagehand: Stagehand | null;
     private apiKey: string;
+    private contexts = new Map();
 
     constructor(sessionId: string) {
         super(sessionId);
@@ -131,30 +132,44 @@ export default class StagehandSession extends Session<Page> {
             global.gc();
         }
 
+        this.closeAllContexts();
         await new Promise(r => setTimeout(r, 1000)); // Longer delay
     }
 
-    public async observe(): Promise<ObserveResult[]> {
+    public async observe(agentId?: string): Promise<ObserveResult[]> {
         if (!this.page) {
             throw new Error("Page not initialized");
         }
 
-        const observations = await this.page.observe();
+        const pageToUse: Page = agentId ? await this.getPage(agentId) : this.page;
+
+        const observations = await pageToUse.observe();
         return observations;
     }
 
-    async getCurrentPageInfo() {
+    /**
+     * Returns information about the current page.
+     * @returns {Promise<{title: string, url: string, contentSummary: string}>} 
+     *     A promise that resolves to an object containing the current page's title, URL, and content summary.
+     */
+    async getCurrentPageInfo(agentId?: string): Promise<{ title: string, url: string, contentSummary: string }> {
+        const pageToUse: Page | null = agentId ? await this.getPage(agentId) : this.page;
+
+        if (!pageToUse) {
+            throw new Error("Page not initialized");
+        }
+
         return {
-            title: await this.page?.title(),
-            url: this.page?.url(),
-            contentSummary: await this.getPageContentSummary()
+            title: await pageToUse.title(),
+            url: pageToUse.url(),
+            contentSummary: await this.getPageContentSummary(pageToUse)
         };
     }
 
-    async getPageContentSummary(): Promise<string> {
+    async getPageContentSummary(page: Page): Promise<string> {
         try {
             // Get visible text content
-            const textContent = await this.page?.evaluate(() => {
+            const textContent = await page.evaluate(() => {
                 // Remove script and style elements
                 const scripts = document.querySelectorAll('script, style');
                 scripts.forEach(el => el.remove());
@@ -180,8 +195,15 @@ export default class StagehandSession extends Session<Page> {
     async takeScreenshot(
         folderName: string,
         basicFilename: string,
+        agentId?: string
     ): Promise<string | null> { // Return the actual path instead of boolean
         try {
+            const pageToUse: Page | null = agentId ? await this.getPage(agentId) : this.page;
+
+            if (!pageToUse) {
+                throw new Error("Page not initialized");
+            }
+
             // Convert to absolute path
             const absoluteFolderPath = path.resolve(folderName);
 
@@ -190,18 +212,17 @@ export default class StagehandSession extends Session<Page> {
             }
 
             const filename = path.join(absoluteFolderPath, basicFilename);
-            if (!this.page) throw new Error("Page not initialized");
 
             try {
                 // Wait for network to be mostly idle (but not too long)
-                await this.page.waitForLoadState('networkidle', { timeout: 5000 });
+                await pageToUse.waitForLoadState('networkidle', { timeout: 5000 });
             } catch {
                 // If networkidle times out, continue anyway
                 console.log('Network idle timeout, proceeding with screenshot');
             }
 
             // 🔑 One-liner: full-page screenshot
-            await this.page.screenshot({
+            await pageToUse.screenshot({
                 path: filename as `${string}.png`,
                 fullPage: true,          // captures above-the-fold + below-the-fold
                 type: "png",
@@ -230,7 +251,7 @@ export default class StagehandSession extends Session<Page> {
             const observations = await this.observe();
             console.log('Observations:', observations);
 
-            const summary = await this.getPageContentSummary();
+            const summary = await this.getPageContentSummary(this.page);
             console.log('Page Content Summary:', summary);
         } catch (error) {
             console.error('Error running test script:', error);
@@ -264,12 +285,66 @@ export default class StagehandSession extends Session<Page> {
         })
     }
 
-    public async act(action: string): Promise<void> {
+    public async act(action: string, agentId?: string): Promise<void> {
         if (!this.page) {
             throw new Error("Page not initialized");
         }
 
+        const pageToUse: Page = agentId ? await this.getPage(agentId) : this.page;
+
         // Example action: Click at a specific position
-        await this.page.act(action);
+        await pageToUse.act(action);
+    }
+
+    /**
+     * Gets a Page object for the given agentId.
+     * If the agentId is null or empty, returns the default Page object.
+     * If the agentId is not found in the contexts map, creates a new isolated browser context and page for the agentId.
+     * @param agentId - the agentId to get the Page object for
+     * @returns a Promise that resolves to the Page object for the given agentId
+     */
+    async getPage(agentId?: string): Promise<Page> {
+        if (!this.stagehand) throw new Error("Stagehand not initialized");
+
+        if (agentId == null || !agentId) {
+            return this.stagehand.page;
+        }
+
+        // Reuse existing context if already created
+        if (this.contexts.has(agentId)) {
+            return this.contexts.get(agentId).page;
+        }
+
+        // 🔥 Create new isolated browser context + page
+        this.logManager.log(`Creating new context for agentId: ${agentId}`, State.INFO);
+        const context = this.stagehand.context;
+        const page = await context.newPage();
+        this.contexts.set(agentId, { context, page });
+        return page;
+    }
+
+    async closeAgentContext(agentId: string) {
+        try {
+            const ctx = this.contexts.get(agentId);
+            if (ctx) {
+                await ctx.page.close();
+                await ctx.context.close();
+                this.contexts.delete(agentId);
+            }
+        } catch (error) {
+            console.error("Error closing context:", error);
+        }
+    }
+
+    async closeAllContexts() {
+        try {
+            for (const [agentId, ctx] of this.contexts) {
+                await ctx.page.close();
+                await ctx.context.close();
+            }
+            this.contexts.clear();
+        } catch (error) {
+            console.error("Error closing contexts:", error);
+        }
     }
 }

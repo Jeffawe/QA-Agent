@@ -5,6 +5,7 @@ import { pipeline } from '@xenova/transformers';
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import { ExtractorOptions } from "../types.js";
 import AutoActionService from "../services/actions/autoActionService.js";
+import { isSameOriginWithPath } from "../utility/functions.js";
 
 interface ClassificationResult {
     label: string;
@@ -109,7 +110,7 @@ export default class PlannerAgent extends Agent {
                 case State.WAIT:
                     this.logManager.log(`PlannerAgent waiting for Goal Agent`, this.buildState(), true);
                     if (this.goalAgent.isDone()) {
-                        if (!this.goalAgent.noErrors) {
+                        if (!this.goalAgent.analyzerStatus) {
                             this.logManager.error("Goal Agent did not see the page, cannot proceed", this.buildState(), true);
                             this.setState(State.PLAN);
                         } else {
@@ -119,6 +120,13 @@ export default class PlannerAgent extends Agent {
                     break;
 
                 case State.VALIDATE:
+                    const isSameOrigin = isSameOriginWithPath(this.stageHandSession.page!.url(), this.currentUrl);
+
+                    if (!isSameOrigin) {
+                        this.logManager.error(`Navigation to external page detected: "${this.currentUrl}" from "${this.stageHandSession.page!.url()}", going back.`, this.buildState(), true);
+                        await this.stageHandSession.page!.goto(this.currentUrl, { waitUntil: "networkidle" });
+                    }
+                    
                     await this.validateGoal();
                     break;
 

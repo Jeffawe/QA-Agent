@@ -11,7 +11,16 @@ export default class AutoActionService extends ActionService {
         this.localsession = session as StagehandSession;
     }
 
-    async executeAction(action: Action, data: LinkInfo, state: State | NamespacedState = State.ACT): Promise<ActionResult> {
+    /**
+     * Executes an action based on the given action object.
+     * 
+     * @param {Action} action - The action to take.
+     * @param {LinkInfo} detailedAction - The detailed action to take if the action.step is not one of the valid steps (It is usually the action itself or one of the valid actions closest to the action given).
+     * @param {State | NamespacedState} [state=State.ACT] - The current state of the crawl.
+     * @returns {Promise<ActionResult>} - The result of the action taken.
+     * @throws {Error} - If the action.step is invalid.
+     */
+    async executeAction(action: Action, detailedAction: LinkInfo, state: State | NamespacedState = State.ACT): Promise<ActionResult> {
         this.intOrext = "external";
         try {
             let finalAction : string = action.step;
@@ -28,12 +37,12 @@ export default class AutoActionService extends ActionService {
                     }
                 }
 
-                const actionToTake = data.selector ?? finalAction;
+                const actionToTake = detailedAction.selector ?? finalAction;
                 await this.localsession.act(actionToTake);
                 this.logManager.log(`Executing action: ${finalAction}`, state);
             }
 
-            return { success: true, message: this.intOrext, actionTaken: finalAction };
+            return { success: true, linkType: this.intOrext, actionTaken: finalAction };
         } catch (error) {
             throw error;
         }

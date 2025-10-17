@@ -1,6 +1,6 @@
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
-import { LinkInfo, StageHandObserveResult, State } from "../types.js";
+import { AnalyzerStatus, LinkInfo, StageHandObserveResult, State } from "../types.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
 import ManualAnalyzer from "./manualAnalyzer.js";
@@ -8,6 +8,8 @@ import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/autoActionService.js";
 import AutoAnalyzer from "./autoanalyzer.js";
 import { UniqueInternalLinkExtractor } from "../utility/links/linkExtractor.js";
+import { Page } from "@browserbasehq/stagehand";
+import { isSameOriginWithPath } from "../utility/functions.js";
 
 export class AutoCrawler extends Agent {
     private isCurrentPageVisited = false;
@@ -18,6 +20,8 @@ export class AutoCrawler extends Agent {
     private stagehandSession: StagehandSession;
 
     private localactionService: AutoActionService;
+    private currentLinkclicked: LinkInfo | null = null;
+    private page: Page | null = null;
 
     constructor(dependencies: BaseAgentDependencies) {
         super("autocrawler", dependencies);
@@ -55,12 +59,16 @@ export class AutoCrawler extends Agent {
             return;
         }
 
-        const page = this.stagehandSession.page;
-        if (!page) {
-            this.logManager.error("Page not initialized", this.buildState());
-            this.setState(State.ERROR);
-            return;
+        if (!this.page) {
+            const page = await this.stagehandSession.getPage();
+            if (!page) {
+                this.logManager.error("Page not initialized", this.buildState());
+                this.setState(State.ERROR);
+                return;
+            }
+            this.page = page;
         }
+
         if (!this.baseUrl) {
             this.logManager.error("BaseURL not found", this.buildState());
             this.setState(State.ERROR);
@@ -76,14 +84,14 @@ export class AutoCrawler extends Agent {
         try {
             switch (this.state) {
 
-                /*────────── 1. START → EVALUATE ──────────*/
+                /*────────── 1. START → OBSERVE ──────────*/
                 case State.START: {
                     (this as any).startTime = performance.now();
-                    this.currentUrl = page.url();
+                    this.currentUrl = this.page.url();
                     // Record the page in memory if we haven’t seen it before
                     if (!PageMemory.pageExists(this.currentUrl)) {
-                        const links: StageHandObserveResult[] = await this.stagehandSession.observe()
-                        const uniqueLinks = await UniqueInternalLinkExtractor.getUniqueInternalLinks(links, this.currentUrl, page);
+                        const links: StageHandObserveResult[] = await this.stagehandSession.observe(this.uniqueId)
+                        const uniqueLinks = await UniqueInternalLinkExtractor.getUniqueInternalLinks(links, this.currentUrl, this.page);
                         //const externalLinks = await getExternalLinks(uniqueLinks, this.currentUrl, page);
                         this.logManager.log(`Links detected: ${uniqueLinks.length} out of ${links.length} are: ${JSON.stringify(uniqueLinks)}`, this.buildState(), false);
                         const pageDetails = {
@@ -95,62 +103,44 @@ export class AutoCrawler extends Agent {
                             screenshot: '',
                         };
                         const linksConverted = this.convertElementsToLinks(uniqueLinks);
-                        const linkWithoutVisited = linksConverted.map(link => {
-                            const { visited, ...rest } = link;
-                            return rest;
-                        });
-                        PageMemory.addPage2(pageDetails, linkWithoutVisited);
+                        PageMemory.addPageWithLinks(pageDetails, linksConverted);
                         CrawlMap.recordPage({ ...pageDetails, links: linksConverted }, this.sessionId);
                     } else {
                         this.logManager.log(`Links detected: ${PageMemory.getAllUnvisitedLinks(this.currentUrl).length}`, this.buildState(), false);
                     }
-                    this.setState(State.EVALUATE);
+                    this.setState(State.OBSERVE);
                     break;
                 }
 
-                /*────────── 2. EVALUATE → VISIT ─────────*/
-                case State.EVALUATE: {
+                case State.OBSERVE: {
                     if (PageMemory.isFullyExplored(this.currentUrl)) {
                         this.logManager.log(`All links visited on page ${this.currentUrl}`, this.buildState(), false);
-                        const back = PageMemory.popFromStack();
-                        if (back) {
-                            this.logManager.log(`Backtracking to ${back}`, this.buildState(), false);
-                            await page.goto(back, { waitUntil: "networkidle" });
-                            this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: back, page: page });
-                            this.setState(State.START);
+                        this.backtrack(this.page);
+                    } else {
+                        // Mark the Link that was clicked last by the analyzer as visited (Did this here instead of act to avoid isFullyExplored beleiving we were done)
+                        if (this.currentLinkclicked) {
+                            PageMemory.markLinkVisited(this.currentUrl, this.currentLinkclicked.description);
+                        }
+
+                        // Start appropriate analyzer
+                        const unvisited = PageMemory.getAllUnvisitedLinks(this.currentUrl);
+                        this.logManager.log(`Visiting ${unvisited.length} unvisited links on page ${this.currentUrl}: ${JSON.stringify(unvisited)}`, this.buildState(), false);
+                        if (PageMemory.isPageVisited(this.currentUrl)) {
+                            this.manualAnalyzer.enqueue(unvisited);
+                            this.isCurrentPageVisited = true;
                         } else {
-                            this.setState(State.DONE);
+                            for (const l of unvisited) {
+                                if (l.href) CrawlMap.addEdge(this.currentUrl!, l.href);
+                            }
+                            PageMemory.markPageVisited(this.currentUrl);
+                            const currentPage = PageMemory.getPage(this.currentUrl);
+                            CrawlMap.recordPage(currentPage, this.sessionId);
+                            this.analyzer.enqueue(unvisited);
+                            this.isCurrentPageVisited = false;
+
                         }
-                    } else {
-                        this.setState(State.VISIT);
+                        this.setState(State.WAIT);
                     }
-                    break;
-                }
-
-                /*────────── 3. VISIT → ACT ─────────────*/
-                case State.VISIT: {
-                    let isVisited = true;
-                    const unvisited = PageMemory.getAllUnvisitedLinks(this.currentUrl);
-                    this.logManager.log(`Visiting ${unvisited.length} unvisited linkson page ${this.currentUrl}: ${JSON.stringify(unvisited)}`, this.buildState(), false);
-                    if (!PageMemory.isPageVisited(this.currentUrl)) {
-                        for (const l of unvisited) {
-                            if (l.href) CrawlMap.addEdge(this.currentUrl!, l.href);
-                        }
-                        PageMemory.markPageVisited(this.currentUrl);
-                        isVisited = false;
-                        const currentPage = PageMemory.getPage(this.currentUrl);
-                        CrawlMap.recordPage(currentPage, this.sessionId);
-                    }
-
-
-                    if (isVisited) {
-                        this.manualAnalyzer.enqueue(unvisited, isVisited);
-                    } else {
-                        this.analyzer.enqueue(unvisited, isVisited);
-                    }
-
-                    this.isCurrentPageVisited = isVisited;
-                    this.setState(State.WAIT);
                     break;
                 }
 
@@ -174,34 +164,39 @@ export class AutoCrawler extends Agent {
 
                 /*────────── 4. ACT → (START | DONE) ─*/
                 case State.ACT: {
-                    if (!this.isCurrentPageVisited && !this.analyzer.noErrors) {
+                    if (!this.isCurrentPageVisited && this.analyzer.analyzerStatus == AnalyzerStatus.PAGE_NOT_SEEN) {
                         this.logManager.error("Analyzer did not see the page", this.buildState());
                         this.setState(State.START);
                         break;
                     }
 
-                    const active = this.isCurrentPageVisited ? this.manualAnalyzer.activeLink : this.analyzer.activeLink;
-                    if (active) {
-                        PageMemory.markLinkVisited(this.currentUrl, active.description);
-                        const finalUrl = page.url();
+                    // Extract the active link clicked on to get where we are
+                    this.currentLinkclicked = this.isCurrentPageVisited ? this.manualAnalyzer.activeLink : this.analyzer.activeLink;
+
+
+                    if (this.currentLinkclicked) {
+                        const newpage = this.page.url();
+
+                        // Check if we are on the same origin, if not, go back
+                        if (!isSameOriginWithPath(this.currentUrl, newpage)) {
+                            this.goto(this.page, newpage, this.currentUrl);
+                            this.logManager.log(`Navigating back to ${this.currentUrl}`, this.buildState(), false);
+                            PageMemory.markLinkVisited(this.currentUrl, this.currentLinkclicked.description);
+                            this.currentLinkclicked = null;
+                            this.setState(State.OBSERVE);
+                            return;
+                        }
+
                         CrawlMap.recordPage(PageMemory.getPage(this.currentUrl), this.sessionId);
                         PageMemory.pushToStack(this.currentUrl);
-                        if (active.href) CrawlMap.addEdge(this.currentUrl!, active.href);
+                        if (this.currentLinkclicked.href) CrawlMap.addEdge(this.currentUrl!, this.currentLinkclicked.href);
 
-                        this.currentUrl = finalUrl;
+                        this.currentUrl = newpage;
                         this.setState(State.START);
                     } else {
                         // dead-end → backtrack
                         this.logManager.log("Backtracking. No more links", this.buildState(), false);
-                        const back = PageMemory.popFromStack();
-                        if (back) {
-                            this.logManager.log(`Backtracking to ${back}`, this.buildState(), false);
-                            await page.goto(back, { waitUntil: "networkidle" });
-                            this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: back, page: page });
-                            this.setState(State.START);
-                        } else {
-                            this.setState(State.DONE);
-                        }
+                        this.backtrack(this.page);
                     }
 
                     const endTime = performance.now();
@@ -255,6 +250,41 @@ export class AutoCrawler extends Agent {
         } catch {
             // Invalid URL? fall back to raw string so the caller can decide
             return href;
+        }
+    }
+
+    private async backtrack(page: Page): Promise<void> {
+        const back = PageMemory.popFromStack();
+        if (back) {
+            this.logManager.log(`Backtracking to ${back}`, this.buildState(), false);
+            await this.goto(page, this.currentUrl, back);
+            this.currentUrl = back;
+            this.setState(State.START);
+        } else {
+            this.logManager.log("No more pages to backtrack to", this.buildState(), false);
+            this.setState(State.DONE);
+        }
+    }
+
+    /**
+     * Navigates to a new page and emits an event when the page is loaded.
+     * @param page - The playwright page to navigate
+     * @param oldPage - The URL of the page before navigation
+     * @param newPage - The URL of the page to navigate to
+     */
+    async goto(page: Page, oldPage: string, newPage: string): Promise<void> {
+        try {
+            await page.goto(newPage, { waitUntil: "networkidle" });
+            this.bus.emit({
+                ts: Date.now(),
+                type: "new_page_visited",
+                oldPage: oldPage,
+                newPage: newPage,
+                page: page
+            });
+        } catch (err) {
+            this.logManager.error(`Crawler error on ${newPage}: ${err}`, this.buildState());
+            this.setState(State.ERROR);
         }
     }
 

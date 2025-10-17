@@ -9,13 +9,16 @@ export default class PlaywrightSession extends Session<Page> {
   private browser: Browser | null = null;
   public rect: Rect | null = null;
   public frame: Frame | null = null;
-  private context: BrowserContext | null = null;
+  private contexts = new Map();
+  private defaultContext: BrowserContext | null = null;
 
   async start(url: string): Promise<boolean> {
     try {
       const browser = await getBrowser();
-      this.context = await browser.newContext();
-      this.page = await this.context.newPage();
+      this.browser = browser;
+      this.defaultContext = await browser.newContext();
+      this.page = await this.defaultContext.newPage();
+      if (!this.page) throw new Error("Page not initialized");
       await this.page.goto(url, { waitUntil: 'networkidle' });
       return true;
     } catch (error) {
@@ -24,8 +27,70 @@ export default class PlaywrightSession extends Session<Page> {
     }
   }
 
-  async takeScreenshot(folderName: string, basicFilename: string): Promise<boolean> {
+  /**
+   * Gets the page for a given agentId.
+   * If the agentId is null or empty, it returns the shared page.
+   * If the agentId is associated with an existing context, it returns the page associated with that context.
+   * If the agentId is not associated with an existing context, it creates a new isolated browser context and page, and returns the new page.
+   * @param {string} agentId - The agentId to get the page for.
+   * @returns {Promise<Page>} - A promise that resolves to the page associated with the agentId.
+   * @throws {Error} - If the Stagehand is not initialized, the page is not initialized, or the default context is not initialized.
+   */
+  async getPage(agentId?: string): Promise<Page> {
+    if (!this.browser) throw new Error("Stagehand not initialized");
+    if (!this.page) throw new Error("Page not initialized");
+    if (!this.defaultContext) throw new Error("Default context not initialized");
+
+    if (agentId == null || !agentId) {
+      return this.page;
+    }
+
+    // Reuse existing context if already created
+    if (this.contexts.has(agentId)) {
+      return this.contexts.get(agentId).page;
+    }
+
+    // 🔥 Create new isolated browser context + page
+    this.logManager.log(`Creating new context for agentId: ${agentId}`, State.INFO);
+    const context = this.defaultContext;
+    const page = await context.newPage();
+    this.contexts.set(agentId, { context, page });
+    return page;
+  }
+
+  async closeAgentContext(agentId: string) {
     try {
+      const ctx = this.contexts.get(agentId);
+      if (ctx) {
+        await ctx.page.close();
+        await ctx.context.close();
+        this.contexts.delete(agentId);
+      }
+    } catch (error) {
+      console.error("Error closing context:", error);
+    }
+  }
+
+  async closeAllContexts() {
+    try {
+      for (const [agentId, ctx] of this.contexts) {
+        await ctx.page.close();
+        await ctx.context.close();
+      }
+      this.contexts.clear();
+    } catch (error) {
+      console.error("Error closing contexts:", error);
+    }
+  }
+
+  async takeScreenshot(folderName: string, basicFilename: string, agentId?: string): Promise<boolean> {
+    try {
+      const pageToUse: Page | null = agentId ? await this.getPage(agentId) : this.page;
+
+      if (!pageToUse) {
+        throw new Error("Page not initialized");
+      }
+
       if (!fs.existsSync(folderName)) {
         fs.mkdirSync(folderName, { recursive: true });
       }
@@ -36,7 +101,7 @@ export default class PlaywrightSession extends Session<Page> {
 
       // Try waiting for fonts but fallback after 2s
       try {
-        await this.page.evaluate(async () => {
+        await pageToUse.evaluate(async () => {
           await Promise.race([
             document.fonts.ready,
             new Promise((resolve) => setTimeout(resolve, 2000)) // max wait 2s
@@ -47,9 +112,9 @@ export default class PlaywrightSession extends Session<Page> {
       }
 
       // Small buffer wait to let rendering stabilize
-      await this.page.waitForTimeout(500);
+      await pageToUse.waitForTimeout(500);
 
-      await this.page.screenshot({
+      await pageToUse.screenshot({
         path: filename,
         fullPage: true,
         timeout: 30000
@@ -63,26 +128,42 @@ export default class PlaywrightSession extends Session<Page> {
     }
   }
 
-  async getCurrentPageInfo() {
+  async getCurrentPageInfo(agentId?: string): Promise<{ title: string, url: string, contentSummary: string }> {
+    const pageToUse: Page | null = agentId ? await this.getPage(agentId) : this.page;
+
+    if (!pageToUse) {
+      throw new Error("Page not initialized");
+    }
+
     return {
-      title: await this.page?.title(),
-      url: this.page?.url(),
-      contentSummary: await this.getPageContentSummary()
+      title: await pageToUse.title(),
+      url: pageToUse.url(),
+      contentSummary: await this.getPageContentSummary(pageToUse)
     };
   }
 
-  async getPageContentSummary(): Promise<string> {
+  async getPageContentSummary(page: Page): Promise<string> {
     try {
-      const textContent = await this.page?.evaluate(() => {
-        document.querySelectorAll('script, style').forEach(el => el.remove());
+      // Get visible text content
+      const textContent = await page.evaluate(() => {
+        // Remove script and style elements
+        const scripts = document.querySelectorAll('script, style');
+        scripts.forEach(el => el.remove());
+
+        // Get text content and clean it up
         const content = document.body.innerText || document.body.textContent || '';
-        return content.replace(/\s+/g, ' ').trim();
+        return content
+          .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+          .trim();
       });
 
-      return typeof textContent === 'string'
-        ? textContent.substring(0, 500) + (textContent.length > 500 ? '...' : '')
-        : '';
-    } catch {
+      // Truncate to reasonable length (first 500 characters)
+      if (typeof textContent === 'string') {
+        return textContent.substring(0, 500) + (textContent.length > 500 ? '...' : '');
+      } else {
+        return '';
+      }
+    } catch (error) {
       return "Unable to extract page content";
     }
   }
@@ -180,7 +261,11 @@ export default class PlaywrightSession extends Session<Page> {
     }
   }
 
-  async clearAllClickPoints() {
+  async clearAllClickPoints(agentId?: string) {
+    const pageToUse: Page | null = agentId ? await this.getPage(agentId) : this.page;
+
+    if (!pageToUse) return;
+
     const clearFromContext = async (context: Page | Frame | null) => {
       if (!context) return;
       await context.evaluate(() => {
@@ -188,7 +273,7 @@ export default class PlaywrightSession extends Session<Page> {
       });
     };
 
-    await clearFromContext(this.page);
+    await clearFromContext(pageToUse);
     await clearFromContext(this.frame);
   }
 
@@ -207,14 +292,15 @@ export default class PlaywrightSession extends Session<Page> {
     } catch (e) { errors.push(e as Error); this.page = null; }
 
     try {
-      if (this.context) {
-        await this.context.close(); // closes only this session’s context
-        this.context = null;
+      if (this.defaultContext) {
+        await this.defaultContext.close(); // closes only this session’s context
+        this.defaultContext = null;
       }
     } catch (e) { errors.push(e as Error); this.browser = null; }
 
     this.rect = null;
     this.logManager.log(`Session ${this.sessionId} cleanup completed`);
+    this.closeAllContexts();
 
     if (errors.length > 0) {
       console.warn(`Session ${this.sessionId} cleanup completed with ${errors.length} warnings:`, errors);

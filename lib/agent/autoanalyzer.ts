@@ -1,21 +1,23 @@
 import { setTimeout } from "node:timers/promises";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { LinkInfo, State, ImageData, Action, ActionResult, } from "../types.js";
+import { LinkInfo, State, ImageData, Action, ActionResult, AnalyzerStatus, } from "../types.js";
 import { fileExists } from "../utility/functions.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/autoActionService.js";
 import path from "node:path";
+import { Page } from "@browserbasehq/stagehand";
 
 export default class AutoAnalyzer extends Agent {
-    public activeLink: Omit<LinkInfo, 'visited'> | null = null;
+    public activeLink: LinkInfo | null = null;
 
     private step = 0;
     private queue: LinkInfo[] = [];
     private goal: string = "";
     private visitedPage: boolean = false;
     private lastAction: string = "";
+    private page: Page | null = null;
 
     private stagehandSession: StagehandSession;
     private localactionService: AutoActionService;
@@ -68,7 +70,14 @@ export default class AutoAnalyzer extends Agent {
             return;
         }
 
-        if (!this.stagehandSession.page) return
+        if(!this.page){
+            const page = await this.stagehandSession.getPage();
+            if(!page){
+                throw new Error("Page not initialized");
+            }
+            this.page = page;
+        }
+
         if (!this.bus) return
 
         try {
@@ -81,7 +90,7 @@ export default class AutoAnalyzer extends Agent {
                     }
                     this.goal = "Crawl the given page";
                     this.step = 0;
-                    this.noErrors = false;
+                    this.analyzerStatus = AnalyzerStatus.PAGE_NOT_SEEN;
                     this.logManager.log(`Start testing ${this.queue.length} links`, this.buildState(), true);
                     if (this.queue.length === 0) {
                         this.setState(State.DONE);
@@ -91,12 +100,12 @@ export default class AutoAnalyzer extends Agent {
                     break;
 
                 case State.OBSERVE: {
-                    this.currentUrl = this.stagehandSession.page?.url();
+                    this.currentUrl = this.page.url();
                     const filename = `screenshot_${this.step}_${this.sessionId.substring(0, 10)}.png`;
                     const expectedPath = path.resolve("images", filename); // Use absolute path
 
                     if (!this.visitedPage || !(await fileExists(expectedPath))) {
-                        const actualPath = await this.stagehandSession.takeScreenshot("images", filename);
+                        const actualPath = await this.stagehandSession.takeScreenshot("images", filename, this.uniqueId);
                         if (!actualPath) {
                             this.logManager.error("Screenshot failed", this.state);
                             this.setState(State.ERROR);
@@ -144,7 +153,11 @@ export default class AutoAnalyzer extends Agent {
                         break;
                     }
 
-                    this.noErrors = command.noErrors ?? false;
+                    if(command.noErrors) {
+                        this.analyzerStatus = AnalyzerStatus.SUCCESS_CLICKED;
+                    }else{
+                        this.analyzerStatus = AnalyzerStatus.ERROR_INVALID;
+                    }
 
                     if (command.analysis) {
                         this.logManager.log(`Storing analysis for ${this.currentUrl}`, this.state, false);
@@ -171,7 +184,9 @@ export default class AutoAnalyzer extends Agent {
                         this.activeLink = null;
                         const endTime = performance.now();
                         this.timeTaken = endTime - (this as any).startTime;
-                        this.noErrors = true;
+
+                        // Does this to inform the crawler that it finished it's job and can move on
+                        this.analyzerStatus = AnalyzerStatus.SUCCESS_CLICKED;
 
                         this.logManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
                         break;
@@ -185,39 +200,30 @@ export default class AutoAnalyzer extends Agent {
                         PageMemory.setAllLinksVisited(this.currentUrl);
                         const endTime = performance.now();
                         this.timeTaken = endTime - (this as any).startTime;
-                        this.noErrors = true;
+
+                        // Does this to inform the crawler that it finished it's job and can move on
+                        this.analyzerStatus = AnalyzerStatus.SUCCESS_NO_MORE;
 
                         this.logManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
                         break;
                     }
 
                     let result: ActionResult | null = null
-                    let specificLink = null;
+
+                    const selectedLink = this.findMatchingLink(action);
+
+                    if (!selectedLink) {
+                        const warning = "Validator warns that Action provided is not among the valid list. Please set step to a valid possible action from the list given or click done or all_done if you want to end the mission.";
+                        this.bus.emit({
+                            ts: Date.now(),
+                            type: "validator_warning",
+                            message: warning
+                        });
+                        break
+                    }
 
                     try {
-                        if (action.step) {
-                            specificLink = this.queue.find(link => link.description === action.step);
-                        }
-
-                        if (!specificLink && action.args?.[0]) {
-                            specificLink = this.queue.find(link => link.description === action.args[0]);
-                        }
-
-                        if (!specificLink && action.possibleActionSelected) {
-                            specificLink = this.queue.find(link => link.description === action.possibleActionSelected);
-                        }
-
-                        if (!specificLink) {
-                            const warning = "Validator warns that Action provided is not among the valid list. Please set step to a valid possible action from the list given or click done or all_done if you want to end the mission.";
-                            this.bus.emit({
-                                ts: Date.now(),
-                                type: "validator_warning",
-                                message: warning
-                            });
-                            break
-                        }
-
-                        result = await this.localactionService.executeAction(action, specificLink, this.buildState());
+                        result = await this.localactionService.executeAction(action, selectedLink, this.buildState());
                     } catch (error) {
                         this.logManager.error(String(error), this.state, false);
                         this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
@@ -225,16 +231,16 @@ export default class AutoAnalyzer extends Agent {
                         break;
                     }
 
-                    if (this.currentUrl && result.message == "external") {
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.stagehandSession.page.url(), page: this.stagehandSession.page, linkIdentifier: result.actionTaken || action.step });
+                    if (this.currentUrl && result.linkType == "external") {
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.page.url(), page: this.page, linkIdentifier: selectedLink.description, handled: true });
                     }
 
                     this.lastAction = `Action ${result.actionTaken || 'no_op'} with args (${action.args.join(",")}) was last taken because of ${action.reason}`;
 
 
                     this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });
-                    const newGoal = action.newGoal ?? "Crawl the given page";
-                    if (newGoal != "Crawl the given page") {
+                    const newGoal = action.newGoal || this.goal;
+                    if (newGoal != this.goal) {
                         this.logManager.addSubMission(newGoal);
                         this.logManager.addSubMission(this.goal, "done");
                         this.logManager.log(`New Goal set as ${newGoal}`, this.buildState(), false);
@@ -247,15 +253,11 @@ export default class AutoAnalyzer extends Agent {
                     const endTime = performance.now();
                     this.timeTaken = endTime - (this as any).startTime;
 
-                    this.activeLink = this.getLinkInfoWithoutVisited(specificLink);
+                    this.activeLink = selectedLink;
 
                     this.logManager.log(`Next link to test: ${JSON.stringify(this.activeLink)}`, this.buildState(), false);
 
-                    if (result && result.message == "internal") {
-                        this.setState(State.OBSERVE);
-                    } else {
-                        this.setState(State.DONE);
-                    }
+                    this.setState(State.DONE);
 
                     this.logManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
                     break;
@@ -282,7 +284,7 @@ export default class AutoAnalyzer extends Agent {
         this.goal = "Crawl the given page";
         this.lastAction = "";
         this.visitedPage = false;
-        this.noErrors = false;
+        this.analyzerStatus = AnalyzerStatus.PAGE_NOT_SEEN;
         this.response = "";
     }
 
@@ -291,12 +293,23 @@ export default class AutoAnalyzer extends Agent {
         return this.queue.map((link) => link.description).includes(label);
     }
 
-    getLinkInfoWithoutVisited(
-        links: LinkInfo,
-    ): Omit<LinkInfo, "visited"> | null {
-        // Return a copy without 'visited'
-        const { visited, ...rest } = links;
-        return rest;
+    private findMatchingLink(action: Action): LinkInfo | null {
+        // Try all possible fields the LLM might use
+        const candidates = [
+            action.step,
+            action.possibleActionSelected,
+            ...(action.args || [])
+        ].filter(Boolean);
+
+        for (const candidate of candidates) {
+            const match = this.queue.find(link =>
+                link.description === candidate ||
+                link.selector === candidate
+            );
+            if (match) return match;
+        }
+
+        return null;
     }
 }
 

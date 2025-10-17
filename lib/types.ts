@@ -26,7 +26,7 @@ export interface Analysis {
 
 export interface ActionResult {
     success: boolean;
-    message: string;
+    linkType: "internal" | "external";
     actionTaken: string;
 }
 
@@ -112,6 +112,14 @@ export enum State {
     PAUSE = "PAUSE",
     RESUME = "RESUME",
     WARN = "WARN"
+}
+
+export enum AnalyzerStatus {
+    SUCCESS_CLICKED,      // Clicked a link, crawler should follow
+    SUCCESS_NO_MORE,      // No links worth clicking, crawler should backtrack
+    ERROR_BLIND,          // Couldn't see the page, crawler should retry
+    ERROR_INVALID,        // LLM gave invalid selector, already retried
+    PAGE_NOT_SEEN,        // Analyzer didn't really go through and fell somewhere
 }
 
 type StateValue = `${State}`;

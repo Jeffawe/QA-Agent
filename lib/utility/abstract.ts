@@ -1,8 +1,10 @@
-import { GetNextActionContext, ThinkResult, ImageData, Action, NamespacedState, State, Namespaces, TokenUsage } from "../types.js";
+import { GetNextActionContext, ThinkResult, ImageData, Action, NamespacedState, State, Namespaces, TokenUsage, AnalyzerStatus } from "../types.js";
 import { EventBus } from "../services/events/event.js";
 import { LogManager } from "./logManager.js";
 import { logManagers } from "../services/memory/logMemory.js";
 import * as fs from "fs";
+
+type LINK_TYPE = "internal" | "external";
 
 export abstract class Thinker {
     protected modelClient: LLM | null = null;
@@ -154,8 +156,8 @@ export abstract class Agent {
 
     public dependent: boolean = false;
 
-    // Indicates if the agent had any errors during its operation
-    public noErrors: boolean = false;
+    // Indicates the status of the analyzer
+    public analyzerStatus: AnalyzerStatus = AnalyzerStatus.PAGE_NOT_SEEN;
 
     // In case of paused agent. This is the state it will return to when resumed.
     protected pausedState: State = State.START;
@@ -170,6 +172,7 @@ export abstract class Agent {
     protected agentRegistry?: AgentRegistry;
     protected response: string = "";
     protected paused: boolean = false;
+    protected uniqueId: string = "";
 
     protected requiredAgents: Agent[] = [];
 
@@ -187,6 +190,7 @@ export abstract class Agent {
         this.agentRegistry = dependencies.agentRegistry;
         this.sessionId = dependencies.sessionId;
         this.dependent = dependencies.dependent;
+        this.uniqueId = uuidv4();
 
         if (dependencies.dependent) {
             this._state = State.WAIT;
@@ -376,7 +380,7 @@ export abstract class Session<TPage = any> {
 export abstract class ActionService {
     protected session: Session;
     protected logManager: LogManager;
-    protected intOrext: string = '';
+    protected intOrext: LINK_TYPE = 'internal';
     protected baseUrl: string = '';
 
     constructor(session: Session) {
@@ -387,4 +391,8 @@ export abstract class ActionService {
     public setBaseUrl(url: string) {
         this.baseUrl = url;
     }
+}
+
+function uuidv4(): string {
+    throw new Error("Function not implemented.");
 }

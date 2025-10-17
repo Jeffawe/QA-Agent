@@ -27,10 +27,41 @@ export async function fileExists(pathFromRoot: string): Promise<boolean> {
  * @returns {Promise<T>} The wrapped promise.
  */
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-    return Promise.race([
-        promise,
-        new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-        )
-    ]);
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout')), timeoutMs)
+    )
+  ]);
+}
+
+/**
+ * Checks if two URLs are same-origin, considering the base path.
+ * 
+ * @param oldUrl - The original URL (defines the allowed origin and base path)
+ * @param newUrl - The URL to check against
+ * @returns true if newUrl is within the same origin and base path as oldUrl
+ * 
+ * @example
+ * isSameOriginWithPath('https://www.qa-agent.site/demo', 'https://www.qa-agent.site/demo/page1') // true
+ * isSameOriginWithPath('https://www.qa-agent.site/demo', 'https://www.qa-agent.site/other') // false
+ * isSameOriginWithPath('https://www.qa-agent.site/demo', 'https://other-site.com/demo') // false
+ */
+export function isSameOriginWithPath(oldUrl: string, newUrl: string): boolean {
+  const old = new URL(oldUrl);
+  const newU = new URL(newUrl);
+
+  // Check protocol and hostname match
+  if (old.protocol !== newU.protocol || old.hostname !== newU.hostname) {
+    return false;
+  }
+
+  // Get the base path from old URL (everything up to the last segment)
+  // Remove trailing slash for consistent comparison
+  const oldPath = old.pathname.replace(/\/$/, '');
+  const newPath = newU.pathname.replace(/\/$/, '');
+
+  // Check if new path starts with the old path
+  // If oldPath is '/demo', newPath must be '/demo' or '/demo/...'
+  return newPath === oldPath || newPath.startsWith(oldPath + '/');
 }

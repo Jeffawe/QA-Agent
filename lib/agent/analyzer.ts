@@ -1,6 +1,6 @@
 import { setTimeout } from "node:timers/promises";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { LinkInfo, State, ImageData, Action, ActionResult, InteractiveElement, } from "../types.js";
+import { LinkInfo, State, ImageData, Action, ActionResult, InteractiveElement, AnalyzerStatus, } from "../types.js";
 import { processScreenshot } from "../services/imageProcessor.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { fileExists } from "../utility/functions.js";
@@ -8,15 +8,17 @@ import { PageMemory } from "../services/memory/pageMemory.js";
 import { CrawlMap } from "../utility/crawlMap.js";
 import playwrightSession from "../browserAuto/playWrightSession.js";
 import ManualActionService from "../services/actions/actionService.js";
+import { Page } from "playwright";
 
 export default class Analyzer extends Agent {
-    public activeLink: Omit<LinkInfo, 'visited'> | null = null;
+    public activeLink: LinkInfo | null = null;
 
     private step = 0;
     private queue: LinkInfo[] = [];
     private goal: string = "";
     private visitedPage: boolean = false;
     private lastAction: string = "";
+    private page: Page | null = null;
 
     private playwrightSession: playwrightSession;
     private localactionService: ManualActionService;
@@ -82,7 +84,6 @@ export default class Analyzer extends Agent {
                     }
                     this.goal = "Crawl the given page";
                     this.step = 0;
-                    this.noErrors = false;
                     this.logManager.log(`Start testing ${this.queue.length} links`, this.buildState(), true);
                     if (this.queue.length === 0) {
                         this.setState(State.DONE);
@@ -144,7 +145,11 @@ export default class Analyzer extends Agent {
                         break;
                     }
 
-                    this.noErrors = command.noErrors ?? false;
+                    if (command.noErrors) {
+                        this.analyzerStatus = AnalyzerStatus.SUCCESS_CLICKED;
+                    } else {
+                        this.analyzerStatus = AnalyzerStatus.ERROR_INVALID;
+                    }
 
                     if (command.analysis) {
                         PageMemory.addAnalysis(this.currentUrl, command.analysis, this.sessionId);
@@ -181,7 +186,7 @@ export default class Analyzer extends Agent {
                         this.activeLink = null;
                         const endTime = performance.now();
                         this.timeTaken = endTime - (this as any).startTime;
-                        this.noErrors = true;
+                        this.analyzerStatus = AnalyzerStatus.SUCCESS_CLICKED;
 
                         this.logManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
                         break;
@@ -200,8 +205,8 @@ export default class Analyzer extends Agent {
                         break;
                     }
 
-                    if (this.currentUrl && result.message == "external") {
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.playwrightSession.page.url(), page: this.playwrightSession.page });
+                    if (this.currentUrl && result.linkType == "external") {
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.playwrightSession.page.url(), page: this.playwrightSession.page, handled: true });
                     }
 
                     this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });
@@ -228,13 +233,13 @@ export default class Analyzer extends Agent {
                         }
                         const link = this.queue.find((link) => link.selector === selector) || this.queue.find((link) => link.description === action.args[0] || link.href === action.args[0]);
                         if (link) {
-                            this.activeLink = this.getLinkInfoWithoutVisited(link);
+                            this.activeLink = link;
                         }
                     }
 
                     this.logManager.log(`Next link to test: ${JSON.stringify(this.activeLink)}`, this.buildState(), false);
 
-                    if (result && result.message == "internal") {
+                    if (result && result.linkType == "internal") {
                         this.setState(State.OBSERVE);
                     } else {
                         this.setState(State.DONE);
@@ -265,21 +270,13 @@ export default class Analyzer extends Agent {
         this.goal = "Crawl the given page";
         this.lastAction = "";
         this.visitedPage = false;
-        this.noErrors = false;
+        this.analyzerStatus = AnalyzerStatus.PAGE_NOT_SEEN;
         this.response = "";
     }
 
     checkifLabelValid(label: string): boolean {
         if (!label) return false;
         return this.queue.map((link) => link.description).includes(label);
-    }
-
-    getLinkInfoWithoutVisited(
-        links: LinkInfo,
-    ): Omit<LinkInfo, "visited"> | null {
-        // Return a copy without 'visited'
-        const { visited, ...rest } = links;
-        return rest;
     }
 
     getSelectorByLabel = (

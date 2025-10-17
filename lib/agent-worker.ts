@@ -158,7 +158,16 @@ const initializeWorker = async () => {
     }
 };
 
-// Streamlined validator creation with lazy loading
+
+/**
+ * Creates all validators for a given session ID in parallel batches.
+ * @param {string} sessionId - The unique identifier for the session.
+ * @returns {Promise<number>} A promise that resolves with the port number used by the event bridge.
+ * @description
+ * This function creates an event bus and all the validators for a session in parallel.
+ * It then sets up the Local event bridge and activates the session.
+ * Finally, it returns the port number used by the event bridge.
+ */
 const createValidatorsAsync = async (sessionId: string): Promise<number> => {
     try {
         console.log(`🔨 Creating validators for session ${sessionId}...`);
@@ -361,6 +370,11 @@ if (parentPort) {
         }
     });
 
+    /**
+     * Stops the worker and performs cleanup operations.
+     * Notifies the parent of the completion and any errors that occurred.
+     * Exits the worker process after cleanup.
+     */
     const stopWorker = async () => {
         try {
             await cleanup();

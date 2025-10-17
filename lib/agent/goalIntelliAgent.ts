@@ -1,5 +1,5 @@
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { Action, ImageData, State } from "../types.js";
+import { Action, AnalyzerStatus, ImageData, State } from "../types.js";
 import { setTimeout } from "node:timers/promises";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
@@ -145,7 +145,12 @@ export class GoalAgent extends Agent {
                         break;
                     }
 
-                    this.noErrors = command.noErrors ?? false;
+                    if (command.noErrors) {
+                        this.analyzerStatus = AnalyzerStatus.SUCCESS_CLICKED;
+                    } else {
+                        this.analyzerStatus = AnalyzerStatus.ERROR_INVALID;
+                    }
+
 
                     if (command.analysis) {
                         PageMemory.addAnalysis(this.currentUrl, command.analysis, this.sessionId);
@@ -175,7 +180,7 @@ export class GoalAgent extends Agent {
                         this.logManager.log("Waiting for a while before next action", this.state);
                         await setTimeout(this.actionResponse?.args[0] || 5000);
                         this.setState(State.DONE);
-                        this.noErrors = true;
+                        this.analyzerStatus = AnalyzerStatus.SUCCESS_CLICKED;
                         break;
                     }
 
@@ -221,7 +226,7 @@ export class GoalAgent extends Agent {
         this.progressDescription = "";
         this.goal = "";
         this.lastAction = "";
-        this.noErrors = false;
+        this.analyzerStatus = AnalyzerStatus.PAGE_NOT_SEEN;
         this.actionResponse = null;
     }
 }

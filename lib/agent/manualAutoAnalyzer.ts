@@ -1,3 +1,4 @@
+import { Page } from "@browserbasehq/stagehand";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/autoActionService.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
@@ -5,12 +6,13 @@ import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 
 export default class ManualAutoAnalyzer extends Agent {
-    public activeLink: Omit<LinkInfo, 'visited'> | null = null;
+    public activeLink: LinkInfo| null = null;
     private stageHandSession: StagehandSession;
     private localactionService: AutoActionService;
 
     private queue: LinkInfo[] = [];
     private goal: string = "";
+    private page: Page | null = null;
 
     constructor(dependencies: BaseAgentDependencies) {
         super("manualAutoanalyzer", dependencies);
@@ -67,7 +69,14 @@ export default class ManualAutoAnalyzer extends Agent {
             return;
         }
 
-        if (!this.stageHandSession.page) return
+        if(!this.page){
+            const page = await this.stageHandSession.getPage();
+            if(!page){
+                throw new Error("Page not initialized");
+            }
+            this.page = page;
+        }
+
         if (!this.bus) return
 
         try {
@@ -75,7 +84,7 @@ export default class ManualAutoAnalyzer extends Agent {
                 /*────────── READY → RUN ──────────*/
                 case State.START:
                     (this as any).startTime = performance.now();
-                    this.currentUrl = this.stageHandSession.page!.url();
+                    this.currentUrl = this.page!.url();
                     this.goal = "Find the next best link to click";
                     this.logManager.log(`Start testing ${this.queue.length} links`, this.buildState(), true);
                     if (this.queue.length === 0) {
@@ -104,7 +113,7 @@ export default class ManualAutoAnalyzer extends Agent {
                             throw new Error("activeLink is null");
                         }
                         this.logManager.log(`Acting on ${this.activeLink.description}`, this.buildState(), true);
-                        await this.stageHandSession.act(this.activeLink.selector);
+                        await this.stageHandSession.act(this.activeLink.selector, this.uniqueId);
                     } catch (error) {
                         this.logManager.error(String(error), this.state, false);
                         this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
@@ -118,7 +127,7 @@ export default class ManualAutoAnalyzer extends Agent {
 
                 case State.VALIDATE: {
                     const oldUrl = new URL(this.currentUrl);
-                    const newUrl = new URL(this.stageHandSession.page.url());
+                    const newUrl = new URL(this.page.url());
 
                     const isSameOrigin =
                         oldUrl.protocol === newUrl.protocol &&
@@ -127,7 +136,7 @@ export default class ManualAutoAnalyzer extends Agent {
                     if (!isSameOrigin) {
                         // Optional: ensure page is defined before going back
                         try {
-                            await this.stageHandSession.page?.goBack({ waitUntil: "networkidle" });
+                            await this.page?.goBack({ waitUntil: "networkidle" });
                             if(!this.activeLink) throw new Error("activeLink is null after external navigation");
                             PageMemory.removeLink(this.currentUrl, this.activeLink.description);
                             this.queue = PageMemory.getAllUnvisitedLinks(this.currentUrl);
@@ -144,7 +153,7 @@ export default class ManualAutoAnalyzer extends Agent {
                         }
                     } else {
                         this.setState(State.DONE);
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.stageHandSession.page.url(), page: this.stageHandSession.page });
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.page.url(), page: this.page });
                     }
                     break;
                 }
@@ -168,18 +177,5 @@ export default class ManualAutoAnalyzer extends Agent {
         this.queue = [];
         this.goal = "Crawl the given page";
         this.response = "";
-    }
-
-    getLinkInfoWithoutVisited(
-        links: LinkInfo[],
-        targetText: string
-    ): Omit<LinkInfo, "visited"> | null {
-        if (!targetText) return null;
-        const found = links.find(link => link.description === targetText);
-        if (!found) return null;
-
-        // Return a copy without 'visited'
-        const { visited, ...rest } = found;
-        return rest;
     }
 }
