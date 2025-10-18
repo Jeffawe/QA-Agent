@@ -56,26 +56,34 @@ export class PageMemory {
     return Object.values(this.pages);
   }
 
-  static cleanUrl(url: string) {
+  static cleanUrl(url: string): string {
     try {
       const u = new URL(url);
 
       // Normalize hostname (strip www.)
-      let host = u.hostname.replace(/^www\./, "");
+      const host = u.hostname.replace(/^www\./, "");
 
-      // Normalize path (remove trailing slash unless it's root)
-      let path = u.pathname === "/" ? "" : u.pathname.replace(/\/$/, "");
+      // Normalize path (always start with /, remove trailing / unless root)
+      let path = u.pathname;
+      if (path !== "/" && path.endsWith("/")) {
+        path = path.slice(0, -1); // Remove trailing slash
+      }
 
-      // Ignore search params and fragments
       return host + path;
     } catch {
-      // Fallback for malformed inputs like "https:jeffawe.com/"
-      return url
+      // Fallback for malformed URLs
+      let cleaned = url
         .replace(/^https?:\/\//, "")
         .replace(/^www\./, "")
-        .replace(/\/$/, "")
         .split("#")[0]
         .split("?")[0];
+
+      // Ensure consistent trailing slash handling
+      if (cleaned.endsWith("/") && cleaned.indexOf("/") !== cleaned.length - 1) {
+        cleaned = cleaned.slice(0, -1);
+      }
+
+      return cleaned;
     }
   }
 

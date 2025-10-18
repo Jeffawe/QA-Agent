@@ -18,6 +18,7 @@ export default class PlaywrightSession extends Session<Page> {
       this.browser = browser;
       this.defaultContext = await browser.newContext();
       this.page = await this.defaultContext.newPage();
+      this.baseUrl = url;
       if (!this.page) throw new Error("Page not initialized");
       await this.page.goto(url, { waitUntil: 'networkidle' });
       return true;
@@ -45,6 +46,10 @@ export default class PlaywrightSession extends Session<Page> {
       return this.page;
     }
 
+    if(!this.baseUrl){
+      throw new Error("Base URL not initialized");
+    }
+
     // Reuse existing context if already created
     if (this.contexts.has(agentId)) {
       return this.contexts.get(agentId).page;
@@ -54,6 +59,7 @@ export default class PlaywrightSession extends Session<Page> {
     this.logManager.log(`Creating new context for agentId: ${agentId}`, State.INFO);
     const context = this.defaultContext;
     const page = await context.newPage();
+    await page.goto(this.baseUrl, { waitUntil: 'networkidle' });
     this.contexts.set(agentId, { context, page });
     return page;
   }

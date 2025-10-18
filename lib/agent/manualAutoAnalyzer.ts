@@ -4,9 +4,10 @@ import AutoActionService from "../services/actions/autoActionService.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
+import { isSameOriginWithPath } from "../utility/functions.js";
 
 export default class ManualAutoAnalyzer extends Agent {
-    public activeLink: LinkInfo| null = null;
+    public activeLink: LinkInfo | null = null;
     private stageHandSession: StagehandSession;
     private localactionService: AutoActionService;
 
@@ -69,9 +70,9 @@ export default class ManualAutoAnalyzer extends Agent {
             return;
         }
 
-        if(!this.page){
+        if (!this.page) {
             const page = await this.stageHandSession.getPage();
-            if(!page){
+            if (!page) {
                 throw new Error("Page not initialized");
             }
             this.page = page;
@@ -86,7 +87,7 @@ export default class ManualAutoAnalyzer extends Agent {
                     (this as any).startTime = performance.now();
                     this.currentUrl = this.page!.url();
                     this.goal = "Find the next best link to click";
-                    this.logManager.log(`Start testing ${this.queue.length} links`, this.buildState(), true);
+                    this.logManager.log(`Start testing ${this.queue.length} links from ${this.currentUrl}`, this.buildState(), true);
                     if (this.queue.length === 0) {
                         this.logManager.log("No more links to test", this.buildState(), true);
                         this.setState(State.DONE);
@@ -113,10 +114,13 @@ export default class ManualAutoAnalyzer extends Agent {
                             throw new Error("activeLink is null");
                         }
                         this.logManager.log(`Acting on ${this.activeLink.description}`, this.buildState(), true);
-                        await this.stageHandSession.act(this.activeLink.selector, this.uniqueId);
-                    } catch (error) {
-                        this.logManager.error(String(error), this.state, false);
+                        this.stageHandSession.act(this.activeLink.selector);
+                    } catch (error: unknown) {
+                        const err = error as Error;
+                        // Real error - propagate it
+                        this.logManager.error(`Action failed: ${err.message}`, this.buildState());
                         this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
+
                         this.setState(State.ERROR);
                         break;
                     }
@@ -126,19 +130,15 @@ export default class ManualAutoAnalyzer extends Agent {
                 }
 
                 case State.VALIDATE: {
-                    const oldUrl = new URL(this.currentUrl);
-                    const newUrl = new URL(this.page.url());
-
-                    const isSameOrigin =
-                        oldUrl.protocol === newUrl.protocol &&
-                        oldUrl.hostname === newUrl.hostname;
+                    this.logManager.log(`Validating ${this.currentUrl} vs ${this.page.url()}`, this.buildState(), true);
+                    const isSameOrigin = isSameOriginWithPath(this.currentUrl, this.page.url());
 
                     if (!isSameOrigin) {
                         // Optional: ensure page is defined before going back
                         try {
-                            await this.page?.goBack({ waitUntil: "networkidle" });
-                            if(!this.activeLink) throw new Error("activeLink is null after external navigation");
-                            PageMemory.removeLink(this.currentUrl, this.activeLink.description);
+                            await this.page?.goto(this.currentUrl, ({ waitUntil: "networkidle" }));
+                            if (!this.activeLink) throw new Error("activeLink is null after external navigation");
+                            PageMemory.markLinkVisited(this.currentUrl, this.activeLink.description);
                             this.queue = PageMemory.getAllUnvisitedLinks(this.currentUrl);
                             this.setState(State.START);
                         } catch (err) {

@@ -78,9 +78,10 @@ export default class StagehandSession extends Session<Page> {
                 }
             });
         } catch (error) {
-            this.logManager.error(`Failed to initialize Stagehand: ${(error as Error).message}`, State.ERROR, true);
+            this.logManager.error('Failed to initialize Stagehand. It may be due to an invalid API key. Please check your API key.', State.ERROR, true);
+            console.error(`Failed to initialize Stagehand: ${(error as Error).message}`);
             this.stagehand = null;
-            throw new Error(`Failed to initialize Stagehand: ${(error as Error).message}`);
+            throw new Error('Failed to initialize Stagehand. It may be due to an invalid API key. Please check your API key.');
         }
     }
 
@@ -95,6 +96,7 @@ export default class StagehandSession extends Session<Page> {
             }
 
             await this.stagehand?.init();
+            this.baseUrl = url;
 
             this.page = this.stagehand?.page ?? null;
 
@@ -192,6 +194,14 @@ export default class StagehandSession extends Session<Page> {
         }
     }
 
+    /**
+     * Takes a full-page screenshot of the current page.
+     * @param {string} folderName - The folder name where the screenshot should be saved.
+     * @param {string} basicFilename - The basic filename (without extension) of the screenshot.
+     * @param {string} [agentId] - The agentId to get the page for. If null or empty, it uses the shared page.
+     * @returns {Promise<string | null>} - A promise that resolves to the absolute path of the screenshot file if successful, or null if an error occurs.
+     * @throws {Error} - If the page is not initialized, or the screenshot file was not created.
+     */
     async takeScreenshot(
         folderName: string,
         basicFilename: string,
@@ -319,6 +329,7 @@ export default class StagehandSession extends Session<Page> {
         this.logManager.log(`Creating new context for agentId: ${agentId}`, State.INFO);
         const context = this.stagehand.context;
         const page = await context.newPage();
+        await page.goto(this.baseUrl, { waitUntil: 'networkidle' });
         this.contexts.set(agentId, { context, page });
         return page;
     }

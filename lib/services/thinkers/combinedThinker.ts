@@ -55,8 +55,7 @@ export class CombinedThinker extends Thinker {
                 - Goal: ${context.goal}
                 - Last Action: ${context.lastAction || "None"}
                 - Memory: ${context.memory.join("; ") || "None"}
-                - Possible Actions: ${context.possibleLabels.join("; ") || "None"}
-                (When using click action. Put the appropriate label tag (it must be in the list of possible Actions provided) for the UI element box in the args list)
+                - Possible Actions: ${context.possibleLabels.join(", ") || "None"}
                 - Extra Info: ${extraInfo || "None"}
 
                 Respond with valid JSON only.

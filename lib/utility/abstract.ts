@@ -190,7 +190,7 @@ export abstract class Agent {
         this.agentRegistry = dependencies.agentRegistry;
         this.sessionId = dependencies.sessionId;
         this.dependent = dependencies.dependent;
-        this.uniqueId = uuidv4();
+        this.uniqueId = `${this.name}_${this.sessionId}`;
 
         if (dependencies.dependent) {
             this._state = State.WAIT;
@@ -363,6 +363,7 @@ export abstract class Session<TPage = any> {
     protected sessionId: string;
     public page: TPage | null = null;
     protected logManager: LogManager
+    protected baseUrl: string = '';
 
     public constructor(sessionId: string) {
         this.sessionId = sessionId;

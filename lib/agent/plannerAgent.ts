@@ -125,6 +125,7 @@ export default class PlannerAgent extends Agent {
                     if (!isSameOrigin) {
                         this.logManager.error(`Navigation to external page detected: "${this.currentUrl}" from "${this.stageHandSession.page!.url()}", going back.`, this.buildState(), true);
                         await this.stageHandSession.page!.goto(this.currentUrl, { waitUntil: "networkidle" });
+                        this.warning = `Navigation to external page detected: "${this.currentUrl}" from "${this.stageHandSession.page!.url()}", Validator went back to ${this.currentUrl}. Stay within the same origin.`;
                     }
                     
                     await this.validateGoal();

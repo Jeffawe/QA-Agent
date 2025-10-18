@@ -105,7 +105,7 @@ export default class AutoAnalyzer extends Agent {
                     const expectedPath = path.resolve("images", filename); // Use absolute path
 
                     if (!this.visitedPage || !(await fileExists(expectedPath))) {
-                        const actualPath = await this.stagehandSession.takeScreenshot("images", filename, this.uniqueId);
+                        const actualPath = await this.stagehandSession.takeScreenshot("images", filename);
                         if (!actualPath) {
                             this.logManager.error("Screenshot failed", this.state);
                             this.setState(State.ERROR);

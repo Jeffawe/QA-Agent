@@ -23,7 +23,7 @@ export class NewPageValidator {
 
         if (!isSameOrigin) {
             if (linkIdentifier) {
-                PageMemory.removeLink(oldPage, linkIdentifier);
+                PageMemory.markLinkVisited(oldPage, linkIdentifier);
             }
 
             if (handled) {
@@ -39,7 +39,7 @@ export class NewPageValidator {
 
             // Optional: ensure page is defined before going back
             try {
-                await page?.goBack({ waitUntil: "networkidle" });
+                await page?.goto(oldPage, ({ waitUntil: "networkidle" }));
             } catch (err) {
                 this.bus.emit({
                     ts: Date.now(),

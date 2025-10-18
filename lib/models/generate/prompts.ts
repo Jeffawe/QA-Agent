@@ -298,7 +298,7 @@ const systemPrompt = String.raw`
             ▸ RESOURCES YOU HAVE
             • Screenshot of the full page (inline image) labelled for the different UI elements
             • Your last action and a short-term memory of prior attempts
-            • A list of possible labels to pick from (UI elements in the page. Don't pick outside of it when using click)
+            • A list of possible actions to pick from (UI elements in the page. Don't pick outside of it when using click)
             • A validator may sometimes give messages on issues you made
 
             ▸ ALLOWED COMMANDS (one per response)
@@ -328,7 +328,7 @@ const systemActionPrompt = String.raw`
             ▸ RESOURCES YOU HAVE
             • Screenshot of the full page (inline image) labelled for the different UI elements
             • Your last action and a short-term memory of prior attempts
-            • A list of possible labels to pick from (UI elements in the page. Don't pick outside of it when using click)
+            • A list of possible actions to pick from (UI elements in the page. Don't pick outside of it when using click)
             • A validator may sometimes give messages on issues you made
 
             ▸ ALLOWED COMMANDS (one per response)
@@ -360,17 +360,17 @@ const systemAutoPrompt = String.raw`
         - Performance hints: large images, slow load/TTFB
         - Contextual info: page purpose, detected frameworks, notable patterns
 
-        2. Decide the single next navigation or interaction that continues exploring the site.
+        2. Decide the single next navigation or interaction that continues exploring the site (pick from the given possibleLabels).
 
         ▸ RESOURCES  
         - Full-page screenshot with labelled UI elements  
         - Your last action + short-term memory of prior attempts  
-        - List of possibleLabels (only valid clickable/interactable elements)  
+        - List of possible Actions (only valid clickable/interactable elements)  
         - Validator messages (if provided)
 
         ▸ ALLOWED COMMANDS  
-        - Action: one string from possibleLabels (or 'wait' to pause)  
-        - Done: set step to "done" when the entire site has been audited and the mission achieved  
+        - Action: one string from possible actions (or 'wait' to pause). DO NOT PICK ANY OUTSIDE OF THE LIST!
+        - Done: set step to "done" when the entire site has been audited and the mission achieved
         - All Done: set step to "all_done" when you are completely finished and all possibleLabels given to you don't lead anywhere new
 
         ▸ RESPONSE FORMAT  
@@ -391,11 +391,11 @@ const systemActionAutoPrompt = String.raw`
         ▸ RESOURCES  
         - Full-page screenshot with labelled UI elements  
         - Your last action + short-term memory of prior attempts  
-        - List of possibleLabels (only valid clickable/interactable elements)  
+        - List of possible Actions (only valid clickable/interactable elements)  
         - Validator messages (if provided)
 
         ▸ ALLOWED COMMANDS  
-        - Action: one string from possibleLabels (or 'wait' to pause)  
+        - Action: one string from possible actions (or 'wait' to pause). DO NOT PICK ANY OUTSIDE OF THE LIST!
         - Done: set step to "done" when the mission is complete  
         - All Done: set step to "all_done" when you are completely finished and all possibleLabels given to you don't lead anywhere new
 

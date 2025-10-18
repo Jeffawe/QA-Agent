@@ -83,7 +83,7 @@ export default class Tester extends Agent {
         }
 
         if(!this.page){
-            const page = await this.stagehandSession.getPage(this.uniqueId);
+            const page = await this.stagehandSession.getPage();
             if(!page){
                 throw new Error("Page not initialized");
             }
@@ -108,7 +108,7 @@ export default class Tester extends Agent {
                 case State.OBSERVE:
                     try {
                         this.logManager.log(`Observing page: ${this.currentUrl}`, this.buildState());
-                        const rawObservedElements = await this.stagehandSession.observe(this.uniqueId);
+                        const rawObservedElements = await this.stagehandSession.observe();
 
                         // Filter out any elements that already exist in the queue
                         this.observedElements = rawObservedElements.filter(observedElement => {
@@ -1076,7 +1076,6 @@ export default class Tester extends Agent {
         this.groupedElements = null;
         this.observedElements = [];
         this.pagesSeen = [];
-        this.stagehandSession.closeAgentContext(this.uniqueId);
     }
 
     public getTestResults(): UITesterResult[] {

@@ -87,10 +87,18 @@ export class AutoCrawler extends Agent {
                 /*────────── 1. START → OBSERVE ──────────*/
                 case State.START: {
                     (this as any).startTime = performance.now();
-                    this.currentUrl = this.page.url();
+                    const newUrl = this.page.url();
+
+                    this.logManager.log(`Starting Crawler. We are at ${newUrl} from ${this.currentUrl}`, this.buildState(), false);
+                    if (isSameOriginWithPath(newUrl, this.baseUrl)) {
+                        this.currentUrl = newUrl;
+                    } else {
+                        await this.goto(this.page, newUrl, this.currentUrl);
+                    }
+
                     // Record the page in memory if we haven’t seen it before
                     if (!PageMemory.pageExists(this.currentUrl)) {
-                        const links: StageHandObserveResult[] = await this.stagehandSession.observe(this.uniqueId)
+                        const links: StageHandObserveResult[] = await this.stagehandSession.observe()
                         const uniqueLinks = await UniqueInternalLinkExtractor.getUniqueInternalLinks(links, this.currentUrl, this.page);
                         //const externalLinks = await getExternalLinks(uniqueLinks, this.currentUrl, page);
                         this.logManager.log(`Links detected: ${uniqueLinks.length} out of ${links.length} are: ${JSON.stringify(uniqueLinks)}`, this.buildState(), false);
@@ -108,11 +116,13 @@ export class AutoCrawler extends Agent {
                     } else {
                         this.logManager.log(`Links detected: ${PageMemory.getAllUnvisitedLinks(this.currentUrl).length}`, this.buildState(), false);
                     }
+
                     this.setState(State.OBSERVE);
                     break;
                 }
 
                 case State.OBSERVE: {
+                    this.logManager.log(`Observing page ${this.currentUrl}. We are on ${this.page.url()}`, this.buildState(), false);
                     if (PageMemory.isFullyExplored(this.currentUrl)) {
                         this.logManager.log(`All links visited on page ${this.currentUrl}`, this.buildState(), false);
                         this.backtrack(this.page);
@@ -159,6 +169,9 @@ export class AutoCrawler extends Agent {
                         }
                     }
 
+                    // While waiting for the other analyzer to finish, clean the unvisited links
+                    this.cleanExternalLinks(PageMemory.getAllUnvisitedLinks(this.currentUrl));
+
                     break;
                 }
 
@@ -176,10 +189,11 @@ export class AutoCrawler extends Agent {
 
                     if (this.currentLinkclicked) {
                         const newpage = this.page.url();
+                        this.logManager.log(`Navigated to ${newpage} from ${this.currentUrl}`, this.buildState(), false);
 
                         // Check if we are on the same origin, if not, go back
                         if (!isSameOriginWithPath(this.currentUrl, newpage)) {
-                            this.goto(this.page, newpage, this.currentUrl);
+                            await this.goto(this.page, newpage, this.currentUrl);
                             this.logManager.log(`Navigating back to ${this.currentUrl}`, this.buildState(), false);
                             PageMemory.markLinkVisited(this.currentUrl, this.currentLinkclicked.description);
                             this.currentLinkclicked = null;
@@ -232,7 +246,7 @@ export class AutoCrawler extends Agent {
             description: el.description || "",
             selector: el.selector,
             method: el.method || "click",
-            href: this.normalise(el.selector, this.currentUrl),
+            href: el.extractedUrl,
             arguments: el.arguments,
             visited: false,
         }));
@@ -254,15 +268,20 @@ export class AutoCrawler extends Agent {
     }
 
     private async backtrack(page: Page): Promise<void> {
-        const back = PageMemory.popFromStack();
-        if (back) {
-            this.logManager.log(`Backtracking to ${back}`, this.buildState(), false);
-            await this.goto(page, this.currentUrl, back);
-            this.currentUrl = back;
-            this.setState(State.START);
-        } else {
-            this.logManager.log("No more pages to backtrack to", this.buildState(), false);
-            this.setState(State.DONE);
+        try {
+            const back = PageMemory.popFromStack();
+            if (back) {
+                this.logManager.log(`Backtracking to ${back}`, this.buildState(), false);
+                await this.goto(page, this.currentUrl, back);
+                this.currentUrl = back;
+                this.setState(State.START);
+            } else {
+                this.logManager.log("No more pages to backtrack to", this.buildState(), false);
+                this.setState(State.DONE);
+            }
+        } catch (err) {
+            this.logManager.error(`Crawler error on ${this.currentUrl}: ${err}`, this.buildState());
+            throw err;
         }
     }
 
@@ -274,17 +293,23 @@ export class AutoCrawler extends Agent {
      */
     async goto(page: Page, oldPage: string, newPage: string): Promise<void> {
         try {
-            await page.goto(newPage, { waitUntil: "networkidle" });
+            if (oldPage === newPage) {
+                this.logManager.log(`Navigating to same page: ${newPage}`, this.buildState(), false);
+                return;
+            }
+
+            await page.goto(newPage, { waitUntil: "domcontentloaded" });
             this.bus.emit({
                 ts: Date.now(),
                 type: "new_page_visited",
                 oldPage: oldPage,
                 newPage: newPage,
-                page: page
+                page: page,
+                handled: true
             });
         } catch (err) {
             this.logManager.error(`Crawler error on ${newPage}: ${err}`, this.buildState());
-            this.setState(State.ERROR);
+            throw err;
         }
     }
 
@@ -293,6 +318,17 @@ export class AutoCrawler extends Agent {
         this.isCurrentPageVisited = false;
         this.timeTaken = 0;
         this.response = "";
+    }
+
+    async cleanExternalLinks(links: LinkInfo[]): Promise<void> {
+        if(!links) return;
+
+        for (const link of links) {
+            if (!link.href) continue;
+            if (!isSameOriginWithPath(this.currentUrl, link.href)) {
+                PageMemory.markLinkVisited(this.currentUrl, link.description);
+            }
+        }
     }
 }
 

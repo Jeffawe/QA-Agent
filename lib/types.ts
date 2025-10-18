@@ -172,6 +172,7 @@ export interface StageHandObserveResult {
     method?: string;
     arguments?: string[];
     selector: string;
+    extractedUrl?: string;
 }
 
 export interface AgentConfig<T extends BaseAgentDependencies = BaseAgentDependencies> {
