@@ -1,6 +1,6 @@
 {
   "name": "qa-agent",
-  "version": "2.2.5",
+  "version": "2.2.7",
   "description": "AI-powered QA agent using LLM models for automated testing and web interaction",
   "main": "dist/server.js",
   "type": "module",

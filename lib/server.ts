@@ -376,6 +376,14 @@ const setupPermanentListener = (worker: Worker, sessionId: string) => {
                 console.error(`❌ Agent error for session ${sessionId}:`, message.error);
                 break;
 
+            case 'done':
+                console.log(`✅ Worker reported done for session ${sessionId}:`, message.data.message);
+                if (parentWSS){ 
+                    parentWSS.sendToClient(message.sessionId, message.data); 
+                    parentWSS.closeClientConnection(message.sessionId);
+                }
+                break;
+
             case 'websocket_message':
                 if (parentWSS) parentWSS.sendToClient(message.sessionId, message.data);
                 break;

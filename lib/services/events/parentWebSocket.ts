@@ -132,12 +132,12 @@ export class ParentWebSocketServer {
         });
     }
 
-        /**
-         * Sends a message to the client with the given session id.
-         * If the client does not exist or the connection is closed, the method will clean up the dead connection.
-         * @param sessionId - The id of the session to send the message to.
-         * @param message - The message to send to the client.
-         */
+    /**
+     * Sends a message to the client with the given session id.
+     * If the client does not exist or the connection is closed, the method will clean up the dead connection.
+     * @param sessionId - The id of the session to send the message to.
+     * @param message - The message to send to the client.
+    */
     public sendToClient(sessionId: string, message: LocalMessage) {
         const client = this.clients.get(sessionId);
 
@@ -158,6 +158,35 @@ export class ParentWebSocketServer {
             // Clean up dead connection
             console.log(`🧹 Cleaning up dead connection for session: ${sessionId}`);
             this.clients.delete(sessionId);
+        }
+    }
+
+    /**
+     * Closes the client connection for the given session id.
+     * If the connection is still open, it will be closed with a code of 1000 and a reason of 'Session ended'.
+     * The client will then be removed from the list of active clients.
+     * @param sessionId - The id of the session to close the connection for.
+     * @returns A promise that resolves when the connection has been closed.
+     */
+    async closeClientConnection(sessionId: string): Promise<void> {
+        const client = this.clients.get(sessionId);
+        if (client) {
+            try {
+                if (client.ws.readyState === WebSocket.OPEN) {
+                    setTimeout(() => {
+                        client.ws.close(1000, 'Session ended');
+                        this.clients.delete(sessionId);
+                        console.log(`✅ Closed client connection for session: ${sessionId}`);
+                    }, 100);
+                } else {
+                    // If not open, delete immediately
+                    this.clients.delete(sessionId);
+                    console.log(`✅ Client connection already closed for session: ${sessionId}`);
+                }
+            } catch (error) {
+                console.error(`❌ Error closing client connection for session ${sessionId}:`, error);
+                this.clients.delete(sessionId); // Clean up on error
+            }
         }
     }
 
