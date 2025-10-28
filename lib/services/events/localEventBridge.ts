@@ -172,10 +172,12 @@ export class LocalEventBridge {
             timestamp: new Date().toISOString()
         };
 
+        const channelName = type === 'DONE' ? 'done' : this.channelName;
+
         try {
             if (parentPort) {
                 const msg = {
-                    type: this.channelName,
+                    type: channelName,
                     sessionId: this.currentSessionId || 'unknown',
                     data: message,
                     timestamp: new Date().toISOString()
