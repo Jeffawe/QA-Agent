@@ -23,6 +23,7 @@ import { withTimeout } from './utility/functions.js';
 import path, { dirname } from "path";
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { sendDiscordError } from './utility/error.js';
 
 // Recreate __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -285,6 +286,14 @@ const setUpWorkerEvents = (worker: Worker, isEndpoint: boolean, sessionId: strin
                     rejectOnce(new Error(`Worker initialization error: ${errorMsg}`));
                     break;
 
+                case 'done':
+                    console.log(`✅ Worker reported done for session ${sessionId}:`, message.data.message);
+                    if (parentWSS) {
+                        parentWSS.sendToClient(message.sessionId, message.data);
+                        parentWSS.closeClientConnection(message.sessionId);
+                    }
+                    break;
+
                 case 'websocket_message':
                     if (parentWSS) parentWSS.sendToClient(sessionId, message.data);
                     break;
@@ -378,8 +387,8 @@ const setupPermanentListener = (worker: Worker, sessionId: string) => {
 
             case 'done':
                 console.log(`✅ Worker reported done for session ${sessionId}:`, message.data.message);
-                if (parentWSS){ 
-                    parentWSS.sendToClient(message.sessionId, message.data); 
+                if (parentWSS) {
+                    parentWSS.sendToClient(message.sessionId, message.data);
                     parentWSS.closeClientConnection(message.sessionId);
                 }
                 break;
@@ -585,8 +594,14 @@ app.post('/start/:sessionId', async (req: Request, res: Response) => {
                 if (session) {
                     session.worker.postMessage({ command: 'stop' });
                     setTimeout(() => {
-                        console.log(`⏰ Force terminating stuck worker ${sessionId}`);
-                        session.worker?.terminate();
+                        if (session.worker) {
+                            session.worker.removeAllListeners('message');
+                            session.worker.removeAllListeners('error');
+                            session.worker.removeAllListeners('exit');
+                            console.log(`⏰ Force terminating stuck worker ${sessionId}`);
+                            session.worker?.terminate();
+                        }
+
                         deleteSession(sessionId);
                     }, 5000); // Reduced from 10s to 5s
                 }
@@ -621,8 +636,13 @@ app.get('/stop/:sessionId', async (req: Request, res: Response) => {
             session.worker.postMessage({ command: 'stop' });
 
             setTimeout(() => {
-                console.log(`⏰ Force terminating stuck worker ${sessionId}`);
-                session.worker?.terminate();
+                if (session.worker) {
+                    session.worker.removeAllListeners('message');
+                    session.worker.removeAllListeners('error');
+                    session.worker.removeAllListeners('exit');
+                    console.log(`⏰ Force terminating stuck worker ${sessionId}`);
+                    session.worker?.terminate();
+                }
                 deleteSession(sessionId);
             }, 10000);
         }
@@ -737,8 +757,14 @@ app.post('/test/:key', async (req: Request, res: Response) => {
                 if (session) {
                     session.worker.postMessage({ command: 'stop' });
                     setTimeout(() => {
-                        console.log(`⏰ Force terminating stuck worker ${sessionId}`);
-                        session.worker?.terminate();
+                        if (session.worker) {
+                            session.worker.removeAllListeners('message');
+                            session.worker.removeAllListeners('error');
+                            session.worker.removeAllListeners('exit');
+                            console.log(`⏰ Force terminating stuck worker ${sessionId}`);
+                            session.worker?.terminate();
+                        }
+
                         deleteSession(sessionId);
                     }, 5000);
                 }
@@ -860,9 +886,10 @@ const memoryCheck = setInterval(() => {
 
     if (mem.heapUsed > 450 * 1024 * 1024) {
         console.error('Memory limit reached - restarting');
+        sendDiscordError('Memory limit reached - restarting server instance');
         cleanup();
         WorkerPool.getInstance().shutdown();
-        process.exit(1); // Let Render restart the instance
+        process.exit(1);
     }
 }, 100000);
 

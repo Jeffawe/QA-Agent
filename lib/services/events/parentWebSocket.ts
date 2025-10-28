@@ -1,6 +1,7 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import { deleteSession, getSession } from '../memory/sessionMemory.js';
 import { LocalMessage } from '../../types.js';
+import { sendDiscordError } from '../../utility/error.js';
 
 interface ClientConnection {
     ws: WebSocket;
@@ -112,8 +113,13 @@ export class ParentWebSocketServer {
                     session.worker.postMessage({ command: 'stop' });
 
                     setTimeout(() => {
-                        console.log(`⏰ Force terminating stuck worker ${sessionId}`);
-                        session.worker?.terminate();
+                        if (session.worker) {
+                            session.worker.removeAllListeners('message');
+                            session.worker.removeAllListeners('error');
+                            session.worker.removeAllListeners('exit');
+                            console.log(`⏰ Force terminating stuck worker ${sessionId}`);
+                            session.worker?.terminate();
+                        }
                         deleteSession(sessionId);
                     }, 10000);
                 }
@@ -122,6 +128,7 @@ export class ParentWebSocketServer {
 
             ws.on('error', (error: Error) => {
                 console.error(`❌ WebSocket error for session ${sessionId}:`, error);
+                sendDiscordError(error, { sessionId, context: 'ParentWebSocketServer WebSocket error' });
                 this.clients.delete(sessionId);
             });
         });
