@@ -310,6 +310,13 @@ export interface ConnectionData {
     message: string;
 }
 
+export interface DisconnectionData {
+    timestamp: number;
+    statistics: Statistics;
+    status: string;
+    message: string;
+}
+
 export interface FirstConnectionData {
     pages: PageDetails[];
     messages: string[];
@@ -322,5 +329,13 @@ export interface LocalMessage {
     sessionId: string;
     data: WebSocketData | ConnectionData | FirstConnectionData;
     timestamp: string;
+}
+
+export interface Statistics {
+    totalPagesVisited: number;
+    totalLinksClicked: number;
+    totalBugsFound: number;
+    totalEndpointsTested: number;
+    totalTokenUsage: number;
 }
 

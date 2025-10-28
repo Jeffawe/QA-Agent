@@ -9,6 +9,7 @@ import { clearAllImages } from './services/imageProcessor.js';
 import { eventBusManager } from './services/events/eventBus.js';
 import { logManagers } from './services/memory/logMemory.js';
 import { ActionServiceFactory, SessionFactory, ThinkerFactory } from "./agentFactory.js";
+import { stat } from "fs";
 
 export interface AgentDependencies {
   sessionId: string;
@@ -245,11 +246,13 @@ export default class BossAgent {
 
       this.logManager.log("Done", State.DONE, true);
       const doneMessage = `Agent is done with task. Used ${this.logManager.getTokens()} tokens`;
-      this.bus.emit({ ts: Date.now(), type: "done", message: doneMessage, sessionId: this.sessionId });
+      const statistics = this.logManager.getStatistics();
+      this.bus.emit({ ts: Date.now(), type: "done", message: doneMessage, sessionId: this.sessionId, statistics });
       await this.stop();
       const endTime = performance.now();
       const timeTaken = endTime - startTime;
       this.logManager.log(`All Agents finished in: ${timeTaken.toFixed(2)} ms`, State.DONE, true);
+      this.logManager.log(JSON.stringify(statistics, null, 2), State.DONE, true);
     }
     catch (error) {
       this.logManager.error(`Error starting agent: ${error}`, State.ERROR, true);

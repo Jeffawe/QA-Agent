@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { NamespacedState, State } from '../types.js';
+import { NamespacedState, State, Statistics } from '../types.js';
 import { eventBusManager } from '../services/events/eventBus.js';
+import { PageMemory } from '../services/memory/pageMemory.js';
 
 type MissionStatus = 'pending' | 'done';
 
@@ -107,11 +108,43 @@ export class LogManager {
   }
 
   updateTokens(tokens: number): void {
-    this.numberOfTokens = tokens;
+    this.numberOfTokens += tokens;
   }
 
   getTokens(): number {
     return this.numberOfTokens;
+  }
+
+  /**
+   * Get statistics about the pages visited, links clicked, bugs found, endpoints tested, and tokens used.
+   * @returns An object containing the statistics.
+   */
+  getStatistics(): Statistics {
+    const pages = PageMemory.getAllPages()
+
+    const totalPagesVisited = pages.length;
+    let totalLinksClicked = 0;
+    let totalBugsFound = 0;
+    let totalEndpointsTested = 0;
+
+    for (const page of pages) {
+      const bugsOnPage = page.analysis?.bugs?.length || 0;
+      const endpointsTestedOnPage = page.endpointResults?.length || 0;
+      const linksClickedOnPage = page.links.filter(link => link.visited).length;
+      totalBugsFound += bugsOnPage;
+      totalEndpointsTested += endpointsTestedOnPage;
+      totalLinksClicked += linksClickedOnPage;
+    }
+
+    const statistics: Statistics = {
+      totalPagesVisited: totalPagesVisited,
+      totalLinksClicked: totalLinksClicked,
+      totalBugsFound: totalBugsFound,
+      totalEndpointsTested: totalEndpointsTested,
+      totalTokenUsage: this.numberOfTokens,
+    };
+
+    return statistics;
   }
 
   /**

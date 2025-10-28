@@ -2,7 +2,7 @@ import { EventBus } from './event.js';
 import { LogManager } from '../../utility/logManager.js';
 import { logManagers } from '../memory/logMemory.js';
 import { PageMemory } from '../memory/pageMemory.js';
-import { ConnectionData, FirstConnectionData, LocalMessage, State, WebSocketData } from '../../types.js';
+import { ConnectionData, DisconnectionData, FirstConnectionData, LocalMessage, State, Statistics, WebSocketData } from '../../types.js';
 import { parentPort } from "worker_threads";
 
 export class LocalEventBridge {
@@ -147,6 +147,7 @@ export class LocalEventBridge {
         this.eventBus.on('done', async (evt) => {
             if (this.isActive) {
                 await this.publishMessage('DONE', {
+                    statistics: evt.statistics, 
                     message: evt.message,
                     timestamp: evt.ts
                 });
@@ -157,7 +158,7 @@ export class LocalEventBridge {
     // Enhanced publish message with session validation
     private async publishMessage(                   
         type: string,
-        data: WebSocketData | ConnectionData | FirstConnectionData
+        data: WebSocketData | ConnectionData | FirstConnectionData | DisconnectionData
     ): Promise<void> {
         // Only publish if we have an active session (except for internal connection messages)
         if (!this.isActive && !['CONNECTION'].includes(type)) {

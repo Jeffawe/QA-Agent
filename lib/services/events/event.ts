@@ -1,4 +1,4 @@
-import { Action, Namespaces, PageDetails, State } from "../../types.js";
+import { Action, Namespaces, PageDetails, State, Statistics } from "../../types.js";
 import { EventEmitter } from 'events';
 import { Page } from "playwright";
 
@@ -18,7 +18,7 @@ export type Event =
     | { ts: number; type: 'resume_all' }
     | { ts: number; type: 'pause_agent'; agentName: Namespaces }
     | { ts: number; type: 'resume_agent'; agentName: Namespaces }
-    | { ts: number; type: 'done'; message: string; sessionId: string }
+    | { ts: number; type: 'done'; message: string; sessionId: string; statistics: Statistics }
     | { ts: number; type: 'thinker_call'; message: string; model: string; level: "error" | "info" | "debug" | "warn" | "LLM_error" }
     | { ts: number; type: 'issue'; message: string; };
 

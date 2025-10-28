@@ -1,4 +1,4 @@
-import { EndPointTestResult, LinkInfo, PageDetails, UITesterResult } from '../../types.js';
+import { EndPointTestResult, LinkInfo, PageDetails, Statistics, UITesterResult } from '../../types.js';
 import { CrawlMap } from '../../utility/crawlMap.js';
 
 export class PageMemory {
