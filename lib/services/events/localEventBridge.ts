@@ -237,7 +237,7 @@ export class LocalEventBridge {
         try {
             // Only send disconnect message if we were active
             if (this.isActive && this.currentSessionId) {
-                await this.publishMessage('CONNECTION', {
+                await this.publishMessage('DISCONNECTION', {
                     status: 'disconnected',
                     message: 'Worker disconnecting from local bridge',
                 });
