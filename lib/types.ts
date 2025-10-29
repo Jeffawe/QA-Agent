@@ -327,7 +327,7 @@ export interface FirstConnectionData {
 export interface LocalMessage {
     type: string;
     sessionId: string;
-    data: WebSocketData | ConnectionData | FirstConnectionData;
+    data: WebSocketData | ConnectionData | FirstConnectionData | DisconnectionData;
     timestamp: string;
 }
 
