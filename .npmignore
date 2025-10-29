@@ -24,6 +24,8 @@ agent-config.json
 agent-config2.json
 generateEmbeddings.js
 deploy.sh
+private.pem
+public.pem
 
 # Exclude source maps and declaration maps
 *.js.map
