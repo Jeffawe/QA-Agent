@@ -286,7 +286,7 @@ const setUpWorkerEvents = (worker: Worker, isEndpoint: boolean, sessionId: strin
                     rejectOnce(new Error(`Worker initialization error: ${errorMsg}`));
                     break;
 
-                case 'done':
+                case 'disconnect':
                     console.log(`✅ Worker reported done for session ${sessionId}:`, message.data.message);
                     if (parentWSS) {
                         parentWSS.sendToClient(message.sessionId, message.data);
@@ -385,8 +385,8 @@ const setupPermanentListener = (worker: Worker, sessionId: string) => {
                 console.error(`❌ Agent error for session ${sessionId}:`, message.error);
                 break;
 
-            case 'done':
-                console.log(`✅ Worker reported done for session ${sessionId}:`, message.data.message);
+            case 'disconnect':
+                console.log(`✅ Worker reported disconnecting for session ${sessionId}:`, message.data.message);
                 if (parentWSS) {
                     parentWSS.sendToClient(message.sessionId, message.data);
                     parentWSS.closeClientConnection(message.sessionId);

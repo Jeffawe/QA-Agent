@@ -59,7 +59,7 @@ export class LocalEventBridge {
 
         try {
             // Send session end message
-            await this.publishMessage('CONNECTION', {
+            await this.publishMessage('DISCONNECTION', {
                 status: 'session_ended',
                 message: 'Session deactivated, worker available for reuse'
             });
@@ -172,7 +172,7 @@ export class LocalEventBridge {
             timestamp: new Date().toISOString()
         };
 
-        const channelName = type === 'DONE' ? 'done' : this.channelName;
+        const channelName = type === 'DISCONNECTION' ? 'disconnect' : this.channelName;
 
         try {
             if (parentPort) {
