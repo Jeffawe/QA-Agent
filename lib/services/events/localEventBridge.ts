@@ -149,6 +149,7 @@ export class LocalEventBridge {
                 await this.publishMessage('DONE', {
                     statistics: evt.statistics, 
                     message: evt.message,
+                    status: 'done',
                     timestamp: evt.ts
                 });
             }
