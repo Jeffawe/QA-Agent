@@ -5,6 +5,7 @@ import path from 'path';
 import { State } from "../types.js";
 import { eventBusManager } from "../services/events/eventBus.js";
 import { getApiKeyForAgent } from "../services/memory/apiMemory.js";
+import { dataMemory } from "../services/memory/dataMemory.js";
 
 export default class StagehandSession extends Session<Page> {
     public stagehand: Stagehand | null;
@@ -221,7 +222,7 @@ export default class StagehandSession extends Session<Page> {
                 fs.mkdirSync(absoluteFolderPath, { recursive: true });
             }
 
-            const filename = path.join(absoluteFolderPath, basicFilename);
+            const filename = path.join(absoluteFolderPath, `${basicFilename}_desktop`);
 
             try {
                 // Wait for network to be mostly idle (but not too long)
@@ -249,6 +250,96 @@ export default class StagehandSession extends Session<Page> {
         } catch (error) {
             console.error("Error taking screenshot:", error);
             return null;
+        }
+    }
+
+    /**
+ * Takes screenshots of the current page for Web, Mobile, and Desktop viewports.
+ * @param {string} folderName - The folder name where the screenshots should be saved.
+ * @param {string} basicFilename - The basic filename (without extension) of the screenshots.
+ * @param {string} [agentId] - The agentId to get the page for. If null or empty, it uses the shared page.
+ * @returns {Promise<string[]>} - A promise that resolves to an array of absolute paths for the three screenshots [web, mobile, desktop], or empty array if error occurs.
+ * @throws {Error} - If the page is not initialized.
+ */
+    async takeMultiDeviceScreenshots(
+        folderName: string,
+        basicFilename: string,
+        agentId?: string
+    ): Promise<string[]> {
+        try {
+            const pageToUse: Page | null = agentId ? await this.getPage(agentId) : this.page;
+
+            if (!pageToUse) {
+                throw new Error("Page not initialized");
+            }
+
+            // Convert to absolute path
+            const absoluteFolderPath = path.resolve(folderName);
+
+            if (!fs.existsSync(absoluteFolderPath)) {
+                fs.mkdirSync(absoluteFolderPath, { recursive: true });
+            }
+
+            // Define viewport configurations
+            const crossPlatform = dataMemory.getData('crossPlatform') as boolean;
+            const viewports = crossPlatform ? {
+                tablet: { width: 1024, height: 768 },      // Tablet/small laptop
+                mobile: { width: 375, height: 812 },    // iPhone X/11/12/13 size
+                desktop: { width: 1920, height: 1080 }  // Full HD desktop
+            } : { 
+                desktop: { width: 1920, height: 1080 }  // Full HD desktop
+            };
+
+            const screenshotPaths: string[] = [];
+            const baseNameWithoutExt = basicFilename.replace(/\.png$/, '');
+
+            // Take screenshot for each viewport
+            for (const [device, viewport] of Object.entries(viewports)) {
+                try {
+                    // Set viewport size
+                    await pageToUse.setViewportSize(viewport);
+
+                    // Wait a bit for the page to adjust to new viewport
+                    await pageToUse.waitForTimeout(500);
+
+                    // Wait for network to be mostly idle (but not too long)
+                    try {
+                        await pageToUse.waitForLoadState('networkidle', { timeout: 3000 });
+                    } catch {
+                        console.log(`Network idle timeout for ${device}, proceeding with screenshot`);
+                    }
+
+                    // Create filename with device suffix
+                    const filename = path.join(absoluteFolderPath, `${baseNameWithoutExt}_${device}.png`);
+
+                    // Take full-page screenshot
+                    await pageToUse.screenshot({
+                        path: filename as `${string}.png`,
+                        fullPage: true,
+                        type: "png",
+                    });
+
+                    console.log(`Screenshot saved as ${filename}`);
+
+                    // Verify the file was actually created
+                    if (!fs.existsSync(filename)) {
+                        throw new Error(`Screenshot file was not created: ${filename}`);
+                    }
+
+                    screenshotPaths.push(filename);
+                } catch (error) {
+                    console.error(`Error taking ${device} screenshot:`, error);
+                    continue;
+                }
+            }
+
+            // Reset to default viewport (desktop) after taking all screenshots
+            await pageToUse.setViewportSize(viewports.desktop);
+
+            return screenshotPaths;
+        } catch (error) {
+            console.error("Error taking multi-device screenshots:", error);
+            return [];
         }
     }
 

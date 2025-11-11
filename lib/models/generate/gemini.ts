@@ -147,11 +147,7 @@ export class GeminiLLm extends LLM {
 
             try {
                 if (this.apiKey?.startsWith('TEST')) {
-                    response = await generateContent({
-                        prompt,
-                        systemInstruction: systemInstruction,
-                        imagePath
-                    });
+                    throw new Error('API_KEY is set to TEST mode, cannot generate multimodal action');
                 } else {
                     const image = await this.genAI?.files.upload({
                         file: imagePath,
@@ -234,54 +230,64 @@ export class GeminiLLm extends LLM {
 
 
     /**
-       * Multimodal helper – embed an image and a textual prompt in a single call.
-       * @param prompt  textual instructions
-       * @param imagePath path to png/jpg
-       * @param recurrent if true, the page explored has been visited before
-       * @returns ThinkResult containing analysis and action
-       * @throws Error if the image is not found or if the LLM response is invalid
-       */
-    async generateMultimodalAction(prompt: string, imagePath: string, recurrent: boolean = false, agentName: Namespaces): Promise<ThinkResult> {
+ * Multimodal helper – embed multiple images and a textual prompt in a single call.
+ * @param prompt  textual instructions
+ * @param imagePaths array of paths to png/jpg files
+ * @param recurrent if true, the page explored has been visited before
+ * @returns ThinkResult containing analysis and action
+ * @throws Error if any image is not found or if the LLM response is invalid
+ */
+    async generateMultimodalAction(
+        prompt: string,
+        imagePaths: string[],
+        recurrent: boolean = false,
+        agentName: Namespaces
+    ): Promise<ThinkResult> {
         try {
-            if (!fs.existsSync(imagePath)) throw new Error(`Image not found at ${imagePath}`);
+            // Validate all images exist
+            for (const imagePath of imagePaths) {
+                if (!fs.existsSync(imagePath)) {
+                    throw new Error(`Image not found at ${imagePath}`);
+                }
+            }
 
-            const mimeType = path.extname(imagePath).toLowerCase() === ".png" ? "image/png" : "image/jpeg";
-            const base64 = fs.readFileSync(imagePath).toString("base64");
-            let response = null;
+            this.logManager.log(`${imagePaths.length} images passed to the model`, State.INFO, true);
+
             const systemInstruction = getSystemPrompt(agentName, recurrent);
             const schema = getSystemSchema(agentName, recurrent);
-
             this.logManager.log(`agentName: ${String(agentName)}, recurrent: ${recurrent}`, State.INFO, true);
+
+            let response = null;
 
             try {
                 if (this.apiKey?.startsWith('TEST')) {
-                    response = await generateContent({
-                        prompt,
-                        systemInstruction,
-                        imagePath
-                    });
+                    throw new Error('Invalid request, There is an issue parsing your test key at the moment')
                 } else {
-                    const image_url = this.imageToDataUrl(imagePath);
-                    const humanMessage = new HumanMessage({
-                        content: [
-                            { type: "text", text: prompt },
-                            { type: "image_url", image_url: { url: image_url } },
-                        ],
-                    });
+                    // Build content array with text prompt followed by all images
+                    const content: Array<{ type: string, text?: string, image_url?: { url: string } }> = [
+                        { type: "text", text: prompt }
+                    ];
 
+                    // Add all images to the content array
+                    for (const imagePath of imagePaths) {
+                        const image_url = this.imageToDataUrl(imagePath);
+                        content.push({
+                            type: "image_url",
+                            image_url: { url: image_url }
+                        });
+                    }
+
+                    const humanMessage = new HumanMessage({ content });
                     const messages = [
                         new SystemMessage(systemInstruction),
                         humanMessage,
                     ];
 
                     const structuredLlm = (this.model as any)?.withStructuredOutput(schema);
-
                     response = await structuredLlm?.invoke(messages);
-
                 }
             } catch (error) {
                 const err = error as Error;
-
                 if (err.message.includes('API key not valid')) {
                     throw new Error('Invalid Gemini API key');
                 } else if (err.message.includes('quota')) {
@@ -295,25 +301,35 @@ export class GeminiLLm extends LLM {
                 throw new Error("No response from Gemini LLM");
             }
 
-            const tokenUsage: TokenUsage = this.calculateTokenUsage(prompt, systemInstruction, imagePath, response.content);
+            // Update token calculation to account for multiple images
+            const tokenUsage: TokenUsage = this.calculateTokenUsage(
+                prompt,
+                systemInstruction,
+                imagePaths, // Pass the array
+                response.content
+            );
 
             this.eventBus?.emit({
                 ts: Date.now(),
                 type: "llm_call",
                 model_name: this.modelName,
-                promptTokens: tokenUsage.promptTokens, // approximate: 1 token ~ 4 characters
-                respTokens: tokenUsage.responseTokens ?? 0, // approximate again
+                promptTokens: tokenUsage.promptTokens,
+                respTokens: tokenUsage.responseTokens ?? 0,
             });
 
             const finalContent = response?.content || response;
             const logContent = typeof finalContent === 'string'
                 ? finalContent
                 : JSON.stringify(finalContent, null, 2);
+
             this.logManager.log(logContent, State.INFO, true);
-            return recurrent ? this.parseActionFromResponse(finalContent) : this.parseDecisionFromResponse(finalContent);
+
+            return recurrent
+                ? this.parseActionFromResponse(finalContent)
+                : this.parseDecisionFromResponse(finalContent);
+
         } catch (error) {
             const err = error as Error;
-
             const isStopLevel = STOP_LEVEL_ERRORS.some(stopError =>
                 err.message.startsWith(stopError) || err.message.includes(stopError)
             );

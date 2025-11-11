@@ -273,6 +273,8 @@ const detailed = args.detailed || config.detailed || false;
 const data = config.data || {};
 const endpoint = args.endpoint || config.endpoint || false;
 const autoconnect = args.autoconnect !== undefined ? args.autoconnect : (config.autoconnect !== undefined ? config.autoconnect : true);
+const optimizeImages = args['optimize-images'] || config['optimize-images'] || false;
+const crossPlatform = args['cross-platform'] || config['cross-platform'] || false;
 
 if (args.help || args.h) {
   console.log(`
@@ -293,6 +295,8 @@ if (args.help || args.h) {
       --detailed       Run in detailed mode. Tests every UI element in every page as well (default: false)
       --endpoint       Boolean value if what is being tested are API endpoints (default: false)
       --autoconnect    Automatically connect to the websocket if available (default: true)
+      --optimize-imagesOptimize images. Lead to more accurate results but takes more time (default: false)
+      --cross-platform Run in cross-platform mode (The agent will test on desktop, mobile and tablet) (default: false)
 
     Logs:
       agent-run logs            Show main agent log
@@ -406,6 +410,8 @@ process.env.API_KEY = key;
 process.env.NODE_ENV = 'development';
 process.env.HEADLESS = String(headless).toLowerCase();
 process.env.WORKER_POOL_SIZE = "1"
+process.env.OPTIMIZE = String(optimizeImages).toLowerCase();
+process.env.CROSS_PLATFORM = String(crossPlatform).toLowerCase();
 
 console.log('🚀 Starting server...');
 
@@ -495,6 +501,8 @@ if (autoStart) {
 
     data['detailed'] = detailed;
     data['endpoint'] = endpoint;
+    data['optimizeImages'] = optimizeImages;
+    data['crossPlatform'] = crossPlatform;
 
     const requestBody = {
       goal: goal,

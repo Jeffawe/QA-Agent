@@ -296,7 +296,7 @@ const systemPrompt = String.raw`
                 2. Decide the single next navigation / interaction that keeps the crawl moving inside the site.
 
             ▸ RESOURCES YOU HAVE
-            • Screenshot of the full page (inline image) labelled for the different UI elements
+            • Screenshots of the full page (inline image) (for web, mobile and/or tablet views) 
             • Your last action and a short-term memory of prior attempts
             • A list of possible actions to pick from (UI elements in the page. Don't pick outside of it when using click)
             • A validator may sometimes give messages on issues you made
@@ -326,7 +326,7 @@ const systemActionPrompt = String.raw`
                 1. Decide the single next navigation / interaction that keeps the crawl moving inside the site.
 
             ▸ RESOURCES YOU HAVE
-            • Screenshot of the full page (inline image) labelled for the different UI elements
+            • Screenshots of the full page (inline image) (for web, mobile and/or tablet views) 
             • Your last action and a short-term memory of prior attempts
             • A list of possible actions to pick from (UI elements in the page. Don't pick outside of it when using click)
             • A validator may sometimes give messages on issues you made
@@ -363,7 +363,7 @@ const systemAutoPrompt = String.raw`
         2. Decide the single next navigation or interaction that continues exploring the site (pick from the given possibleLabels).
 
         ▸ RESOURCES  
-        - Full-page screenshot with labelled UI elements  
+        - Full-page screenshots (for web, mobile and/or tablet views) 
         - Your last action + short-term memory of prior attempts  
         - List of possible Actions (only valid clickable/interactable elements)  
         - Validator messages (if provided)
@@ -389,7 +389,7 @@ const systemActionAutoPrompt = String.raw`
         - Decide the single next navigation or interaction that continues exploring the site.
 
         ▸ RESOURCES  
-        - Full-page screenshot with labelled UI elements  
+        - Full-page screenshots (for web, mobile and/or tablet views)
         - Your last action + short-term memory of prior attempts  
         - List of possible Actions (only valid clickable/interactable elements)  
         - Validator messages (if provided)
@@ -479,5 +479,6 @@ export const STOP_LEVEL_ERRORS = [
     'Memory allocation failed',
     'Disk space full',
     'Configuration error',
-    'Dependency not found'
+    'Dependency not found',
+    'Invalid request, There is an issue parsing your test key at the moment'
 ];

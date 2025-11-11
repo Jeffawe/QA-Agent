@@ -9,7 +9,6 @@ import { clearAllImages } from './services/imageProcessor.js';
 import { eventBusManager } from './services/events/eventBus.js';
 import { logManagers } from './services/memory/logMemory.js';
 import { ActionServiceFactory, SessionFactory, ThinkerFactory } from "./agentFactory.js";
-import { stat } from "fs";
 
 export interface AgentDependencies {
   sessionId: string;
@@ -360,7 +359,7 @@ export default class BossAgent {
 
   cleanup() {
     this.agentRegistry.clear();
-    clearAllImages();
+    clearAllImages(this.sessionId);
     for (const session of this.sessions.values()) {
       session.close();
     }

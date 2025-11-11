@@ -101,7 +101,7 @@ export default class PlaywrightSession extends Session<Page> {
         fs.mkdirSync(folderName, { recursive: true });
       }
 
-      const filename = path.join(folderName, basicFilename);
+      const filename = path.join(folderName, `${basicFilename}_desktop`);
 
       if (!this.page) throw new Error("Page not initialized");
 

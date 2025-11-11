@@ -3,6 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import { InteractiveElement } from '../types.js';
 import crypto from 'crypto';
+import sharp from 'sharp';
+
+// Define the maximum size for a single dimension (width or height)
+const MAX_DIMENSION = 2048;
 
 type HashAlgorithm = 'md5' | 'sha1' | 'sha256';
 const imageDir = 'images';
@@ -45,18 +49,202 @@ export function storeImage(imagePath: string, outputDir: string = imageDir): str
     return outputPath;
 }
 
-// Clear all images in the output directory
-export function clearAllImages(outputDir: string = imageDir): void {
+
+/**
+ * Clears all images related to a session from the output directory.
+ * @param sessionId - The id of the session to clear images for.
+ * @param outputDir - The directory to clear images from. Defaults to the "images" directory.
+ */
+export function clearAllImages(sessionId: string, outputDir: string = imageDir): void {
     try {
-        fs.readdirSync(outputDir).forEach(file => {
-            const filePath = path.join(outputDir, file);
-            fs.unlinkSync(filePath);
-        });
-    } catch (e) { 
+        const files = fs.readdirSync(outputDir);
+        for (const file of files) {
+            // Check if the filename contains the sessionId anywhere.
+            // This catches both "1234" and "image_1234"
+            if (file.includes(sessionId)) {
+                fs.rmSync(path.join(outputDir, file), { recursive: true, force: true });
+            }
+        }
+    } catch (e) {
         console.error(e);
     }
 }
 
+
+/**
+ * Returns the base directory for images related to a session.
+ * The base directory is created by joining the output directory with a folder name
+ * that includes the session id.
+ * @example getBaseImageFolderPath('1234') returns 'images/image_1234'
+ * @param sessionId - The id of the session.
+ * @param outputDir - The root directory for the images. Defaults to the "images" directory.
+ * @returns The base directory for images related to the session.
+ */
+export function getBaseImageFolderPath(sessionId: string, outputDir: string = imageDir): string {
+    return path.join(outputDir, `image_${sessionId}`);
+}
+
+/**
+ * Helper to determine the expected directory for tiled output.
+ * @param inputPath The original image path.
+ * @returns The expected path of the tiled output directory.
+ */
+function getTiledOutputDir(inputPath: string): string {
+    const parsedPath = path.parse(inputPath);
+    // This must match the logic inside tileImage
+    return path.join(parsedPath.dir, 'tiled_output');
+}
+
+/**
+ * Tiles a single image file if its dimensions exceed MAX_DIMENSION.
+ * * @param inputPath - Path to the original image file.
+ * @returns A promise that resolves to an array of paths (original or tiled).
+ */
+async function tileImage(inputPath: string): Promise<string[]> {
+    try {
+        const metadata = await sharp(inputPath).metadata();
+        const width = metadata.width!;
+        const height = metadata.height!;
+
+        // Determine the number of horizontal and vertical tiles needed
+        const hTiles = Math.ceil(width / MAX_DIMENSION);
+        const vTiles = Math.ceil(height / MAX_DIMENSION);
+
+        // If the image fits within the limit, just return its original path
+        if (hTiles <= 1 && vTiles <= 1) {
+            return [inputPath];
+        }
+
+        const outputPaths: string[] = [];
+        const parsedPath = path.parse(inputPath);
+
+        // 1. Define the output directory NEXT TO the original file
+        // e.g., if input is /project/assets/img.jpg, outputDir is /project/assets/tiled_output/
+        const outputDir = path.join(parsedPath.dir, 'tiled_output');
+
+        // Ensure the temporary output directory exists
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+        }
+
+        // Iterate and crop the image into tiles
+        for (let yIdx = 0; yIdx < vTiles; yIdx++) {
+            for (let xIdx = 0; xIdx < hTiles; xIdx++) {
+                const xStart = xIdx * MAX_DIMENSION;
+                const yStart = yIdx * MAX_DIMENSION;
+
+                const tileWidth = Math.min(MAX_DIMENSION, width - xStart);
+                const tileHeight = Math.min(MAX_DIMENSION, height - yStart);
+
+                // Construct the output path
+                const outputFilename = `${parsedPath.name}_tile_${xIdx}_${yIdx}${parsedPath.ext}`;
+                const outputPath = path.join(outputDir, outputFilename);
+
+                // Use sharp's extract method to crop and save the tile
+                await sharp(inputPath)
+                    .extract({ left: xStart, top: yStart, width: tileWidth, height: tileHeight })
+                    .toFile(outputPath);
+
+                outputPaths.push(outputPath);
+            }
+        }
+
+        return outputPaths;
+
+    } catch (error) {
+        console.error(`Error processing image ${inputPath}:`, error);
+        // On error, return the original path so the process can continue
+        return [inputPath];
+    }
+}
+
+/**
+ * Finds all screenshot files related to a specific session ID and step,
+ * regardless of the platform suffix (e.g., _web, _mobile, _desktop).
+ * * @param sessionId The full session ID string.
+ * @param step The step identifier (e.g., 'initial', 'step1').
+ * @param outputDir The directory to search (defaults to imageDir).
+ * @returns A promise that resolves to an array of full file paths.
+ */
+export async function getRelatedScreenshots(
+    sessionId: string,
+    step: number,
+    outputDir: string = imageDir
+): Promise<string[]> {
+    try {
+        // 1. Define the unique base prefix to search for.
+        // The original format is: screenshot_{step}_{sessionId.substring(0, 10)}.png
+        const searchPrefix = `screenshot_${step}_${sessionId}`;
+
+        // 2. Read all entries in the output directory.
+        const files: string[] = await fs.promises.readdir(outputDir);
+
+        const relatedPaths: string[] = [];
+
+        // 3. Filter files that match the prefix and end with .png.
+        for (const file of files) {
+            // Check if the filename starts with the base prefix AND ends with the correct extension
+            if (file.startsWith(searchPrefix) && file.endsWith('.png')) {
+                // If it matches, push the full path
+                relatedPaths.push(path.join(outputDir, file));
+            }
+        }
+
+        return relatedPaths;
+
+    } catch (e) {
+        // Log an error if the directory can't be read (e.g., if it doesn't exist)
+        console.error(`Error reading output directory ${outputDir}:`, e);
+        return [];
+    }
+}
+
+/**
+ * Processes a single image path or an array of image paths, tiling them if necessary.
+ * It checks for existing tiled images before processing.
+ * * @param inputPaths - A single path string or an array of path strings.
+ * @returns A promise that resolves to an array of file paths for all resulting images (tiled or original).
+ */
+export async function processImages(inputPaths: string | string[]): Promise<string[]> {
+    const pathsArray = Array.isArray(inputPaths) ? inputPaths : [inputPaths];
+    const allTiledPaths: string[] = [];
+
+    for (const inputPath of pathsArray) {
+        const tiledOutputDir = getTiledOutputDir(inputPath);
+
+        // 1. CHECK FOR EXISTING TILED IMAGES
+        if (fs.existsSync(tiledOutputDir)) {
+            try {
+                // Check if the directory is not empty
+                const existingFiles = fs.readdirSync(tiledOutputDir);
+                
+                if (existingFiles.length > 0) {
+                    console.log(`Tiled images found for ${inputPath}. Reusing existing files.`);
+                    // Return the full paths of the existing files
+                    const fullPaths = existingFiles.map(file => path.join(tiledOutputDir, file));
+                    allTiledPaths.push(...fullPaths);
+                    continue; // Move to the next inputPath
+                }
+            } catch (e) {
+                console.error(`Error reading existing tiled directory ${tiledOutputDir}. Will re-process.`, e);
+                // Fall through to re-processing if directory exists but can't be read.
+            }
+        }
+        
+        // 2. TILE IF NECESSARY (Original tileImage logic)
+        // If the directory didn't exist, was empty, or failed to read, run the tiling process.
+        try {
+            const tiledPaths = await tileImage(inputPath);
+            allTiledPaths.push(...tiledPaths);
+        } catch (e) {
+            console.error(`Failed to process and tile image ${inputPath}`, e);
+            // Optionally push the original path if the tiling failed completely
+            allTiledPaths.push(inputPath);
+        }
+    }
+
+    return allTiledPaths;
+}
 
 /**
  * Annotate an image with interactive elements.

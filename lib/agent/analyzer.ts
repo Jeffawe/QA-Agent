@@ -1,7 +1,7 @@
 import { setTimeout } from "node:timers/promises";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { LinkInfo, State, ImageData, Action, ActionResult, InteractiveElement, AnalyzerStatus, } from "../types.js";
-import { processScreenshot } from "../services/imageProcessor.js";
+import { getBaseImageFolderPath, processScreenshot } from "../services/imageProcessor.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { fileExists } from "../utility/functions.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
@@ -22,6 +22,7 @@ export default class Analyzer extends Agent {
 
     private playwrightSession: playwrightSession;
     private localactionService: ManualActionService;
+    private imagePath: string = "";
 
     constructor(dependencies: BaseAgentDependencies) {
         super("analyzer", dependencies);
@@ -30,6 +31,7 @@ export default class Analyzer extends Agent {
         this.playwrightSession = this.session as playwrightSession;
         this.localactionService = this.actionService as ManualActionService;
         this.validatorWarningState = State.OBSERVE;
+        this.imagePath = getBaseImageFolderPath(this.sessionId);
     }
 
     /* ───────── external API ───────── */
@@ -96,11 +98,11 @@ export default class Analyzer extends Agent {
                     await this.playwrightSession.clearAllClickPoints();
                     this.currentUrl = this.playwrightSession.page?.url();
                     const filename = `screenshot_${this.step}_${this.sessionId.substring(0, 10)}.png`;
-                    (this as any).finalFilename = `images/annotated_${filename}`;
+                    (this as any).finalFilename = `${this.imagePath}/annotated_${filename}`;
 
                     const elements = await getInteractiveElements(this.playwrightSession.page!)
                     if (!this.visitedPage || !(await fileExists((this as any).finalFilename))) {
-                        const success = await this.playwrightSession.takeScreenshot("images", filename);
+                        const success = await this.playwrightSession.takeScreenshot(this.imagePath, filename);
                         if (!success) {
                             this.logManager.error("Screenshot failed", this.state);
                             this.setState(State.ERROR);
@@ -108,7 +110,7 @@ export default class Analyzer extends Agent {
                             break;
                         }
 
-                        await processScreenshot(`./images/${filename}`, elements);
+                        await processScreenshot(`./${this.imagePath}/${filename}`, elements);
                     }
 
                     (this as any).clickableElements = elements;
@@ -133,7 +135,7 @@ export default class Analyzer extends Agent {
                     };
 
                     const imageData: ImageData = {
-                        imagepath: (this as any).finalFilename,
+                        imagepath: [(this as any).finalFilename],
                     };
 
                     this.logManager.addMission(nextActionContext.goal);

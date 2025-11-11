@@ -8,6 +8,7 @@ import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/autoActionService.js";
 import path from "node:path";
 import { Page } from "@browserbasehq/stagehand";
+import { getBaseImageFolderPath, getRelatedScreenshots } from "../services/imageProcessor.js";
 
 export default class AutoAnalyzer extends Agent {
     public activeLink: LinkInfo | null = null;
@@ -21,6 +22,8 @@ export default class AutoAnalyzer extends Agent {
 
     private stagehandSession: StagehandSession;
     private localactionService: AutoActionService;
+    private imagePath: string = "";
+    private screenshots: string[] = [];
 
     constructor(dependencies: BaseAgentDependencies) {
         super("autoanalyzer", dependencies);
@@ -29,6 +32,7 @@ export default class AutoAnalyzer extends Agent {
         this.stagehandSession = this.session as StagehandSession;
         this.localactionService = this.actionService as AutoActionService;
         this.validatorWarningState = State.OBSERVE;
+        this.imagePath = getBaseImageFolderPath(this.sessionId);
     }
 
     /* ───────── external API ───────── */
@@ -102,22 +106,24 @@ export default class AutoAnalyzer extends Agent {
                 case State.OBSERVE: {
                     this.currentUrl = this.page.url();
                     const filename = `screenshot_${this.step}_${this.sessionId.substring(0, 10)}.png`;
-                    const expectedPath = path.resolve("images", filename); // Use absolute path
+                    const expectedPath = path.resolve(this.imagePath, filename); // Use absolute path
 
-                    if (!this.visitedPage || !(await fileExists(expectedPath))) {
-                        const actualPath = await this.stagehandSession.takeScreenshot("images", filename);
-                        if (!actualPath) {
+                    if (!(await fileExists(expectedPath))) {
+                        this.logManager.log(`Take screenshot ${filename}`, this.buildState(), false);
+                        const paths = await this.stagehandSession.takeMultiDeviceScreenshots(this.imagePath, filename);
+                        if (!paths || paths.length === 0) {
                             this.logManager.error("Screenshot failed", this.state);
                             this.setState(State.ERROR);
                             this.stopSystem("Screenshot failed");
                             break;
                         }
-                        (this as any).finalFilename = actualPath; // Use the actual returned path
+                        this.screenshots= paths; // Use the actual returned path
                     } else {
-                        (this as any).finalFilename = expectedPath; // Use the expected path if file exists
+                        const allPaths = await getRelatedScreenshots(this.sessionId, this.step, this.imagePath);
+                        this.screenshots= allPaths;
                     }
 
-                    this.bus.emit({ ts: Date.now(), type: "screenshot_taken", filename: (this as any).finalFilename, elapsedMs: 0 });
+                    this.bus.emit({ ts: Date.now(), type: "screenshot_taken", filename: this.screenshots[0], elapsedMs: 0 });
 
                     this.setState(State.DECIDE);
                     break;
@@ -135,7 +141,7 @@ export default class AutoAnalyzer extends Agent {
                     };
 
                     const imageData: ImageData = {
-                        imagepath: (this as any).finalFilename,
+                        imagepath: this.screenshots,
                     };
 
                     this.logManager.addMission(nextActionContext.goal);

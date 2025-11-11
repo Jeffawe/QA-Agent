@@ -29,7 +29,7 @@ export abstract class LLM {
 
     abstract generateTextResponse(prompt: string): Promise<Action>;
 
-    abstract generateMultimodalAction(prompt: string, imagePath: string, recurrent: boolean, agentName: Namespaces): Promise<ThinkResult>
+    abstract generateMultimodalAction(prompt: string, imagePath: string[], recurrent: boolean, agentName: Namespaces): Promise<ThinkResult>
 
     /**
      * More accurate token counting using a simple tokenizer approximation
@@ -54,30 +54,35 @@ export abstract class LLM {
     /**
      * Calculate image token usage based on image dimensions and format
      */
-    protected calculateImageTokens(imagePath: string): number {
+    protected calculateImageTokens(imagePaths: string[]): number {
         try {
-            const stats = fs.statSync(imagePath);
-            const fileSizeKB = stats.size / 1024;
+            let localValue = 0;
+            for (const imagePath of imagePaths) {
+                const stats = fs.statSync(imagePath);
+                const fileSizeKB = stats.size / 1024;
 
-            // Gemini token calculation is complex and depends on:
-            // - Image resolution
-            // - Image format
-            // - Model version
+                // Gemini token calculation is complex and depends on:
+                // - Image resolution
+                // - Image format
+                // - Model version
 
-            // For Gemini 2.5 Flash, rough estimates:
-            // - Small images (~100KB): ~250-500 tokens
-            // - Medium images (~500KB): ~750-1500 tokens  
-            // - Large images (1MB+): ~1500-3000 tokens
+                // For Gemini 2.5 Flash, rough estimates:
+                // - Small images (~100KB): ~250-500 tokens
+                // - Medium images (~500KB): ~750-1500 tokens  
+                // - Large images (1MB+): ~1500-3000 tokens
 
-            if (fileSizeKB < 100) {
-                return 400; // Conservative estimate for small images
-            } else if (fileSizeKB < 500) {
-                return Math.ceil(fileSizeKB * 2.5); // ~2.5 tokens per KB
-            } else if (fileSizeKB < 1000) {
-                return Math.ceil(fileSizeKB * 2); // ~2 tokens per KB
-            } else {
-                return Math.ceil(fileSizeKB * 1.5); // ~1.5 tokens per KB for large images
+                if (fileSizeKB < 100) {
+                    localValue += 400; // Conservative estimate for small images
+                } else if (fileSizeKB < 500) {
+                    localValue += Math.ceil(fileSizeKB * 2.5); // ~2.5 tokens per KB
+                } else if (fileSizeKB < 1000) {
+                    localValue += Math.ceil(fileSizeKB * 2); // ~2 tokens per KB
+                } else {
+                    localValue += Math.ceil(fileSizeKB * 1.5); // ~1.5 tokens per KB for large images
+                }
             }
+
+            return localValue;
         } catch (error) {
             return 1000; // Default conservative estimate
         }
@@ -109,12 +114,12 @@ export abstract class LLM {
     protected calculateTokenUsage(
         prompt: string,
         systemInstruction: string,
-        imagePath: string | null,
+        imagePaths: string[] | null,
         response: any
     ): TokenUsage {
         const promptTokens = this.estimateTokens(prompt);
         const systemTokens = this.estimateTokens(systemInstruction);
-        const imageTokens = imagePath ? this.calculateImageTokens(imagePath) : 0;
+        const imageTokens = imagePaths ? this.calculateImageTokens(imagePaths) : 0;
         let responseTokens = 0;
 
         if (response) {

@@ -5,6 +5,8 @@ import { GetNextActionContext, State, ThinkResult, ImageData, Namespaces } from 
 import { logManagers } from "../memory/logMemory.js";
 import { EventBus } from "../events/event.js";
 import { eventBusManager } from "../events/eventBus.js";
+import { processImages } from "../imageProcessor.js";
+import { dataMemory } from "../memory/dataMemory.js";
 
 const thinkerState = State.DECIDE
 
@@ -64,6 +66,11 @@ export class CombinedThinker extends Thinker {
             // Use multimodal if we have an image
             if (!imageData?.imagepath) {
                 throw new Error("No image data provided.");
+            }else{
+                const optimize = dataMemory.getData("optimizeImages");
+                if (optimize) {
+                    imageData.imagepath = await processImages(imageData.imagepath);
+                }
             }
 
             const result = await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath, recurrent, agentName);
@@ -124,6 +131,11 @@ export class CombinedThinker extends Thinker {
             // Use multimodal if we have an image
             if (!imageData?.imagepath) {
                 throw new Error("No image data provided.");
+            }else{
+                const optimize = dataMemory.getData("optimizeImages");
+                if (optimize) {
+                    imageData.imagepath = await processImages(imageData.imagepath);
+                }
             }
 
             const result = await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath, recurrent, agentName);

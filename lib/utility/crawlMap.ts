@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { writeFileSync, existsSync } from "node:fs";
+import { writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { join, dirname, isAbsolute } from "node:path";
 import { mkdirSync } from "node:fs";
 import type { PageDetails } from "../types.js";

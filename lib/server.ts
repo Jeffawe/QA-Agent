@@ -161,6 +161,7 @@ const cleanup = async () => {
         console.log('No active sessions to stop.');
         return;
     }
+
     for (const session of getSessions().values()) {
         if (session.worker) {
             session.worker.postMessage({ command: 'stop' });
@@ -171,8 +172,8 @@ const cleanup = async () => {
 
             // Force terminate after timeout
             setTimeout(() => {
-                session.worker?.terminate();
-            }, 5000);
+                session?.worker?.terminate();
+            }, 20000);
         }
     }
 

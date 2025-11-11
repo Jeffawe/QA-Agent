@@ -4,6 +4,7 @@ import { setTimeout } from "node:timers/promises";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import { PageMemory } from "../services/memory/pageMemory.js";
 import AutoActionService from "../services/actions/autoActionService.js";
+import { getBaseImageFolderPath } from "../services/imageProcessor.js";
 
 export class GoalAgent extends Agent {
     public goal: string;
@@ -17,6 +18,8 @@ export class GoalAgent extends Agent {
     private actionResponse: Action | null = null;
     private stageHandSession: StagehandSession;
     private localactionService: AutoActionService;
+    private imagePath: string = "";
+    private screenshot: string = "";
 
     constructor(dependencies: BaseAgentDependencies) {
         super("goalagent", dependencies);
@@ -25,6 +28,7 @@ export class GoalAgent extends Agent {
 
         this.stageHandSession = this.session as StagehandSession;
         this.localactionService = this.actionService as AutoActionService;
+        this.imagePath = getBaseImageFolderPath(this.sessionId);
     }
 
     public setBaseValues(url: string, mainGoal?: string): void {
@@ -101,10 +105,10 @@ export class GoalAgent extends Agent {
 
                 case State.OBSERVE: {
                     const filename = `screenshot_${Date.now()}_${this.sessionId.substring(0, 10)}.png`;
-                    const finalPath = `images/${filename}`;
-                    (this as any).screenshot = finalPath;
+                    const finalPath = `${this.imagePath}/${filename}`;
+                    this.screenshot = finalPath;
 
-                    const success = await this.stageHandSession.takeScreenshot("images", filename);
+                    const success = await this.stageHandSession.takeScreenshot(this.imagePath, filename);
                     if (!success) {
                         this.logManager.error("Screenshot failed", this.state);
                         this.setState(State.ERROR);
@@ -134,7 +138,7 @@ export class GoalAgent extends Agent {
                     };
 
                     const imageData: ImageData = {
-                        imagepath: (this as any).screenshot
+                        imagepath: [this.screenshot]
                     };
 
                     const command = await this.thinker.think(context, imageData, this.response, this.name);

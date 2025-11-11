@@ -11,7 +11,7 @@ import PlaywrightSession from "../browserAuto/playWrightSession.js";
 import ManualActionService from "../services/actions/actionService.js";
 import { dataMemory } from "../services/memory/dataMemory.js";
 
-const router = Router();
+const router: Router = Router();
 
 router.get("/test-data", async (req, res) => {
     try {

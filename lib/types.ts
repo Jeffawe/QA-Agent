@@ -53,7 +53,7 @@ export interface GetNextActionContext {
 }
 
 export interface ImageData {
-    imagepath: string;
+    imagepath: string[];
     imageUrl?: string;
 }
 
