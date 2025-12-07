@@ -4,8 +4,8 @@ import { LinkInfo, State, ImageData, Action, ActionResult, InteractiveElement, A
 import { getBaseImageFolderPath, processScreenshot } from "../services/imageProcessor.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { fileExists } from "../utility/functions.js";
-import { PageMemory } from "../services/memory/pageMemory.js";
-import { CrawlMap } from "../utility/crawlMap.js";
+import { pageMemory } from "../services/memory/pageMemory.js";
+import { crawlMap } from "../utility/crawlMap.js";
 import playwrightSession from "../browserAuto/playWrightSession.js";
 import ManualActionService from "../services/actions/actionService.js";
 import { Page } from "playwright";
@@ -154,7 +154,7 @@ export default class Analyzer extends Agent {
                     }
 
                     if (command.analysis) {
-                        PageMemory.addAnalysis(this.currentUrl, command.analysis, this.sessionId);
+                        pageMemory.addAnalysis(this.currentUrl, command.analysis, this.sessionId);
                     }
 
                     (this as any).pendingAction = command.action;
@@ -166,7 +166,7 @@ export default class Analyzer extends Agent {
                 case State.ACT: {
                     const action: Action = (this as any).pendingAction;
                     const t0 = Date.now();
-                    this.bus.emit({ ts: t0, type: "action_started", action });
+                    this.bus.emit({ ts: t0, type: "action_started", action, agentName: this.name });
 
                     if (action.step === "click" && !this.checkifLabelValid(action.args[0])) {
                         this.logManager.error("Label is not valid", State.ERROR, false);
@@ -174,16 +174,17 @@ export default class Analyzer extends Agent {
                         this.bus.emit({
                             ts: Date.now(),
                             type: "validator_warning",
-                            message: warning
+                            message: warning,
+                            agentName: this.name
                         });
                         break;
                     }
 
                     if (action.step === 'done') {
                         this.setState(State.DONE);
-                        const leftovers = PageMemory.getAllUnvisitedLinks(this.currentUrl);
-                        leftovers.forEach(l => PageMemory.markLinkVisited(this.currentUrl, l.description || l.href!));
-                        CrawlMap.recordPage(PageMemory.getPage(this.currentUrl), this.sessionId);
+                        const leftovers = pageMemory.getAllUnvisitedLinks(this.currentUrl);
+                        leftovers.forEach(l => pageMemory.markLinkVisited(this.currentUrl, l.href || l.description));
+                        crawlMap.recordPage(pageMemory.getPage(this.currentUrl), this.sessionId);
                         this.logManager.log("All links have been tested", this.buildState(), true);
                         this.activeLink = null;
                         const endTime = performance.now();
@@ -208,10 +209,10 @@ export default class Analyzer extends Agent {
                     }
 
                     if (this.currentUrl && result.linkType == "external") {
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.playwrightSession.page.url(), page: this.playwrightSession.page, handled: true });
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.baseUrl!, newPage: this.playwrightSession.page.url(), page: this.playwrightSession.page, handled: true });
                     }
 
-                    this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });
+                    this.bus.emit({ ts: Date.now(), type: "action_finished", action, agentName: this.name, elapsedMs: Date.now() - t0 });
                     const newGoal = action.newGoal ?? "Crawl the given page";
                     if (newGoal != "Crawl the given page") {
                         this.logManager.addSubMission(newGoal);

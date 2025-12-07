@@ -39,7 +39,6 @@ export default class AutoActionService extends ActionService {
 
                 const actionToTake = detailedAction.selector ?? finalAction;
                 await this.localsession.act(actionToTake);
-                this.logManager.log(`Executing action: ${finalAction}`, state);
             }
 
             return { success: true, linkType: this.intOrext, actionTaken: finalAction };

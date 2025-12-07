@@ -1,7 +1,7 @@
 import { EventBus } from './event.js';
 import { LogManager } from '../../utility/logManager.js';
 import { logManagers } from '../memory/logMemory.js';
-import { PageMemory } from '../memory/pageMemory.js';
+import { pageMemory } from '../memory/pageMemory.js';
 import { ConnectionData, DisconnectionData, FirstConnectionData, LocalMessage, State, Statistics, WebSocketData } from '../../types.js';
 import { parentPort } from "worker_threads";
 
@@ -87,7 +87,7 @@ export class LocalEventBridge {
             // Send initial data for the new session
             await this.publishMessage('INITIAL_DATA', {
                 messages: this.logManager?.getLogs(),
-                pages: PageMemory.getAllPages(),
+                pages: pageMemory.getAllPages(),
                 timestamp: Date.now()
             });
 

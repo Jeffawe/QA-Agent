@@ -1,11 +1,11 @@
 /* eslint-disable no-console */
-import { writeFileSync, existsSync, unlinkSync } from "node:fs";
+import { writeFileSync, existsSync } from "node:fs";
 import { join, dirname, isAbsolute } from "node:path";
 import { mkdirSync } from "node:fs";
 import type { PageDetails } from "../types.js";
 import { LogManager } from "./logManager.js";
 import { eventBusManager } from "../services/events/eventBus.js";
-import { PageMemory } from "../services/memory/pageMemory.js";
+import { pageMemory } from "../services/memory/pageMemory.js";
 
 export interface Edge { from: string; to: string }
 const MAX_STRING_LENGTH = 300;
@@ -14,19 +14,19 @@ const MAX_LINES = 5;
 /** Pretty, page-centric crawl map for debugging */
 export class CrawlMap {
   /* ───── internal state ───── */
-  private static file = "crawl_map.md";
+  private file = "crawl_map.md";
 
   /** order of visitation (urls) */
-  private static navOrder: Set<string> = new Set();
+  private navOrder: Set<string> = new Set();
 
   /** “from-->to” edge list (kept for completeness) */
-  private static edges: Set<string> = new Set();
+  private edges: Set<string> = new Set();
 
-  private static initialised = false;
-  private static finished = false;
+  private initialised = false;
+  private finished = false;
 
   /** Call once at program start (optional custom path) */
-  static init(filePath = "crawl_map.md") {
+  init(filePath = "crawl_map.md") {
     try {
       const full = isAbsolute(filePath)
         ? filePath
@@ -46,11 +46,11 @@ export class CrawlMap {
     }
   }
 
-  static addPageWithURL(url: string): string {
+  addPageWithURL(url: string): string {
     const eventBus = eventBusManager.getOrCreateBus();
     if (!this.navOrder.has(url)) {
       this.navOrder.add(url);
-      const page = PageMemory.getPage(url);
+      const page = pageMemory.getPage(url);
       if (page) {
         eventBus.emit({ ts: Date.now(), type: "crawl_map_updated", page });
       }
@@ -61,13 +61,13 @@ export class CrawlMap {
   }
 
   /** Register page details (call as soon as PageDetails is ready) */
-  static recordPage(page: PageDetails, sessionId: string) {
+  recordPage(page: PageDetails, sessionId: string) {
     try {
       if (!this.initialised) this.init();
       const eventBus = eventBusManager.getOrCreateBus();
       eventBus.emit({ ts: Date.now(), type: "crawl_map_updated", page });
-      if (!this.navOrder.has(page.url ?? page.uniqueID)) {
-        const url = PageMemory.addPageWithURL(page.url ?? page.uniqueID);
+      if (!this.navOrder.has(page.url)) {
+        const url = pageMemory.addPageWithURL(page.url, page.parentUrl ?? "");
         this.navOrder.add(url);
       }
       this.write();
@@ -77,11 +77,11 @@ export class CrawlMap {
     }
   }
 
-  static finish() {
+  finish() {
     this.finished = true;
   }
 
-  
+
   /**
    * Add an edge to the crawl map. This is typically used to
    * represent a link between two pages.
@@ -90,17 +90,17 @@ export class CrawlMap {
    * @param {string} to - the URL of the page that the link
    * points to.
    */
-  static addEdge(from: string, to: string) {
+  addEdge(from: string, to: string) {
     if (!this.initialised) this.init();
     this.edges.add(`${from}-->${to}`);
     // we *don’t* write() here; recordPage will write soon anyway
   }
 
-  public static writetoFile() { this.write(); }
+  public writetoFile() { this.write(); }
 
   /* ───── markdown writer ───── */
 
-  private static write() {
+  private write() {
     if (this.navOrder.size === 0) return;
     if (this.finished) return; // prevent late writes
     let md =
@@ -108,19 +108,25 @@ export class CrawlMap {
     /* ---------- quick overview ---------- */
     md += "## Quick overview\n\n";
     for (const url of this.navOrder) {
-      const title = PageMemory.getPage(url)?.title ?? url;
+      const title = pageMemory.getPage(url)?.title ?? url;
       md += `| - ${title}\n`;
     }
     md += "\n---\n";
     /* ---------- per-page blocks ---------- */
     this.navOrder.forEach((url, idx) => {
-      const page = PageMemory.getPage(url);
+      const page = pageMemory.getPage(url);
       if (!page) return;
       const heading = `### ${idx + 1}. ${page.title || "(untitled)"} \n`;
       const sub = page.url ? `**URL:** ${page.url} \n` : "";
       const desc = page.description ? `${page.description}\n` : "";
       const shot = page.screenshot ? `![screenshot](${page.screenshot})\n\n` : "";
+      const parentUrl = page.parentUrl ? `**Parent URL:** ${page.parentUrl}\n` : "";
+      const depth = page.depth !== undefined && page.depth !== null
+        ? `**Depth:** ${page.depth}\n`
+        : "";
       md += `${heading}${sub}${desc}${shot}`;
+      md += `${parentUrl}`;
+      md += `${depth}`;
       /* ----- links ----- */
       md += "**Links:**\n\n";
       if (page.links.length === 0) {
@@ -260,7 +266,10 @@ export class CrawlMap {
   }
 
   /* helper – indent multi-line notes for nicer MD block */
-  static indent(txt: string, spaces = 2) {
+  indent(txt: string, spaces = 2) {
     return txt.split("\n").map(l => " ".repeat(spaces) + l).join("\n");
   }
 }
+
+const crawlMap = new CrawlMap();
+export { crawlMap };

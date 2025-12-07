@@ -1,7 +1,7 @@
 import { Page } from "playwright";
 import playwrightSession from "../browserAuto/playWrightSession.js";
 import ManualActionService from "../services/actions/actionService.js";
-import { PageMemory } from "../services/memory/pageMemory.js";
+import { pageMemory } from "../services/memory/pageMemory.js";
 import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { isSameOriginWithPath } from "../utility/functions.js";
@@ -77,6 +77,10 @@ export default class ManualAnalyzer extends Agent {
             this.page = page;
         }
 
+        if(!this.baseUrl){
+            throw new Error("Base URL not initialized");
+        }
+
         if (!this.bus) return
 
         try {
@@ -122,7 +126,7 @@ export default class ManualAnalyzer extends Agent {
                 }
 
                 case State.VALIDATE: {
-                    const oldUrl = new URL(this.currentUrl);
+                    const oldUrl = new URL(this.baseUrl);
                     const newUrl = new URL(this.page.url());
 
                     const isSameOrigin = isSameOriginWithPath(oldUrl.toString(), newUrl.toString());
@@ -132,8 +136,8 @@ export default class ManualAnalyzer extends Agent {
                         try {
                             await this.page.goBack({ waitUntil: "networkidle" });
                             if (!this.activeLink) throw new Error("nextLink is null after external navigation");
-                            PageMemory.removeLink(this.currentUrl, this.activeLink.description);
-                            this.queue = PageMemory.getAllUnvisitedLinks(this.currentUrl);
+                            pageMemory.removeLink(this.currentUrl, this.activeLink.description);
+                            this.queue = pageMemory.getAllUnvisitedLinks(this.currentUrl);
                             this.setState(State.START);
                         } catch (err) {
                             this.bus.emit({
@@ -147,7 +151,7 @@ export default class ManualAnalyzer extends Agent {
                         }
                     } else {
                         this.setState(State.DONE);
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.page.url(), page: this.page });
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.baseUrl, newPage: this.page.url(), page: this.page });
                     }
                     break;
                 }

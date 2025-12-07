@@ -41,7 +41,8 @@ class DataMemory {
         }
 
         Object.entries(dataObject).forEach(([key, value]) => {
-            const finalKey = prefix ? `${prefix}.${key}` : key;
+            let finalKey = prefix ? `${prefix}.${key}` : key;
+            finalKey = finalKey.replace(/^\./, '').trim().toLowerCase();
 
             // --- detect if this is an endpoint ---
             const isEndpoint =

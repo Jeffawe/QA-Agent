@@ -2,7 +2,7 @@ import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { Action, AnalyzerStatus, ImageData, State } from "../types.js";
 import { setTimeout } from "node:timers/promises";
 import StagehandSession from "../browserAuto/stagehandSession.js";
-import { PageMemory } from "../services/memory/pageMemory.js";
+import { pageMemory } from "../services/memory/pageMemory.js";
 import AutoActionService from "../services/actions/autoActionService.js";
 import { getBaseImageFolderPath } from "../services/imageProcessor.js";
 
@@ -85,7 +85,7 @@ export class GoalAgent extends Agent {
                 case State.START: {
                     (this as any).startTime = performance.now();
                     this.previousPage = this.currentPage;
-                    this.currentPage = page.url();
+                    this.currentPage = this.stageHandSession.getCurrentUrl();
                     if (!this.goal) {
                         this.logManager.error("GoalAgent started without a goal", this.buildState());
                         this.setState(State.ERROR);
@@ -157,7 +157,7 @@ export class GoalAgent extends Agent {
 
 
                     if (command.analysis) {
-                        PageMemory.addAnalysis(this.currentUrl, command.analysis, this.sessionId);
+                        pageMemory.addAnalysis(this.currentUrl, command.analysis, this.sessionId);
                     }
 
                     this.actionResponse = command.action;

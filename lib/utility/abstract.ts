@@ -183,7 +183,7 @@ export abstract class Agent {
 
     // Default state to go to after a validator warning
     // This is set to START by default, meaning it will reset the agent to the initial state
-    protected validatorWarningState: State = State.START;
+    protected validatorWarningState: State = this.dependent ? State.WAIT : State.START;
     protected logManager: LogManager;
 
     protected constructor(name: Namespaces, dependencies: BaseAgentDependencies) {
@@ -204,9 +204,11 @@ export abstract class Agent {
         this.logManager = logManagers.getOrCreateManager(this.sessionId);
 
         this.bus.on("validator_warning", (evt) => {
-            this.response = evt.message;
-            this.logManager.log(`Validator warning in agent ${this.name}: ${evt.message}`, State.WARN, true);
-            this.setState(this.validatorWarningState);
+            if (evt.agentName === this.name) {
+                this.response = evt.message;
+                this.logManager.log(`Validator warning in agent ${this.name}: ${evt.message}`, State.WARN, true);
+                this.setState(this.validatorWarningState);
+            }
         });
 
         this.bus.on('stop', async (evt) => {
@@ -380,6 +382,8 @@ export abstract class Session<TPage = any> {
     public getSessionId(): string {
         return this.sessionId;
     }
+
+    public abstract goto(newPage: string, oldPage?: string): Promise<void>;
 }
 
 

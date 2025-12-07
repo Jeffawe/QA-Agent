@@ -1,8 +1,8 @@
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { PageMemory } from "../services/memory/pageMemory.js";
+import { pageMemory } from "../services/memory/pageMemory.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
 import { InteractiveElement, LinkInfo, State } from "../types.js";
-import { CrawlMap } from "../utility/crawlMap.js";
+import { crawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
 import ManualAnalyzer from "./manualAnalyzer.js";
 import playwrightSession from "../browserAuto/playWrightSession.js";
@@ -79,7 +79,7 @@ export class Crawler extends Agent {
                 case State.START: {
                     (this as any).startTime = performance.now();
                     this.currentUrl = page.url();
-                    if (!PageMemory.pageExists(this.currentUrl)) {
+                    if (!pageMemory.pageExists(this.currentUrl)) {
                         const elements = await getInteractiveElements(this.playwrightSession.page!);
                         const links = this.convertInteractiveElementsToLinks(elements, this.baseUrl!, this.currentUrl);
                         this.logManager.log(`Links detected: ${links.length} are: ${JSON.stringify(links)}`, this.buildState(), false);
@@ -90,9 +90,12 @@ export class Crawler extends Agent {
                             description: '',
                             visited: false,
                             screenshot: '',
+                            depth: 0,
+                            hasDepth: false,
+                            parentUrl: this.baseUrl,
                         };
-                        PageMemory.addPageWithLinks(pageDetails, links);
-                        CrawlMap.recordPage({ ...pageDetails, links }, this.sessionId);
+                        pageMemory.addPageWithLinks(pageDetails, links);
+                        crawlMap.recordPage({ ...pageDetails, links }, this.sessionId);
                     }
                     this.setState(State.EVALUATE);
                     break;
@@ -100,12 +103,12 @@ export class Crawler extends Agent {
 
                 /*────────── 2. EVALUATE → VISIT ─────────*/
                 case State.EVALUATE: {
-                    if (PageMemory.isFullyExplored(this.currentUrl)) {
-                        const back = PageMemory.popFromStack();
+                    if (pageMemory.isFullyExplored(this.currentUrl)) {
+                        const back = pageMemory.popFromStack();
                         if (back) {
                             this.logManager.log(`Backtracking to ${back}`, this.buildState(), false);
-                            await page.goto(back, { waitUntil: "networkidle" });
-                            this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: back, page: page });
+                            await this.playwrightSession.goto(back, this.currentUrl);
+                            this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.baseUrl, newPage: back, page: page });
                             this.setState(State.START);
                         } else {
                             this.setState(State.DONE);
@@ -119,13 +122,13 @@ export class Crawler extends Agent {
                 /*────────── 3. VISIT → ACT ─────────────*/
                 case State.VISIT: {
                     let isVisited = true;
-                    const unvisited = PageMemory.getAllUnvisitedLinks(this.currentUrl);
+                    const unvisited = pageMemory.getAllUnvisitedLinks(this.currentUrl);
                     this.logManager.log(`Visiting ${unvisited.length} unvisited linkson page ${this.currentUrl}: ${JSON.stringify(unvisited)}`, this.buildState(), false);
-                    if (!PageMemory.isPageVisited(this.currentUrl)) {
-                        for (const l of unvisited) CrawlMap.addEdge(this.currentUrl!, l.href!);
-                        PageMemory.markPageVisited(this.currentUrl);
+                    if (!pageMemory.isPageVisited(this.currentUrl)) {
+                        for (const l of unvisited) crawlMap.addEdge(this.currentUrl!, l.href!);
+                        pageMemory.markPageVisited(this.currentUrl);
                         isVisited = false;
-                        CrawlMap.recordPage(PageMemory.getPage(this.currentUrl), this.sessionId);
+                        crawlMap.recordPage(pageMemory.getPage(this.currentUrl), this.sessionId);
                     }
 
                     if (isVisited) {
@@ -167,22 +170,22 @@ export class Crawler extends Agent {
 
                     const active = this.isCurrentPageVisited ? this.manualAnalyzer.activeLink : this.analyzer.activeLink;
                     if (active) {
-                        PageMemory.markLinkVisited(this.currentUrl, active.description || active.href!);
+                        pageMemory.markLinkVisited(this.currentUrl, active.href || active.description);
                         const finalUrl = page.url();
-                        CrawlMap.recordPage(PageMemory.getPage(this.currentUrl), this.sessionId);
-                        PageMemory.pushToStack(this.currentUrl);
-                        CrawlMap.addEdge(this.currentUrl!, active.href!);
+                        crawlMap.recordPage(pageMemory.getPage(this.currentUrl), this.sessionId);
+                        pageMemory.pushToStack(this.currentUrl);
+                        crawlMap.addEdge(this.currentUrl!, active.href!);
 
                         this.currentUrl = finalUrl;
                         this.setState(State.START);
                     } else {
                         // dead-end → backtrack
                         this.logManager.log("Backtracking. No more links", this.buildState(), false);
-                        const back = PageMemory.popFromStack();
+                        const back = pageMemory.popFromStack();
                         if (back) {
                             this.logManager.log(`Backtracking to ${back}`, this.buildState(), false);
-                            await page.goto(back, { waitUntil: "networkidle" });
-                            this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: back, page: page });
+                            await this.playwrightSession.goto(back, this.currentUrl);
+                            this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.baseUrl, newPage: back, page: page });
                             this.setState(State.START);
                         } else {
                             this.setState(State.DONE);

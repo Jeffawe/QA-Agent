@@ -1,4 +1,4 @@
-import { Action } from "../../types.js";
+import { Action, Namespaces } from "../../types.js";
 import { EventBus } from "../events/event.js";
 
 export class ActionSpamValidator {
@@ -8,10 +8,14 @@ export class ActionSpamValidator {
   private extraSpamCount = 0;
 
   constructor(private bus: EventBus, private sessionId: string, private windowSize: number = 3, private extraSpamLimit: number = 2) {
-    bus.on("action_started", evt => this.onAction(evt.action));
+    bus.on("action_started", evt => this.onAction(evt.action, evt.agentName));
   }
 
-  private onAction(action: Action) {
+  private onAction(action: Action, agentName: Namespaces) {
+    if (this.isEmpty(action)) {
+      return;
+    }
+
     this.history.push(action);
     if (this.history.length > this.windowSize) this.history.shift();
 
@@ -43,7 +47,8 @@ export class ActionSpamValidator {
           type: "validator_warning",
           message: `Validator warns that Action "${action.step}" with args "${JSON.stringify(
             action.args
-          )}" was repeated ${this.windowSize}× consecutively. Don't pick it again as it obviously doesn't do anything`
+          )}" was repeated ${this.windowSize}× consecutively. Don't pick it again as it obviously doesn't do anything`,
+          agentName: agentName
         });
       }
 
@@ -60,6 +65,17 @@ export class ActionSpamValidator {
         a.step === first.step &&
         JSON.stringify(a.args) === JSON.stringify(first.args)
     );
+  }
+
+  private isEmpty(action: Action): boolean {
+    // Check if step is empty or args is empty/null/undefined
+    const stepEmpty = !action.step || action.step.trim() === "";
+    const argsEmpty =
+      !action.args ||
+      (typeof action.args === "object" && Object.keys(action.args).length === 0) ||
+      (Array.isArray(action.args) && action.args.length === 0);
+
+    return stepEmpty || argsEmpty;
   }
 
   private key(action: Action): string {

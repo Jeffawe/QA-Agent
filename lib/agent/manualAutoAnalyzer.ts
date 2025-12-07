@@ -1,7 +1,7 @@
 import { Page } from "@browserbasehq/stagehand";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/autoActionService.js";
-import { PageMemory } from "../services/memory/pageMemory.js";
+import { pageMemory } from "../services/memory/pageMemory.js";
 import { LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { isSameOriginWithPath } from "../utility/functions.js";
@@ -19,6 +19,7 @@ export default class ManualAutoAnalyzer extends Agent {
         super("manualAutoanalyzer", dependencies);
         this.goal = "";
         this.setState(dependencies.dependent ? State.WAIT : State.START);
+        this.validatorWarningState = dependencies.dependent ? State.WAIT : State.START;
 
         this.stageHandSession = this.session as StagehandSession;
         this.localactionService = this.actionService as AutoActionService;
@@ -78,6 +79,10 @@ export default class ManualAutoAnalyzer extends Agent {
             this.page = page;
         }
 
+        if (!this.baseUrl) {
+            throw new Error("Base URL not initialized");
+        }
+
         if (!this.bus) return
 
         try {
@@ -85,7 +90,7 @@ export default class ManualAutoAnalyzer extends Agent {
                 /*────────── READY → RUN ──────────*/
                 case State.START:
                     (this as any).startTime = performance.now();
-                    this.currentUrl = this.page!.url();
+                    this.currentUrl = this.stageHandSession.getCurrentUrl();
                     this.goal = "Find the next best link to click";
                     this.logManager.log(`Start testing ${this.queue.length} links from ${this.currentUrl}`, this.buildState(), true);
                     if (this.queue.length === 0) {
@@ -130,16 +135,23 @@ export default class ManualAutoAnalyzer extends Agent {
                 }
 
                 case State.VALIDATE: {
-                    this.logManager.log(`Validating ${this.currentUrl} vs ${this.page.url()}`, this.buildState(), true);
-                    const isSameOrigin = isSameOriginWithPath(this.currentUrl, this.page.url());
+                    const currentUrl = await this.stageHandSession.waitForStableUrl();
+                    this.logManager.log(`Validating ${this.currentUrl} vs ${currentUrl}`, this.buildState(), true);
+                    const isSameOrigin = isSameOriginWithPath(this.baseUrl, currentUrl);
+
+                    if (this.activeLink) {
+                        pageMemory.markLinkVisited(this.currentUrl, this.activeLink.href || this.activeLink.description);
+                        this.logManager.log(`Marked link "${this.activeLink.href}" as visited on ${this.currentUrl}`, this.buildState(), true);
+                    }
 
                     if (!isSameOrigin) {
                         // Optional: ensure page is defined before going back
                         try {
-                            await this.page?.goto(this.currentUrl, ({ waitUntil: "networkidle" }));
+                            await this.stageHandSession.goto(this.currentUrl);
+                            this.logManager.log(`Navigated back to ${this.currentUrl} after external page nav`, this.buildState(), true);
                             if (!this.activeLink) throw new Error("activeLink is null after external navigation");
-                            PageMemory.markLinkVisited(this.currentUrl, this.activeLink.description);
-                            this.queue = PageMemory.getAllUnvisitedLinks(this.currentUrl);
+                            pageMemory.markLinkVisited(this.currentUrl, this.activeLink.href || this.activeLink.description);
+                            this.queue = pageMemory.getAllUnvisitedLinks(this.currentUrl);
                             this.setState(State.START);
                         } catch (err) {
                             this.bus.emit({
@@ -153,7 +165,7 @@ export default class ManualAutoAnalyzer extends Agent {
                         }
                     } else {
                         this.setState(State.DONE);
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.page.url(), page: this.page });
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.baseUrl, newPage: currentUrl, page: this.page });
                     }
                     break;
                 }

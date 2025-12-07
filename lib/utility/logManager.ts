@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { NamespacedState, State, Statistics } from '../types.js';
 import { eventBusManager } from '../services/events/eventBus.js';
-import { PageMemory } from '../services/memory/pageMemory.js';
+import { pageMemory } from '../services/memory/pageMemory.js';
 
 type MissionStatus = 'pending' | 'done';
 
@@ -74,6 +74,30 @@ export class LogManager {
     }
   }
 
+  test_log(
+    message: string,
+    state?: NamespacedState | State,
+    logToConsole: boolean = true
+  ): void {
+    const test = process.env.TEST_LOG === "true" ? true : false;
+    if (!test) return;
+    const resolvedState = this.resolveState(state, State.INFO);
+    const timestamped = `[${new Date().toISOString()}] [state: ${resolvedState}] ${message}`;
+    this.logs.push(timestamped);
+
+    if (logToConsole) console.log(timestamped);
+    const eventBus = eventBusManager.getBusIfExists();
+    eventBus?.emit({ ts: Date.now(), type: "new_log", message: String(message) });
+
+    if (this.logFilePath === undefined || this.logFilePath === null) return;
+    try {
+      fs.mkdirSync(path.dirname(this.logFilePath), { recursive: true });
+      fs.appendFileSync(this.logFilePath, timestamped + "\n");
+    } catch (err) {
+      console.error("Error writing to log file:", err);
+    }
+  }
+
   /**
    * Logs an error message with a standardized format.
    * Adds it to memory and prints to console.
@@ -120,7 +144,7 @@ export class LogManager {
    * @returns An object containing the statistics.
    */
   getStatistics(): Statistics {
-    const pages = PageMemory.getAllPages()
+    const pages = pageMemory.getAllPages()
 
     const totalPagesVisited = pages.length;
     let totalLinksClicked = 0;

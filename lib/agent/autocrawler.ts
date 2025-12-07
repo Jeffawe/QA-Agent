@@ -1,7 +1,7 @@
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { PageMemory } from "../services/memory/pageMemory.js";
+import { PageMemory, pageMemory } from "../services/memory/pageMemory.js";
 import { AnalyzerStatus, LinkInfo, StageHandObserveResult, State } from "../types.js";
-import { CrawlMap } from "../utility/crawlMap.js";
+import { crawlMap } from "../utility/crawlMap.js";
 import { setTimeout } from "node:timers/promises";
 import ManualAnalyzer from "./manualAnalyzer.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
@@ -10,6 +10,7 @@ import AutoAnalyzer from "./autoanalyzer.js";
 import { UniqueInternalLinkExtractor } from "../utility/links/linkExtractor.js";
 import { Page } from "@browserbasehq/stagehand";
 import { isSameOriginWithPath } from "../utility/functions.js";
+import { dataMemory } from "../services/memory/dataMemory.js";
 
 export class AutoCrawler extends Agent {
     private isCurrentPageVisited = false;
@@ -23,6 +24,10 @@ export class AutoCrawler extends Agent {
     private currentLinkclicked: LinkInfo | null = null;
     private page: Page | null = null;
 
+    private maxPagedepth: number = 10;
+
+    private formerPageUrl: string = "";
+
     constructor(dependencies: BaseAgentDependencies) {
         super("autocrawler", dependencies);
         this.setState(dependencies.dependent ? State.WAIT : State.START);
@@ -32,6 +37,7 @@ export class AutoCrawler extends Agent {
 
         this.stagehandSession = this.session as StagehandSession;
         this.localactionService = this.actionService as AutoActionService;
+        this.maxPagedepth = dataMemory.getData("maxpagedepth") as number || 10;
     }
 
     protected validateSessionType(): void {
@@ -52,6 +58,11 @@ export class AutoCrawler extends Agent {
         }
 
         this.localactionService = this.actionService as AutoActionService;
+    }
+
+    public setBaseValues(url: string, mainGoal?: string): void {
+        super.setBaseValues(url, mainGoal); // call the parent method to set baseUrl and currentUrl
+        this.formerPageUrl = url;
     }
 
     async tick(): Promise<void> {
@@ -87,21 +98,21 @@ export class AutoCrawler extends Agent {
                 /*────────── 1. START → OBSERVE ──────────*/
                 case State.START: {
                     (this as any).startTime = performance.now();
-                    const newUrl = this.page.url();
+                    const newUrl = await this.stagehandSession.waitForStableUrl();
 
-                    this.logManager.log(`Starting Crawler. We are at ${newUrl} from ${this.currentUrl}`, this.buildState(), false);
-                    if (isSameOriginWithPath(newUrl, this.baseUrl)) {
+                    this.logManager.test_log(`Starting Crawler. We are at ${newUrl} which is same as ${this.currentUrl}`, this.buildState(), false);
+                    if (isSameOriginWithPath(this.baseUrl, newUrl)) {
                         this.currentUrl = newUrl;
                     } else {
-                        await this.goto(this.page, newUrl, this.currentUrl);
+                        await this.local_goto(this.page, newUrl, this.currentUrl);
                     }
 
                     // Record the page in memory if we haven’t seen it before
-                    if (!PageMemory.pageExists(this.currentUrl)) {
+                    if (!pageMemory.pageExists(this.currentUrl)) {
                         const links: StageHandObserveResult[] = await this.stagehandSession.observe()
                         const uniqueLinks = await UniqueInternalLinkExtractor.getUniqueInternalLinks(links, this.currentUrl, this.page);
                         //const externalLinks = await getExternalLinks(uniqueLinks, this.currentUrl, page);
-                        this.logManager.log(`Links detected: ${uniqueLinks.length} out of ${links.length} are: ${JSON.stringify(uniqueLinks)}`, this.buildState(), false);
+                        this.logManager.log(`Links detected: ${uniqueLinks.length} out of ${links.length}`, this.buildState(), false);
                         const pageDetails = {
                             title: this.currentUrl,
                             url: this.currentUrl,
@@ -109,42 +120,72 @@ export class AutoCrawler extends Agent {
                             description: '',
                             visited: false,
                             screenshot: '',
+                            depth: 0,
+                            hasDepth: false,
+                            parentUrl: this.formerPageUrl
                         };
+
+                        // Add depth to base url
+                        if (PageMemory.cleanUrl(this.currentUrl) === PageMemory.cleanUrl(this.baseUrl)) {
+                            this.logManager.test_log(`Adding depth to base url`, this.buildState(), false);
+                            pageDetails.depth = 0;
+                            pageDetails.hasDepth = true;
+                        }
+
                         const linksConverted = this.convertElementsToLinks(uniqueLinks);
-                        PageMemory.addPageWithLinks(pageDetails, linksConverted);
-                        CrawlMap.recordPage({ ...pageDetails, links: linksConverted }, this.sessionId);
+                        pageMemory.addPageWithLinks(pageDetails, linksConverted);
+                        crawlMap.recordPage({ ...pageDetails, links: linksConverted }, this.sessionId);
                     } else {
-                        this.logManager.log(`Links detected: ${PageMemory.getAllUnvisitedLinks(this.currentUrl).length}`, this.buildState(), false);
+                        // Mark any link on the page that has been visited as visited
+                        this.logManager.test_log(`Links seen at this point: ${JSON.stringify(Array.from(pageMemory.getVisitedLinks()))}`, this.buildState(), false);
+                        pageMemory.markLinksVisited(this.currentUrl);
+                        this.logManager.log(`Links detected: ${pageMemory.getAllUnvisitedLinks(this.currentUrl).length}`, this.buildState(), false);
                     }
 
+                    // Set the page depth. Can be set only once
+                    pageMemory.updatePageDepth(this.currentUrl, pageMemory.getPageParentDepth(this.currentUrl) + 1);
                     this.setState(State.OBSERVE);
                     break;
                 }
 
                 case State.OBSERVE: {
-                    this.logManager.log(`Observing page ${this.currentUrl}. We are on ${this.page.url()}`, this.buildState(), false);
-                    if (PageMemory.isFullyExplored(this.currentUrl)) {
+                    const currentPageDepth = pageMemory.getPageDepth(this.currentUrl);
+                    this.logManager.test_log(`Current page depth is ${currentPageDepth}`, this.buildState(), false);
+
+                    // Check if max page depth is reached
+                    if (currentPageDepth >= this.maxPagedepth) {
+                        this.logManager.log("Max page depth reached", this.buildState(), false);
+                        // Set all children of the previous page to visited
+                        const previousPage = pageMemory.getPageParent(this.currentUrl);
+                        if (previousPage) {
+                            pageMemory.setAllLinksVisited(previousPage);
+                        }
+                        this.backtrack(this.page);
+                        break;
+                    }
+
+                    if (pageMemory.isFullyExplored(this.currentUrl)) {
                         this.logManager.log(`All links visited on page ${this.currentUrl}`, this.buildState(), false);
                         this.backtrack(this.page);
                     } else {
                         // Mark the Link that was clicked last by the analyzer as visited (Did this here instead of act to avoid isFullyExplored beleiving we were done)
                         if (this.currentLinkclicked) {
-                            PageMemory.markLinkVisited(this.currentUrl, this.currentLinkclicked.description);
+                            pageMemory.markLinkVisited(this.formerPageUrl, this.currentLinkclicked.href || this.currentLinkclicked.description);
                         }
 
                         // Start appropriate analyzer
-                        const unvisited = PageMemory.getAllUnvisitedLinks(this.currentUrl);
+                        const unvisited = pageMemory.getAllUnvisitedLinks(this.currentUrl);
                         this.logManager.log(`Visiting ${unvisited.length} unvisited links on page ${this.currentUrl}: ${JSON.stringify(unvisited)}`, this.buildState(), false);
-                        if (PageMemory.isPageVisited(this.currentUrl)) {
+                        if (pageMemory.isPageVisited(this.currentUrl)) {
                             this.manualAnalyzer.enqueue(unvisited);
                             this.isCurrentPageVisited = true;
                         } else {
                             for (const l of unvisited) {
-                                if (l.href) CrawlMap.addEdge(this.currentUrl!, l.href);
+                                if (l.href) crawlMap.addEdge(this.currentUrl!, l.href);
                             }
-                            PageMemory.markPageVisited(this.currentUrl);
-                            const currentPage = PageMemory.getPage(this.currentUrl);
-                            CrawlMap.recordPage(currentPage, this.sessionId);
+                            pageMemory.markPageVisited(this.currentUrl);
+                            const currentPage = pageMemory.getPage(this.currentUrl);
+                            crawlMap.recordPage(currentPage, this.sessionId);
                             this.analyzer.enqueue(unvisited);
                             this.isCurrentPageVisited = false;
 
@@ -170,7 +211,7 @@ export class AutoCrawler extends Agent {
                     }
 
                     // While waiting for the other analyzer to finish, clean the unvisited links
-                    this.cleanExternalLinks(PageMemory.getAllUnvisitedLinks(this.currentUrl));
+                    this.cleanExternalLinks(pageMemory.getAllUnvisitedLinks(this.currentUrl));
 
                     break;
                 }
@@ -186,24 +227,33 @@ export class AutoCrawler extends Agent {
                     // Extract the active link clicked on to get where we are
                     this.currentLinkclicked = this.isCurrentPageVisited ? this.manualAnalyzer.activeLink : this.analyzer.activeLink;
 
-
                     if (this.currentLinkclicked) {
-                        const newpage = this.page.url();
+                        const newpage = await this.stagehandSession.waitForStableUrl();
+                        if (newpage === this.currentUrl) {
+                            this.setState(State.OBSERVE);
+                            return;
+                        }
+
                         this.logManager.log(`Navigated to ${newpage} from ${this.currentUrl}`, this.buildState(), false);
 
                         // Check if we are on the same origin, if not, go back
-                        if (!isSameOriginWithPath(this.currentUrl, newpage)) {
-                            await this.goto(this.page, newpage, this.currentUrl);
+                        if (!isSameOriginWithPath(this.baseUrl, newpage)) {
+                            await this.local_goto(this.page, newpage, this.currentUrl);
                             this.logManager.log(`Navigating back to ${this.currentUrl}`, this.buildState(), false);
-                            PageMemory.markLinkVisited(this.currentUrl, this.currentLinkclicked.description);
+                            pageMemory.markLinkVisited(this.currentUrl, this.currentLinkclicked.href || this.currentLinkclicked.description);
                             this.currentLinkclicked = null;
                             this.setState(State.OBSERVE);
                             return;
                         }
 
-                        CrawlMap.recordPage(PageMemory.getPage(this.currentUrl), this.sessionId);
-                        PageMemory.pushToStack(this.currentUrl);
-                        if (this.currentLinkclicked.href) CrawlMap.addEdge(this.currentUrl!, this.currentLinkclicked.href);
+                        crawlMap.recordPage(pageMemory.getPage(this.currentUrl), this.sessionId);
+                        pageMemory.pushToStack(this.currentUrl);
+                        if (this.currentLinkclicked.href) crawlMap.addEdge(this.currentUrl!, this.currentLinkclicked.href);
+
+                        const topOfStack = pageMemory.getTopOfStack();
+                        if (topOfStack) {
+                            this.formerPageUrl = topOfStack || this.baseUrl;
+                        }
 
                         this.currentUrl = newpage;
                         this.setState(State.START);
@@ -228,7 +278,7 @@ export class AutoCrawler extends Agent {
                     break;
             }
         } catch (err) {
-            this.logManager.error(`Crawler error on ${this.currentUrl}: ${err}`, this.buildState());
+            this.logManager.error(`Crawler tick error on ${this.currentUrl}: ${err}`, this.buildState());
             this.setState(State.ERROR);
         }
     }
@@ -269,14 +319,17 @@ export class AutoCrawler extends Agent {
 
     private async backtrack(page: Page): Promise<void> {
         try {
-            const back = PageMemory.popFromStack();
+            const back = pageMemory.popFromStack();
             if (back) {
                 this.logManager.log(`Backtracking to ${back}`, this.buildState(), false);
-                await this.goto(page, this.currentUrl, back);
+                await this.local_goto(page, this.currentUrl, back);
                 this.currentUrl = back;
                 this.setState(State.START);
             } else {
                 this.logManager.log("No more pages to backtrack to", this.buildState(), false);
+                const currentPageDepth = pageMemory.getPageDepth(this.currentUrl);
+                this.logManager.log(`Final page depth is ${currentPageDepth}`, this.buildState(), false);
+                this.logManager.log(`Final page stack is ${this.currentUrl}`, this.buildState(), false);
                 this.setState(State.DONE);
             }
         } catch (err) {
@@ -291,22 +344,19 @@ export class AutoCrawler extends Agent {
      * @param oldPage - The URL of the page before navigation
      * @param newPage - The URL of the page to navigate to
      */
-    async goto(page: Page, oldPage: string, newPage: string): Promise<void> {
+    async local_goto(page: Page, oldPage: string, newPage: string): Promise<void> {
         try {
-            if (oldPage === newPage) {
-                this.logManager.log(`Navigating to same page: ${newPage}`, this.buildState(), false);
-                return;
-            }
+            await this.stagehandSession.goto(newPage, oldPage);
 
-            await page.goto(newPage, { waitUntil: "domcontentloaded" });
             this.bus.emit({
                 ts: Date.now(),
                 type: "new_page_visited",
-                oldPage: oldPage,
+                oldPage: this.baseUrl!,
                 newPage: newPage,
                 page: page,
                 handled: true
             });
+            this.logManager.test_log(`After goto, current page is ${page.url()}`, this.buildState(), false);
         } catch (err) {
             this.logManager.error(`Crawler error on ${newPage}: ${err}`, this.buildState());
             throw err;
@@ -321,12 +371,13 @@ export class AutoCrawler extends Agent {
     }
 
     async cleanExternalLinks(links: LinkInfo[]): Promise<void> {
-        if(!links) return;
+        if (!links) return;
+        if (!this.baseUrl) return;
 
         for (const link of links) {
             if (!link.href) continue;
-            if (!isSameOriginWithPath(this.currentUrl, link.href)) {
-                PageMemory.markLinkVisited(this.currentUrl, link.description);
+            if (!isSameOriginWithPath(this.baseUrl, link.href)) {
+                pageMemory.markLinkVisited(this.currentUrl, link.href || link.description);
             }
         }
     }

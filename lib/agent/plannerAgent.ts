@@ -90,6 +90,8 @@ export default class PlannerAgent extends Agent {
             return;
         }
 
+        if(!this.baseUrl) return;
+
         try {
             switch (this.state) {
                 case State.START:
@@ -120,12 +122,12 @@ export default class PlannerAgent extends Agent {
                     break;
 
                 case State.VALIDATE:
-                    const isSameOrigin = isSameOriginWithPath(this.stageHandSession.page!.url(), this.currentUrl);
+                    const isSameOrigin = isSameOriginWithPath(this.baseUrl, this.currentUrl);
 
                     if (!isSameOrigin) {
-                        this.logManager.error(`Navigation to external page detected: "${this.currentUrl}" from "${this.stageHandSession.page!.url()}", going back.`, this.buildState(), true);
-                        await this.stageHandSession.page!.goto(this.currentUrl, { waitUntil: "networkidle" });
-                        this.warning = `Navigation to external page detected: "${this.currentUrl}" from "${this.stageHandSession.page!.url()}", Validator went back to ${this.currentUrl}. Stay within the same origin.`;
+                        this.logManager.error(`Navigation to external page detected: "${this.currentUrl}" from "${this.stageHandSession.getCurrentUrl()}", going back.`, this.buildState(), true);
+                        await this.stageHandSession.goto(this.currentUrl);
+                        this.warning = `Navigation to external page detected: "${this.currentUrl}" from "${this.stageHandSession.getCurrentUrl()}", Validator went back to ${this.currentUrl}. Stay within the same origin.`;
                     }
                     
                     await this.validateGoal();

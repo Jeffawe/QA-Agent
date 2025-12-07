@@ -2,8 +2,8 @@ import { setTimeout } from "node:timers/promises";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { LinkInfo, State, ImageData, Action, ActionResult, AnalyzerStatus, } from "../types.js";
 import { fileExists } from "../utility/functions.js";
-import { PageMemory } from "../services/memory/pageMemory.js";
-import { CrawlMap } from "../utility/crawlMap.js";
+import { pageMemory } from "../services/memory/pageMemory.js";
+import { crawlMap } from "../utility/crawlMap.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/autoActionService.js";
 import path from "node:path";
@@ -104,7 +104,7 @@ export default class AutoAnalyzer extends Agent {
                     break;
 
                 case State.OBSERVE: {
-                    this.currentUrl = this.page.url();
+                    this.currentUrl = this.stagehandSession.getCurrentUrl();
                     const filename = `screenshot_${this.step}_${this.sessionId.substring(0, 10)}.png`;
                     const expectedPath = path.resolve(this.imagePath, filename); // Use absolute path
 
@@ -167,7 +167,7 @@ export default class AutoAnalyzer extends Agent {
 
                     if (command.analysis) {
                         this.logManager.log(`Storing analysis for ${this.currentUrl}`, this.state, false);
-                        PageMemory.addAnalysis(this.currentUrl, command.analysis, this.sessionId);
+                        pageMemory.addAnalysis(this.currentUrl, command.analysis, this.sessionId);
                     } else {
                         this.logManager.log(`No analysis returned for ${this.currentUrl}`, this.state, false);
                     }
@@ -181,11 +181,11 @@ export default class AutoAnalyzer extends Agent {
                 case State.ACT: {
                     const action: Action = (this as any).pendingAction;
                     const t0 = Date.now();
-                    this.bus.emit({ ts: t0, type: "action_started", action });
+                    this.bus.emit({ ts: t0, type: "action_started", action, agentName: this.name });
 
                     if (action.step === 'done') {
                         this.setState(State.DONE);
-                        CrawlMap.recordPage(PageMemory.getPage(this.currentUrl), this.sessionId);
+                        crawlMap.recordPage(pageMemory.getPage(this.currentUrl), this.sessionId);
                         this.logManager.log("All links have been tested", this.buildState(), true);
                         this.activeLink = null;
                         const endTime = performance.now();
@@ -203,7 +203,7 @@ export default class AutoAnalyzer extends Agent {
                         this.queue = [];
                         this.logManager.log("All links have been tested", this.buildState(), true);
                         this.activeLink = null;
-                        PageMemory.setAllLinksVisited(this.currentUrl);
+                        pageMemory.setAllLinksVisited(this.currentUrl);
                         const endTime = performance.now();
                         this.timeTaken = endTime - (this as any).startTime;
 
@@ -223,7 +223,8 @@ export default class AutoAnalyzer extends Agent {
                         this.bus.emit({
                             ts: Date.now(),
                             type: "validator_warning",
-                            message: warning
+                            message: warning,
+                            agentName: this.name
                         });
                         break
                     }
@@ -238,13 +239,13 @@ export default class AutoAnalyzer extends Agent {
                     }
 
                     if (this.currentUrl && result.linkType == "external") {
-                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.currentUrl, newPage: this.page.url(), page: this.page, linkIdentifier: selectedLink.description, handled: true });
+                        this.bus.emit({ ts: Date.now(), type: "new_page_visited", oldPage: this.baseUrl!, newPage: this.stagehandSession.getCurrentUrl(), page: this.page, linkIdentifier: selectedLink.href || selectedLink.description, handled: true });
                     }
 
                     this.lastAction = `Action ${result.actionTaken || 'no_op'} with args (${action.args.join(",")}) was last taken because of ${action.reason}`;
 
 
-                    this.bus.emit({ ts: Date.now(), type: "action_finished", action, elapsedMs: Date.now() - t0 });
+                    this.bus.emit({ ts: Date.now(), type: "action_finished", action, agentName: this.name, elapsedMs: Date.now() - t0 });
                     const newGoal = action.newGoal || this.goal;
                     if (newGoal != this.goal) {
                         this.logManager.addSubMission(newGoal);

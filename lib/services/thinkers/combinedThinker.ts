@@ -67,7 +67,7 @@ export class CombinedThinker extends Thinker {
             if (!imageData?.imagepath) {
                 throw new Error("No image data provided.");
             }else{
-                const optimize = dataMemory.getData("optimizeImages");
+                const optimize = dataMemory.getData("optimizeimages");
                 if (optimize) {
                     imageData.imagepath = await processImages(imageData.imagepath);
                 }
@@ -132,7 +132,7 @@ export class CombinedThinker extends Thinker {
             if (!imageData?.imagepath) {
                 throw new Error("No image data provided.");
             }else{
-                const optimize = dataMemory.getData("optimizeImages");
+                const optimize = dataMemory.getData("optimizeimages");
                 if (optimize) {
                     imageData.imagepath = await processImages(imageData.imagepath);
                 }

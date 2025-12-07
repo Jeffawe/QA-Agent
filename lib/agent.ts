@@ -4,7 +4,7 @@ import { EventBus } from "./services/events/event.js";
 import { AgentConfig, Namespaces, State } from "./types.js";
 
 import { Agent } from "./utility/abstract.js";
-import { CrawlMap } from './utility/crawlMap.js';
+import { crawlMap } from './utility/crawlMap.js';
 import { clearAllImages } from './services/imageProcessor.js';
 import { eventBusManager } from './services/events/eventBus.js';
 import { logManagers } from './services/memory/logMemory.js';
@@ -165,9 +165,13 @@ export default class BossAgent {
   public async start(url: string): Promise<void> {
     try {
       const startTime = performance.now();
-      CrawlMap.init(`logs/crawl_map_${this.sessionId}.md`);
+      crawlMap.init(`logs/crawl_map_${this.sessionId}.md`);
 
       console.log("STEP 1 AGENT: 🌟 Starting all sessions...");
+
+      if (!url) {
+        throw new Error('No url provided');
+      }
 
       // Start all sessions
       const sessionPromises = Array.from(this.sessions.entries()).map(async ([name, session]) => {

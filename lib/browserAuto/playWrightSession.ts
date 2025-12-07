@@ -46,7 +46,7 @@ export default class PlaywrightSession extends Session<Page> {
       return this.page;
     }
 
-    if(!this.baseUrl){
+    if (!this.baseUrl) {
       throw new Error("Base URL not initialized");
     }
 
@@ -131,6 +131,20 @@ export default class PlaywrightSession extends Session<Page> {
     } catch (error) {
       console.error("Error taking screenshot:", error);
       return false;
+    }
+  }
+
+  public async goto(newPage: string, oldPage?: string): Promise<void> {
+    try {
+      if (!this.page) throw new Error('Page not initialized');
+      const currentUrl = this.page.url();
+      if (oldPage && !currentUrl.includes(oldPage)) {
+        throw new Error(`Current page "${currentUrl}" does not match expected page "${oldPage}"`);
+      }
+      await this.page.goto(newPage, { waitUntil: 'networkidle' });
+    } catch (error) {
+      this.logManager.error(`Error navigating from ${oldPage} to ${newPage}: ${error}`, State.ACT);
+      throw error;
     }
   }
 

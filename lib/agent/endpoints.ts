@@ -4,8 +4,8 @@ import { EndpointInfo, EndpointMap, getEndpointMap, ParameterInfo, RequestBodyIn
 import { dataMemory } from "../services/memory/dataMemory.js";
 import PlaywrightSession from "../browserAuto/playWrightSession.js";
 import ManualActionService from "../services/actions/actionService.js";
-import { PageMemory } from "../services/memory/pageMemory.js";
-import { CrawlMap } from "../utility/crawlMap.js";
+import { pageMemory } from "../services/memory/pageMemory.js";
+import { crawlMap } from "../utility/crawlMap.js";
 
 const MAX_CHARS = 1200; // safe limit for logs/results
 const MAX_LINES = 200; // also limit lines for extremely long newline-separated payloads
@@ -115,9 +115,9 @@ export default class EndPoints extends Agent {
                         this.setState(State.DONE);
                         break;
                     }
-                    PageMemory.addPageWithURL(this.finalUrl);
-                    PageMemory.addEndpointResults(this.finalUrl, this.results);
-                    CrawlMap.addPageWithURL(this.finalUrl);
+                    pageMemory.addPageWithURL(this.finalUrl, this.finalUrl);
+                    pageMemory.addEndpointResults(this.finalUrl, this.results);
+                    crawlMap.addPageWithURL(this.finalUrl);
                     this.logManager.log(`✅ Tested ${this.results.length} endpoints for ${this.finalUrl}`, this.buildState());
                     this.setState(State.DONE);
                     break;

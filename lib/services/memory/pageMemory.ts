@@ -1,11 +1,11 @@
-import { EndPointTestResult, LinkInfo, PageDetails, Statistics, UITesterResult } from '../../types.js';
-import { CrawlMap } from '../../utility/crawlMap.js';
+import { EndPointTestResult, LinkInfo, PageDetails, UITesterResult } from '../../types.js';
 
 export class PageMemory {
-  private static pages: Record<string, PageDetails> = {};
-  private static navStack: string[] = [];
+  private pages: Record<string, PageDetails> = {};
+  private visitedLinks: Set<string> = new Set();
+  private navStack: string[] = [];
 
-  static addPage(details: PageDetails) {
+  addPage(details: PageDetails) {
     if (!details.url) return;
     const cleanUrl = PageMemory.cleanUrl(details.url);
     if (!this.pages[cleanUrl]) {
@@ -18,17 +18,29 @@ export class PageMemory {
     }
   }
 
-  static addPageWithURL(url: string): string {
+  public getVisitedLinks(): Set<string> {
+    return this.visitedLinks;
+  }
+
+  getPageDepth(url: string): number {
+    const cleanUrl = PageMemory.cleanUrl(url);
+    return this.pages[cleanUrl]?.depth || 0;
+  }
+
+  addPageWithURL(url: string, parentUrl: string): string {
     if (!url) throw new Error("No URL provided");
     const cleanUrl = PageMemory.cleanUrl(url);
     if (!this.pages[cleanUrl]) {
       this.pages[cleanUrl] = {
         url: url,
+        parentUrl: parentUrl,
         title: "",
         uniqueID: "",
         description: "",
         visited: false,
-        links: []
+        links: [],
+        depth: 0,
+        hasDepth: false
       };
     }
 
@@ -42,17 +54,17 @@ export class PageMemory {
    * @param {string} url - URL of the page to check for.
    * @returns {boolean} True if the page exists, false otherwise.
    */
-  static hasPage(url: string): boolean {
+  hasPage(url: string): boolean {
     url = PageMemory.cleanUrl(url);
     return !!this.pages[url];
   }
 
-  static getPage(url: string): PageDetails {
+  getPage(url: string): PageDetails {
     const cleanUrl = PageMemory.cleanUrl(url);
     return this.pages[cleanUrl];
   }
 
-  static getAllPages(): PageDetails[] {
+  getAllPages(): PageDetails[] {
     return Object.values(this.pages);
   }
 
@@ -87,30 +99,62 @@ export class PageMemory {
     }
   }
 
-  static addPageWithLinks(details: Omit<PageDetails, 'links'>, links: LinkInfo[]) {
+  addPageWithLinks(details: Omit<PageDetails, 'links'>, links: LinkInfo[]) {
     if (!details.url) return;
     const cleanUrl = PageMemory.cleanUrl(details.url);
     if (!this.pages[cleanUrl]) {
       this.pages[cleanUrl] = {
         visited: false,
+        parentUrl: details.parentUrl,
         title: details.title,
         url: details.url,
         screenshot: details.screenshot,
         uniqueID: details.uniqueID,
         description: details.description,
-        links: links.map(link => ({ ...link, visited: false })),
+        links: links.map(link => ({ ...link, visited: this.isLinkVisitedAll(link.href || link.description) })),
+        depth: details.depth,
+        hasDepth: details.hasDepth
       }
     }
   }
 
-  static markPageVisited(url: string) {
+  /// This checks if the link is visited throughout the entire crawl
+  isLinkVisitedAll(identifier: string) {
+    return this.visitedLinks.has(identifier);
+  }
+
+  getPageParent(url: string): string {
+    url = PageMemory.cleanUrl(url);
+    const page = this.pages[url];
+    if (!page) return "";
+    return page.parentUrl;
+  }
+
+  getPageParentDepth(url: string): number {
+    url = PageMemory.cleanUrl(url);
+    const page = this.pages[url];
+    if (!page) return 0;
+    return page.depth;
+  }
+
+  updatePageDepth(url: string, increment: number) {
+    const key = PageMemory.cleanUrl(url);
+    const page = this.pages[key];
+
+    if (page && !page.hasDepth) {
+      page.depth += increment;
+      page.hasDepth = true;
+    }
+  }
+
+  markPageVisited(url: string) {
     url = PageMemory.cleanUrl(url);
     if (this.pages[url]) {
       this.pages[url].visited = true;
     }
   }
 
-  static isLinkVisited(url: string, identifier: string): boolean {
+  isLinkVisited(url: string, identifier: string): boolean {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return false;
@@ -121,25 +165,25 @@ export class PageMemory {
     return link.visited;
   }
 
-  static addPageScreenshot(url: string, screenshot: string) {
+  addPageScreenshot(url: string, screenshot: string) {
     url = PageMemory.cleanUrl(url);
     if (this.pages[url]) {
       this.pages[url].screenshot = screenshot;
     }
   }
 
-  static addAnalysis(url: string, analysis: any, sessionId: string) {
+  addAnalysis(url: string, analysis: any, sessionId: string) {
     url = PageMemory.cleanUrl(url);
     if (this.pages[url]) {
       this.pages[url].analysis = {
         ...this.pages[url].analysis,
         ...analysis
       };
-      CrawlMap.recordPage(this.pages[url], sessionId);
+      // crawlMap.recordPage(this.pages[url], sessionId);
     }
   }
 
-  static addEndpointResults(url: string, results: EndPointTestResult[]) {
+  addEndpointResults(url: string, results: EndPointTestResult[]) {
     url = PageMemory.cleanUrl(url);
     if (this.pages[url]) {
       this.pages[url].endpointResults = results;
@@ -149,7 +193,7 @@ export class PageMemory {
   }
 
   ///True if there is a screenshot. False if not or doesn't exist
-  static hasPageScreenshot(url: string): boolean {
+  hasPageScreenshot(url: string): boolean {
     url = PageMemory.cleanUrl(url);
     return !!this.pages[url]?.screenshot;
   }
@@ -160,15 +204,47 @@ export class PageMemory {
    * @param {string} url - URL of the page containing the link to mark as visited.
    * @param {string} identifier - Description or absolute URL of the link to mark as visited.
    */
-  static markLinkVisited(url: string, identifier: string) {
+  markLinkVisited(url: string, identifier: string) {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
-    if (!page) return;
+    if (!page) {
+      console.warn(`Page not found in memory for URL: ${url}. Cannot mark link as visited.`);
+      return;
+    }
     const link = page.links.find(
-      l => l.description === identifier || l.href === identifier
+      l => l.href === identifier || l.description === identifier
     );
     if (link) {
       link.visited = true;
+      this.visitedLinks.add(link.href || link.description);
+      console.log(
+        "\x1b[32m%s\x1b[0m",
+        `Marked link as visited for URL: ${url}. Identifier: ${identifier}`
+      )
+    } else {
+      const linkDescriptions = page.links?.map(l => l.href).join(", ") || "none";
+
+      console.warn(
+        "\x1b[33m%s\x1b[0m",
+        `Link not found in page for URL: ${url}. Identifier: ${identifier} among links [${linkDescriptions}]. Cannot mark link as visited.`
+      );
+    }
+  }
+
+  /**
+   * Marks all links on a page as visited if they have been
+   * marked as visited before.
+   * If the page doesn't exist, does nothing.
+   * @param {string} url - URL of the page containing the links to mark as visited.
+   */
+  markLinksVisited(url: string) {
+    url = PageMemory.cleanUrl(url);
+    const page = this.pages[url];
+    if (!page) return;
+    for (const link of page.links) {
+      if (this.visitedLinks.has(link.href || link.description)) {
+        link.visited = true;
+      }
     }
   }
 
@@ -178,14 +254,14 @@ export class PageMemory {
    * @param {string} url - URL of the page to search for unvisited links.
    * @returns {LinkInfo | null} The next unvisited link on the page, or null if none.
    */
-  static getNextUnvisitedLink(url: string): LinkInfo | null {
+  getNextUnvisitedLink(url: string): LinkInfo | null {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return null;
     return page.links.find(link => !link.visited) || null;
   }
 
-  static pageExists(url: string): boolean {
+  pageExists(url: string): boolean {
     url = PageMemory.cleanUrl(url);
     return !!this.pages[url];
   }
@@ -196,7 +272,7 @@ export class PageMemory {
    * @param {string} url - URL of the page
    * @returns {boolean} true if all links are visited, false if not
    */
-  static isFullyExplored(url: string): boolean {
+  isFullyExplored(url: string): boolean {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return true;
@@ -209,7 +285,7 @@ export class PageMemory {
    * @param {string} url - URL of the page containing the link to remove
    * @param {string} identifier - Description or absolute URL of the link to remove
    */
-  static removeLink(url: string, identifier: string) {
+  removeLink(url: string, identifier: string) {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return;
@@ -222,29 +298,32 @@ export class PageMemory {
    * @param {string} url - URL of the page
    * @returns {LinkInfo[]} Unvisited links on the page
    */
-  static getAllUnvisitedLinks(url: string): LinkInfo[] {
+  getAllUnvisitedLinks(url: string): LinkInfo[] {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return [];
     return page.links.filter(link => !link.visited);
   }
 
-  static setTestResults(url: string, testResults: UITesterResult[]) {
+  setTestResults(url: string, testResults: UITesterResult[]) {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return;
     page.testResults = testResults;
   }
 
-  static clear() {
-    PageMemory.pages = {};
+  clear() {
+    this.pages = {};
   }
 
-  static setAllLinksVisited(url: string) {
+  setAllLinksVisited(url: string) {
     url = PageMemory.cleanUrl(url);
     const page = this.pages[url];
     if (!page) return;
-    page.links.forEach(link => link.visited = true);
+    for (const link of page.links) {
+      link.visited = true;
+      this.visitedLinks.add(link.href || link.description);
+    }
   }
 
   /**
@@ -252,7 +331,7 @@ export class PageMemory {
    * If the URL is the same as the last one on the stack, it is not pushed.
    * @param {string} url - URL to push onto the stack
    */
-  static pushToStack(url: string) {
+  pushToStack(url: string) {
     const last = this.navStack[this.navStack.length - 1];
     if (last !== url) {
       this.navStack.push(url);
@@ -264,12 +343,16 @@ export class PageMemory {
    * If the stack is empty, returns undefined.
    * @returns {string | undefined} The last URL on the stack, or undefined if the stack is empty.
    */
-  static popFromStack(): string | undefined {
+  popFromStack(): string | undefined {
     if (this.navStack.length === 0) return undefined;
     return this.navStack.pop();
   }
 
-  static hasStack(): boolean {
+  getTopOfStack(): string | undefined {
+    return this.navStack[this.navStack.length - 1];
+  }
+
+  hasStack(): boolean {
     return this.navStack.length > 0;
   }
 
@@ -279,8 +362,11 @@ export class PageMemory {
    * @param {string} url - URL of the page to check for
    * @returns {boolean} True if the page has been visited, false otherwise
    */
-  static isPageVisited(url: string): boolean {
+  isPageVisited(url: string): boolean {
     url = PageMemory.cleanUrl(url);
     return this.pages[url]?.visited || false;
   }
 }
+
+const pageMemory = new PageMemory();
+export { pageMemory };

@@ -147,7 +147,8 @@ export interface InteractiveElement {
 
 export interface PageDetails {
     title: string;
-    url?: string;
+    url: string;
+    parentUrl: string;
     uniqueID: string;
     screenshot?: string;
     analysis?: Analysis;
@@ -155,6 +156,8 @@ export interface PageDetails {
     endpointResults?: EndPointTestResult[];
     description: string;
     visited: boolean;
+    depth: number;
+    hasDepth: boolean;
     links: LinkInfo[];
 }
 

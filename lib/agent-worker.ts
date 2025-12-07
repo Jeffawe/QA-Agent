@@ -11,10 +11,10 @@ import { logManagers } from './services/memory/logMemory.js';
 import { ThinkerValidator } from './services/validators/thinkerValidator.js';
 import { NewPageValidator } from './services/validators/newPageValidator.js';
 import { ValidatorWarningValidator } from './services/validators/validatorWarningValidator.js';
-import { PageMemory } from './services/memory/pageMemory.js';
+import { pageMemory } from './services/memory/pageMemory.js';
 import { dataMemory } from './services/memory/dataMemory.js';
 import { LocalEventBridge } from './services/events/localEventBridge.js';
-import { CrawlMap } from './utility/crawlMap.js';
+import { crawlMap } from './utility/crawlMap.js';
 
 let agent: BossAgent | null = null;
 let isInitialized = false;
@@ -272,6 +272,7 @@ if (parentPort) {
                 // Load data memory only when needed
                 if (workerData.data && typeof workerData.data === 'object') {
                     dataMemory.loadData(workerData.data);
+                    console.log('Data loaded into memory', dataMemory.getAllData());
 
                     if (apikey && apikey !== '' && dataMemory.getData('endpoint') === true) {
                         dataMemory.setData('advanced_endpoint', true);
@@ -410,7 +411,7 @@ const cleanup = async () => {
 
     try {
         console.log(`🛑 Stopping agent ${workerData.sessionId}...`);
-        CrawlMap.finish();
+        crawlMap.finish();
 
         const cleanupPromises: Promise<void>[] = [];
 
@@ -429,7 +430,7 @@ const cleanup = async () => {
                 logManagers.clear();
             }),
             Promise.resolve().then(() => {
-                PageMemory.clear();
+                pageMemory.clear();
             }),
             Promise.resolve().then(() => {
                 dataMemory.clear();

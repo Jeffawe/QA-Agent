@@ -4,7 +4,7 @@ import AutoActionService from "../services/actions/autoActionService.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import { GroupedUIElements, UIElementGrouper } from "../utility/links/linkGrouper.js";
 import { Page } from "@browserbasehq/stagehand";
-import { PageMemory } from "../services/memory/pageMemory.js";
+import { pageMemory } from "../services/memory/pageMemory.js";
 import { TestingThinker } from "../services/thinkers/testingThinker.js";
 import { batchTestElements, quickTestButtonElement } from "../utility/links/linktesterUtilities.js";
 
@@ -189,7 +189,7 @@ export default class Tester extends Agent {
                 case State.VALIDATE:
                     try {
                         await this.validateResults();
-                        PageMemory.setTestResults(this.currentUrl, this.testResults);
+                        pageMemory.setTestResults(this.currentUrl, this.testResults);
                         this.setState(State.EVALUATE);
                     } catch (e) {
                         this.logManager.error(`Error validating results: ${String(e)}`, this.buildState());

@@ -4,12 +4,12 @@ import { Page } from "playwright";
 
 export type Event =
     | { ts: number; type: 'state_transition'; from: State; to: State }
-    | { ts: number; type: 'action_started'; action: Action }
-    | { ts: number; type: 'action_finished'; action: Action; elapsedMs: number }
+    | { ts: number; type: 'action_started'; action: Action; agentName: Namespaces }
+    | { ts: number; type: 'action_finished'; action: Action; agentName: Namespaces; elapsedMs: number }
     | { ts: number; type: 'llm_call'; model_name: string; promptTokens: number; respTokens: number }
     | { ts: number; type: 'screenshot_taken'; filename: string; elapsedMs: number }
     | { ts: number; type: 'error'; message: string; error?: Error }
-    | { ts: number; type: 'validator_warning'; message: string }
+    | { ts: number; type: 'validator_warning'; message: string; agentName: Namespaces | "all" }
     | { ts: number; type: 'crawl_map_updated'; page: PageDetails }
     | { ts: number; type: 'new_log'; message: string }
     | { ts: number; type: 'new_page_visited'; oldPage: string; newPage: string; page: Page; linkIdentifier?: string; handled?: boolean; }

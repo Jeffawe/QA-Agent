@@ -12,6 +12,11 @@ export default class StagehandSession extends Session<Page> {
     private apiKey: string;
     private contexts = new Map();
 
+    private isNavigating = false;
+    private navigationQueue: Array<() => Promise<void>> = [];
+    private _currentUrl: string = "";
+    private _pendingUrl: string | null = null;
+
     constructor(sessionId: string) {
         super(sessionId);
 
@@ -110,6 +115,11 @@ export default class StagehandSession extends Session<Page> {
                 waitUntil: 'domcontentloaded' // Less strict than 'load'
             });
 
+            if (this.page) {
+                this._currentUrl = this.page.url();
+                this._pendingUrl = null;
+            }
+
             return true;
         } catch (error) {
             const err = error as Error;
@@ -120,14 +130,47 @@ export default class StagehandSession extends Session<Page> {
 
     async close(): Promise<void> {
         try {
+            // Wait for any pending navigations to complete before clearing
+            this.logManager.log(`Closing StagehandSession. Checking for pending operations...`, State.INFO);
+
+            let waitAttempts = 0;
+            const maxWaitAttempts = 50; // 5 seconds max (50 * 100ms)
+
+            while ((this.isNavigating || this.navigationQueue.length > 0) && waitAttempts < maxWaitAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                waitAttempts++;
+            }
+
+            if (waitAttempts >= maxWaitAttempts) {
+                this.logManager.log(
+                    `⚠️ Force closing - some operations may still be pending (queue: ${this.navigationQueue.length})`,
+                    State.INFO
+                );
+            }
+
+            // Now clear any remaining operations
+            this.clearNavigationQueue();
+
+            // Close the page first
             if (this.stagehand?.page) {
-                await this.stagehand.page.close();
+                this.logManager.log('Closing Stagehand page...', State.INFO);
+                await this.stagehand.page.close().catch(err => {
+                    this.logManager.log(`Page close error (expected if already closed): ${err.message}`, State.INFO);
+                });
             }
+
+            // Then close stagehand
             if (this.stagehand) {
-                await this.stagehand.close();
+                this.logManager.log('Closing Stagehand instance...', State.INFO);
+                await this.stagehand.close().catch(err => {
+                    this.logManager.log(`Stagehand close error: ${err.message}`, State.INFO);
+                });
             }
+
+            this.logManager.log('✅ StagehandSession closed successfully', State.INFO);
         } catch (error) {
             console.error('Error during stagehand cleanup:', error);
+            this.logManager.error(`Stagehand cleanup error: ${error}`, State.ERROR);
         }
 
         // Force garbage collection if available
@@ -137,6 +180,18 @@ export default class StagehandSession extends Session<Page> {
 
         this.closeAllContexts();
         await new Promise(r => setTimeout(r, 1000)); // Longer delay
+    }
+
+    public clearNavigationQueue(): void {
+        if (this.navigationQueue.length > 0) {
+            this.logManager.log(
+                `🧹 Clearing ${this.navigationQueue.length} queued navigation operations`,
+                State.INFO
+            );
+        }
+        this.navigationQueue.length = 0;
+        this.isNavigating = false;
+        this._pendingUrl = null; // Also clear pending URL
     }
 
     public async observe(agentId?: string): Promise<ObserveResult[]> {
@@ -281,12 +336,12 @@ export default class StagehandSession extends Session<Page> {
             }
 
             // Define viewport configurations
-            const crossPlatform = dataMemory.getData('crossPlatform') as boolean;
+            const crossPlatform = dataMemory.getData('crossplatform') as boolean || false;
             const viewports = crossPlatform ? {
                 tablet: { width: 1024, height: 768 },      // Tablet/small laptop
                 mobile: { width: 375, height: 812 },    // iPhone X/11/12/13 size
                 desktop: { width: 1920, height: 1080 }  // Full HD desktop
-            } : { 
+            } : {
                 desktop: { width: 1920, height: 1080 }  // Full HD desktop
             };
 
@@ -386,15 +441,209 @@ export default class StagehandSession extends Session<Page> {
         })
     }
 
-    public async act(action: string, agentId?: string): Promise<void> {
-        if (!this.page) {
-            throw new Error("Page not initialized");
+    /**
+     * Get current URL synchronously - what the browser is showing RIGHT NOW
+     * WARNING: May be stale if navigation is queued/in-progress
+     * Use for: Logging, display, non-critical operations
+     */
+    public getCurrentUrl(): string {
+        try {
+            if (!this.page) {
+                throw new Error("Page not initialized");
+            }
+
+            return this._currentUrl || this.page.url();
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    /**
+     * Get the URL we'll be on once all queued operations complete
+     * Returns pending URL if navigation is queued, otherwise current URL
+     * Use for: Planning next actions, checking future destination
+     */
+    public getEffectiveUrl(): string {
+        return this._pendingUrl || this._currentUrl || this.page?.url() || "";
+    }
+
+    /**
+     * Wait for all pending navigations to complete, then return current URL
+     * This BLOCKS until the navigation queue is empty and no navigation is in progress
+     * Use for: Critical operations that require accurate URL (state transitions, validations)
+     * @returns Promise<string> The stable, guaranteed-accurate current URL
+     */
+    public async waitForStableUrl(): Promise<string> {
+        // Wait until nothing is navigating and queue is empty
+        while (this.isNavigating || this.navigationQueue.length > 0) {
+            await new Promise(resolve => setTimeout(resolve, 50));
         }
 
-        const pageToUse: Page = agentId ? await this.getPage(agentId) : this.page;
+        // Double-check the page URL matches our tracked URL
+        if (this.page) {
+            const pageUrl = this.page.url();
+            if (pageUrl !== this._currentUrl) {
+                this.logManager.log(`URL sync: ${this._currentUrl} -> ${pageUrl}`, State.INFO);
+                this._currentUrl = pageUrl;
+            }
+        }
 
-        // Example action: Click at a specific position
-        await pageToUse.act(action);
+        return this._currentUrl;
+    }
+
+
+    /**
+     * Navigates to a new page and updates the tracked URL.
+     * Waits for the page to load (domcontentloaded) and then updates the tracked URL.
+     * If the old page is the same as the new page, does nothing.
+     * If the old page is different from the new page, logs the navigation.
+     * If an error occurs during navigation, logs the error and clears the pending URL.
+     * @param newPage The URL of the page to navigate to.
+     * @param oldPage The URL of the page before navigation. If this is the same as newPage, does nothing.
+     * @returns A promise that resolves when the navigation is complete.
+     */
+    public async goto(newPage: string, oldPage?: string): Promise<void> {
+        // Set pending URL immediately (before queuing)
+        this._pendingUrl = newPage;
+
+        return this.queueNavigation(async () => {
+            if (!this.page) {
+                this._pendingUrl = null;
+                throw new Error("Page not initialized");
+            }
+
+            if (oldPage && oldPage === newPage) {
+                this.logManager.log(`Already on ${newPage}`, State.INFO);
+                this._pendingUrl = null;
+                return;
+            }
+
+            if (oldPage) this.logManager.log(`Navigating: ${oldPage} -> ${newPage}`, State.INFO);
+
+            try {
+                await this.page.goto(newPage, {
+                    waitUntil: "domcontentloaded",
+                    timeout: 30000
+                });
+
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Update tracked URL AFTER navigation completes
+                this._currentUrl = this.page.url();
+                this._pendingUrl = null; // ✅ Clear pending
+
+                this.logManager.log(`Navigation complete: ${this._currentUrl}`, State.INFO);
+            } catch (err: any) {
+                if (err.message?.includes('ERR_ABORTED') ||
+                    err.message?.includes('net::ERR_')) {
+                    this._currentUrl = this.page.url();
+                    this._pendingUrl = null; // ✅ Clear pending even on error
+                    this.logManager.log(`Navigation interrupted, at: ${this._currentUrl}`, State.INFO);
+                    return;
+                }
+                this._pendingUrl = null; // ✅ Clear pending on any error
+                throw err;
+            }
+        });
+    }
+
+    /**
+     * Thread-safe action - returns the URL after action completes
+     */
+    public async act(action: string, agentId?: string): Promise<string> {
+        const urlBefore = this.getCurrentUrl();
+
+        await this.queueNavigation(async () => {
+            if (!this.page) {
+                throw new Error("Page not initialized");
+            }
+
+            const pageToUse: Page = agentId ? await this.getPage(agentId) : this.page;
+
+            this.logManager.log(`[ACT] Before: ${urlBefore}, Action: ${action}`, State.INFO);
+
+            try {
+                const element = await pageToUse.locator(action).first();
+                if (element) {
+                    await element.scrollIntoViewIfNeeded().catch(() => { });
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                }
+
+                const result = await pageToUse.act(action);
+                this.logManager.log(`[ACT] Result: ${JSON.stringify(result)}`, State.INFO);
+
+                // Wait for potential navigation
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                const urlAfter = pageToUse.url();
+
+                // ✅ Update tracked URL if it changed
+                if (urlBefore !== urlAfter) {
+                    this._currentUrl = urlAfter;
+                    this.logManager.log(`[ACT] URL changed: ${urlBefore} -> ${urlAfter}`, State.INFO);
+                } else {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    const urlFinal = pageToUse.url();
+                    if (urlFinal !== urlBefore) {
+                        this._currentUrl = urlFinal; // ✅ Update on delayed change
+                        this.logManager.log(`[ACT] URL changed (delayed): ${urlBefore} -> ${urlFinal}`, State.INFO);
+                    }
+                }
+
+            } catch (err: any) {
+                if (err.message?.includes('ERR_ABORTED') ||
+                    err.message?.includes('frame was detached') ||
+                    err.message?.includes('Execution context was destroyed') ||
+                    err.message?.includes('Target page, context or browser has been closed')) {
+                    // ✅ Update URL even after detachment
+                    this._currentUrl = this.page?.url() || this._currentUrl;
+                    this.logManager.log(`[ACT] Navigation caused detachment, at: ${this._currentUrl}`, State.INFO);
+                    return;
+                }
+                throw err;
+            }
+        });
+
+        // Return the URL after action completes
+        return this.getCurrentUrl();
+    }
+
+    /**
+     * Queue system to ensure only one navigation/action happens at a time
+     */
+    private async queueNavigation(operation: () => Promise<void>): Promise<void> {
+        // If currently navigating, queue this operation
+        if (this.isNavigating) {
+            this.logManager.log(`Operation queued (${this.navigationQueue.length} in queue)`, State.INFO);
+            return new Promise((resolve, reject) => {
+                this.navigationQueue.push(async () => {
+                    try {
+                        await operation();
+                        resolve();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+            });
+        }
+
+        // Execute immediately
+        this.isNavigating = true;
+        try {
+            await operation();
+        } finally {
+            this.isNavigating = false;
+
+            // Process next item in queue
+            const next = this.navigationQueue.shift();
+            if (next) {
+                this.logManager.log(`Processing queued operation (${this.navigationQueue.length} remaining)`, State.INFO);
+                // Don't await - let it run independently
+                next().catch(err => {
+                    this.logManager.error(`Queued operation failed: ${err.message}`, State.ERROR);
+                });
+            }
+        }
     }
 
     /**
