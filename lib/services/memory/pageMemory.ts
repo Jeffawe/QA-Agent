@@ -1,8 +1,10 @@
+import { link } from 'fs';
 import { EndPointTestResult, LinkInfo, PageDetails, UITesterResult } from '../../types.js';
 
 export class PageMemory {
   private pages: Record<string, PageDetails> = {};
   private visitedLinks: Set<string> = new Set();
+  private linksSeen: Set<string> = new Set();
   private navStack: string[] = [];
 
   addPage(details: PageDetails) {
@@ -116,6 +118,10 @@ export class PageMemory {
         hasDepth: details.hasDepth
       }
     }
+
+    links.forEach(link => {
+      this.linksSeen.add(link.href || link.description);
+    });
   }
 
   /// This checks if the link is visited throughout the entire crawl
@@ -196,6 +202,16 @@ export class PageMemory {
   hasPageScreenshot(url: string): boolean {
     url = PageMemory.cleanUrl(url);
     return !!this.pages[url]?.screenshot;
+  }
+
+  /**
+   * Marks a page as visited.
+   * If the page doesn't exist, does nothing.
+   * This is for the unique set of visited pages
+   * @param {string} url - URL of the page to mark as visited.
+   */
+  markVisitedLink(url: string) {
+    this.visitedLinks.add(url);
   }
 
   /**

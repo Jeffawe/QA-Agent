@@ -109,7 +109,7 @@ export class AutoCrawler extends Agent {
 
                     // Record the page in memory if we haven’t seen it before
                     if (!pageMemory.pageExists(this.currentUrl)) {
-                        const links: StageHandObserveResult[] = await this.stagehandSession.observe()
+                        const links: StageHandObserveResult[] = await this.stagehandSession.observe();
                         const uniqueLinks = await UniqueInternalLinkExtractor.getUniqueInternalLinks(links, this.currentUrl, this.page);
                         //const externalLinks = await getExternalLinks(uniqueLinks, this.currentUrl, page);
                         this.logManager.log(`Links detected: ${uniqueLinks.length} out of ${links.length}`, this.buildState(), false);
@@ -130,15 +130,13 @@ export class AutoCrawler extends Agent {
                             this.logManager.test_log(`Adding depth to base url`, this.buildState(), false);
                             pageDetails.depth = 0;
                             pageDetails.hasDepth = true;
+
                         }
 
                         const linksConverted = this.convertElementsToLinks(uniqueLinks);
                         pageMemory.addPageWithLinks(pageDetails, linksConverted);
                         crawlMap.recordPage({ ...pageDetails, links: linksConverted }, this.sessionId);
                     } else {
-                        // Mark any link on the page that has been visited as visited
-                        this.logManager.test_log(`Links seen at this point: ${JSON.stringify(Array.from(pageMemory.getVisitedLinks()))}`, this.buildState(), false);
-                        pageMemory.markLinksVisited(this.currentUrl);
                         this.logManager.log(`Links detected: ${pageMemory.getAllUnvisitedLinks(this.currentUrl).length}`, this.buildState(), false);
                     }
 
@@ -172,6 +170,10 @@ export class AutoCrawler extends Agent {
                         if (this.currentLinkclicked) {
                             pageMemory.markLinkVisited(this.formerPageUrl, this.currentLinkclicked.href || this.currentLinkclicked.description);
                         }
+
+                        // Mark any link on the page that has been visited as visited
+                        this.logManager.test_log(`Links seen at this point: ${JSON.stringify(Array.from(pageMemory.getVisitedLinks()))}`, this.buildState(), false);
+                        pageMemory.markLinksVisited(this.currentUrl);
 
                         // Start appropriate analyzer
                         const unvisited = pageMemory.getAllUnvisitedLinks(this.currentUrl);
@@ -208,6 +210,12 @@ export class AutoCrawler extends Agent {
                             this.logManager.log("Analyzer finished", this.buildState(), false);
                             this.setState(State.ACT);
                         }
+                    }
+
+                    // Mark base url as visited
+                    if (PageMemory.cleanUrl(this.currentUrl) === PageMemory.cleanUrl(this.baseUrl)) {
+                        pageMemory.markVisitedLink(this.baseUrl)
+
                     }
 
                     // While waiting for the other analyzer to finish, clean the unvisited links

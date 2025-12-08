@@ -7,6 +7,14 @@ import { eventBusManager } from "../services/events/eventBus.js";
 import { getApiKeyForAgent } from "../services/memory/apiMemory.js";
 import { dataMemory } from "../services/memory/dataMemory.js";
 
+export interface ActResult{
+    success: boolean,
+    message: string
+}
+
+// 2 seconds max (20 * 100ms)
+const MAX_WAIT_ATTEMPTS = 20;
+
 export default class StagehandSession extends Session<Page> {
     public stagehand: Stagehand | null;
     private apiKey: string;
@@ -134,14 +142,13 @@ export default class StagehandSession extends Session<Page> {
             this.logManager.log(`Closing StagehandSession. Checking for pending operations...`, State.INFO);
 
             let waitAttempts = 0;
-            const maxWaitAttempts = 50; // 5 seconds max (50 * 100ms)
 
-            while ((this.isNavigating || this.navigationQueue.length > 0) && waitAttempts < maxWaitAttempts) {
+            while ((this.isNavigating || this.navigationQueue.length > 0) && waitAttempts < MAX_WAIT_ATTEMPTS) {
                 await new Promise(resolve => setTimeout(resolve, 100));
                 waitAttempts++;
             }
 
-            if (waitAttempts >= maxWaitAttempts) {
+            if (waitAttempts >= MAX_WAIT_ATTEMPTS) {
                 this.logManager.log(
                     `⚠️ Force closing - some operations may still be pending (queue: ${this.navigationQueue.length})`,
                     State.INFO
@@ -153,7 +160,6 @@ export default class StagehandSession extends Session<Page> {
 
             // Close the page first
             if (this.stagehand?.page) {
-                this.logManager.log('Closing Stagehand page...', State.INFO);
                 await this.stagehand.page.close().catch(err => {
                     this.logManager.log(`Page close error (expected if already closed): ${err.message}`, State.INFO);
                 });
@@ -161,13 +167,10 @@ export default class StagehandSession extends Session<Page> {
 
             // Then close stagehand
             if (this.stagehand) {
-                this.logManager.log('Closing Stagehand instance...', State.INFO);
                 await this.stagehand.close().catch(err => {
                     this.logManager.log(`Stagehand close error: ${err.message}`, State.INFO);
                 });
             }
-
-            this.logManager.log('✅ StagehandSession closed successfully', State.INFO);
         } catch (error) {
             console.error('Error during stagehand cleanup:', error);
             this.logManager.error(`Stagehand cleanup error: ${error}`, State.ERROR);
@@ -548,10 +551,21 @@ export default class StagehandSession extends Session<Page> {
     }
 
     /**
-     * Thread-safe action - returns the URL after action completes
+     * Executes an action on a page and tracks the success state.
+     * This method is intended to be used for executing actions on a page
+     * and tracking the success state.
+     * If the action causes a navigation, the method will wait until the
+     * navigation completes before resolving.
+     * @param action The action to execute on the page.
+     * @param agentId The agentId to use for the action.
+     * @returns A promise that resolves to a boolean indicating whether the
+     * action completed successfully.
      */
-    public async act(action: string, agentId?: string): Promise<string> {
+    public async act(action: string, agentId?: string): Promise<ActResult> {
         const urlBefore = this.getCurrentUrl();
+
+        let success = false; // Track success state
+        let message = "";
 
         await this.queueNavigation(async () => {
             if (!this.page) {
@@ -559,7 +573,6 @@ export default class StagehandSession extends Session<Page> {
             }
 
             const pageToUse: Page = agentId ? await this.getPage(agentId) : this.page;
-
             this.logManager.log(`[ACT] Before: ${urlBefore}, Action: ${action}`, State.INFO);
 
             try {
@@ -572,9 +585,14 @@ export default class StagehandSession extends Session<Page> {
                 const result = await pageToUse.act(action);
                 this.logManager.log(`[ACT] Result: ${JSON.stringify(result)}`, State.INFO);
 
+                if (result.success == false) {
+                    success = false; // ✅ Explicitly set false
+                    message = result.message;
+                    return;
+                }
+
                 // Wait for potential navigation
                 await new Promise(resolve => setTimeout(resolve, 1000));
-
                 const urlAfter = pageToUse.url();
 
                 // ✅ Update tracked URL if it changed
@@ -585,10 +603,12 @@ export default class StagehandSession extends Session<Page> {
                     await new Promise(resolve => setTimeout(resolve, 1000));
                     const urlFinal = pageToUse.url();
                     if (urlFinal !== urlBefore) {
-                        this._currentUrl = urlFinal; // ✅ Update on delayed change
+                        this._currentUrl = urlFinal;
                         this.logManager.log(`[ACT] URL changed (delayed): ${urlBefore} -> ${urlFinal}`, State.INFO);
                     }
                 }
+
+                success = true; // ✅ Action completed successfully
 
             } catch (err: any) {
                 if (err.message?.includes('ERR_ABORTED') ||
@@ -598,14 +618,16 @@ export default class StagehandSession extends Session<Page> {
                     // ✅ Update URL even after detachment
                     this._currentUrl = this.page?.url() || this._currentUrl;
                     this.logManager.log(`[ACT] Navigation caused detachment, at: ${this._currentUrl}`, State.INFO);
+                    success = true; // ✅ Detachment is actually success (navigation happened)
                     return;
                 }
+                success = false; // ✅ Real error
+                message = err.message;
                 throw err;
             }
         });
 
-        // Return the URL after action completes
-        return this.getCurrentUrl();
+        return { success, message }; // ✅ Return the tracked success state
     }
 
     /**

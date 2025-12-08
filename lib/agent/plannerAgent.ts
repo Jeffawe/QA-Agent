@@ -101,11 +101,12 @@ export default class PlannerAgent extends Agent {
                     break;
 
                 case State.PLAN:
+                    this.currentUrl = await this.stageHandSession.waitForStableUrl();
                     this.setState(State.ACT);
                     break;
 
                 case State.ACT:
-                    this.goalAgent.run(this.goal, this.warning);
+                    this.goalAgent.run(this.goal, this.currentUrl, this.warning);
                     this.setState(State.WAIT);
                     break;
 
@@ -122,19 +123,17 @@ export default class PlannerAgent extends Agent {
                     break;
 
                 case State.VALIDATE:
-                    const isSameOrigin = isSameOriginWithPath(this.baseUrl, this.currentUrl);
+                    const currentUrl = await this.stageHandSession.waitForStableUrl();
+                    const isSameOrigin = isSameOriginWithPath(this.baseUrl, currentUrl);
 
                     if (!isSameOrigin) {
-                        this.logManager.error(`Navigation to external page detected: "${this.currentUrl}" from "${this.stageHandSession.getCurrentUrl()}", going back.`, this.buildState(), true);
+                        this.logManager.error(`Navigation to external page detected: "${currentUrl}" from "${this.currentUrl}", going back.`, this.buildState(), true);
                         await this.stageHandSession.goto(this.currentUrl);
-                        this.warning = `Navigation to external page detected: "${this.currentUrl}" from "${this.stageHandSession.getCurrentUrl()}", Validator went back to ${this.currentUrl}. Stay within the same origin.`;
+                        this.warning = `Navigation to external page detected: "${currentUrl}" from "${this.currentUrl}", Validator went back to ${this.currentUrl}. Stay within the same origin.`;
                     }
                     
-                    await this.validateGoal();
-                    break;
-
-                case State.DECIDE:
-                    this.setState(State.PLAN);
+                    const result = await this.validateGoal();
+                    if (result) this.currentUrl = currentUrl;
                     break;
 
                 case State.PAUSE:
@@ -191,7 +190,7 @@ export default class PlannerAgent extends Agent {
 
             // Check if progress is being made
             if (this.isProgressImproving(metrics)) {
-                this.setState(State.DECIDE);
+                this.setState(State.PLAN);
                 this.lastProgress = this.currentProgress;
                 this.warning = "";
                 this.goal = this.goalAgent.goal;

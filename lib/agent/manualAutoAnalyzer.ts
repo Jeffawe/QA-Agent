@@ -2,7 +2,7 @@ import { Page } from "@browserbasehq/stagehand";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/autoActionService.js";
 import { pageMemory } from "../services/memory/pageMemory.js";
-import { LinkInfo, State } from "../types.js";
+import { Action, LinkInfo, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { isSameOriginWithPath } from "../utility/functions.js";
 
@@ -90,7 +90,7 @@ export default class ManualAutoAnalyzer extends Agent {
                 /*────────── READY → RUN ──────────*/
                 case State.START:
                     (this as any).startTime = performance.now();
-                    this.currentUrl = this.stageHandSession.getCurrentUrl();
+                    this.currentUrl = await this.stageHandSession.waitForStableUrl();
                     this.goal = "Find the next best link to click";
                     this.logManager.log(`Start testing ${this.queue.length} links from ${this.currentUrl}`, this.buildState(), true);
                     if (this.queue.length === 0) {
@@ -113,13 +113,26 @@ export default class ManualAutoAnalyzer extends Agent {
                 }
 
                 case State.ACT: {
+                    const t0 = Date.now();
                     try {
                         if (!this.activeLink || !this.activeLink.selector) {
                             this.logManager.error("activeLink is null", this.state, false);
                             throw new Error("activeLink is null");
                         }
+                        const action: Action = {
+                            step: "click",
+                            args: [this.activeLink.selector],
+                            reason: "Crawling"
+                        }
+                        this.bus.emit({ ts: t0, type: "action_started", action: action, agentName: this.name });
                         this.logManager.log(`Acting on ${this.activeLink.description}`, this.buildState(), true);
-                        this.stageHandSession.act(this.activeLink.selector);
+                        const result = await this.stageHandSession.act(this.activeLink.selector);
+                        if (!result.success) {
+                            this.logManager.error(`Action failed: ${result.message}`, this.buildState());
+                            this.setState(State.START);
+                            break;
+                        }
+                        this.bus.emit({ ts: t0, type: "action_started", action: action, agentName: this.name });
                     } catch (error: unknown) {
                         const err = error as Error;
                         // Real error - propagate it

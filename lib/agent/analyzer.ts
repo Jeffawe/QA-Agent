@@ -129,6 +129,8 @@ export default class Analyzer extends Agent {
                     const nextActionContext = {
                         goal: this.goal,
                         vision: "",
+                        currentUrl: this.currentUrl,
+                        visitedPages: [],
                         lastAction: this.lastAction || null,
                         memory: [],
                         possibleLabels: labels,

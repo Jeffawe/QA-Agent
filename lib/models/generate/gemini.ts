@@ -9,7 +9,7 @@ import { getApiKeyForAgent } from "../../services/memory/apiMemory.js";
 
 import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genai";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { EventBus } from "../../services/events/event.js";
 import { eventBusManager } from "../../services/events/eventBus.js";
 import { LogManager } from "../../utility/logManager.js";
@@ -129,111 +129,13 @@ export class GeminiLLm extends LLM {
     }
 
     /**
-       * Multimodal helper – embed an image and a textual prompt in a single call.
-       * @param prompt  textual instructions
-       * @param imagePath path to png/jpg
-       * @param recurrent if true, the page explored has been visited before
-       * @returns ThinkResult containing analysis and action
-       * @throws Error if the image is not found or if the LLM response is invalid
-       */
-    async generateOldMultimodalAction(prompt: string, imagePath: string, recurrent: boolean = false, agentName: Namespaces): Promise<ThinkResult> {
-        try {
-            if (!fs.existsSync(imagePath)) throw new Error(`Image not found at ${imagePath}`);
-
-            const mimeType = path.extname(imagePath).toLowerCase() === ".png" ? "image/png" : "image/jpeg";
-            const base64 = fs.readFileSync(imagePath).toString("base64");
-            let response = null;
-            const systemInstruction = getSystemPrompt(agentName, recurrent);
-
-            try {
-                if (this.apiKey?.startsWith('TEST')) {
-                    throw new Error('API_KEY is set to TEST mode, cannot generate multimodal action');
-                } else {
-                    const image = await this.genAI?.files.upload({
-                        file: imagePath,
-                    });
-
-                    if (!image || !image.uri) {
-                        throw new Error("Failed to upload image to Gemini");
-                    }
-
-                    response = await this.genAI?.models.generateContent({
-                        model: this.modelName,
-                        contents: [
-                            createUserContent([
-                                prompt,
-                                createPartFromUri(image.uri || base64, image.mimeType || mimeType),
-                            ]),
-                        ],
-                        config: {
-                            systemInstruction: systemInstruction,
-                        }
-                    });
-                }
-            } catch (error) {
-                const err = error as Error;
-
-                if (err.message.includes('API key not valid')) {
-                    throw new Error('Invalid Gemini API key');
-                } else if (err.message.includes('quota')) {
-                    throw new Error('Gemini API quota exceeded');
-                } else {
-                    throw err;
-                }
-            }
-
-            if (!response || !response.candidates || response.candidates.length === 0) {
-                throw new Error("No response from Gemini LLM");
-            }
-
-            const content = response.candidates[0]?.content?.parts?.[0]?.text
-
-            if (content) {
-                this.eventBus?.emit({
-                    ts: Date.now(),
-                    type: "llm_call",
-                    model_name: this.modelName,
-                    promptTokens: prompt.length, // approximate: 1 token ~ 4 characters
-                    respTokens: content.length ?? 0, // approximate again
-                });
-            } else {
-                this.eventBus?.emit({
-                    ts: Date.now(),
-                    type: "llm_call",
-                    model_name: this.modelName,
-                    promptTokens: prompt.length, // approximate: 1 token ~ 4 characters
-                    respTokens: 0, // approximate again
-                });
-            }
-
-            return recurrent ? this.parseActionFromResponse(content) : this.parseDecisionFromResponse(content);
-        }
-        catch (error) {
-            const err = error as Error;
-
-            const isStopLevel = STOP_LEVEL_ERRORS.some(stopError =>
-                err.message.startsWith(stopError) || err.message.includes(stopError)
-            );
-
-            if (isStopLevel) {
-                this.eventBus?.emit({
-                    ts: Date.now(),
-                    type: "stop",
-                    sessionId: this.sessionId,
-                    message: `Failed to generate multimodal action: ${err}`,
-                });
-            }
-
-            throw err; // rethrow the error for upstream handling
-        }
-    }
-
-
-    /**
  * Multimodal helper – embed multiple images and a textual prompt in a single call.
+ * With conversation history for context.
  * @param prompt  textual instructions
  * @param imagePaths array of paths to png/jpg files
  * @param recurrent if true, the page explored has been visited before
+ * @param agentName the agent making the request
+ * @param includeHistory number of previous exchanges to include (default: 3)
  * @returns ThinkResult containing analysis and action
  * @throws Error if any image is not found or if the LLM response is invalid
  */
@@ -241,7 +143,8 @@ export class GeminiLLm extends LLM {
         prompt: string,
         imagePaths: string[],
         recurrent: boolean = false,
-        agentName: Namespaces
+        agentName: Namespaces,
+        includeHistory: number = 3 // How many previous exchanges to include
     ): Promise<ThinkResult> {
         try {
             // Validate all images exist
@@ -263,7 +166,24 @@ export class GeminiLLm extends LLM {
                 if (this.apiKey?.startsWith('TEST')) {
                     throw new Error('Invalid request, There is an issue parsing your test key at the moment')
                 } else {
-                    // Build content array with text prompt followed by all images
+                    // Get conversation history for this agent
+                    const history = this.getConversationHistory(agentName, includeHistory);
+
+                    // Build messages array starting with system message
+                    const messages: Array<SystemMessage | HumanMessage | AIMessage> = [
+                        new SystemMessage(systemInstruction)
+                    ];
+
+                    // Add conversation history
+                    for (const entry of history) {
+                        if (entry.role === 'user') {
+                            messages.push(new HumanMessage(entry.content));
+                        } else {
+                            messages.push(new AIMessage(entry.content));
+                        }
+                    }
+
+                    // Build current content with text prompt and images
                     const content: Array<{ type: string, text?: string, image_url?: { url: string } }> = [
                         { type: "text", text: prompt }
                     ];
@@ -277,14 +197,14 @@ export class GeminiLLm extends LLM {
                         });
                     }
 
-                    const humanMessage = new HumanMessage({ content });
-                    const messages = [
-                        new SystemMessage(systemInstruction),
-                        humanMessage,
-                    ];
+                    // Add current message
+                    messages.push(new HumanMessage({ content }));
 
                     const structuredLlm = (this.model as any)?.withStructuredOutput(schema);
                     response = await structuredLlm?.invoke(messages);
+
+                    // Store this exchange in history
+                    this.addToConversationHistory(agentName, prompt, response?.content || response);
                 }
             } catch (error) {
                 const err = error as Error;
@@ -301,11 +221,10 @@ export class GeminiLLm extends LLM {
                 throw new Error("No response from Gemini LLM");
             }
 
-            // Update token calculation to account for multiple images
             const tokenUsage: TokenUsage = this.calculateTokenUsage(
                 prompt,
                 systemInstruction,
-                imagePaths, // Pass the array
+                imagePaths,
                 response.content
             );
 
@@ -344,6 +263,80 @@ export class GeminiLLm extends LLM {
             }
 
             throw err;
+        }
+    }
+
+    /**
+     * Get conversation history for a specific agent
+     */
+    private getConversationHistory(
+        agentName: Namespaces,
+        limit: number
+    ): Array<{ role: 'user' | 'assistant'; content: string; timestamp: number; agentName: Namespaces }> {
+        const key = this.getHistoryKey(agentName);
+        const history = this.conversationHistory.get(key) || [];
+
+        // Return last N exchanges (each exchange = user + assistant, so limit * 2)
+        return history.slice(-limit * 2);
+    }
+
+    /**
+     * Add an exchange to conversation history
+     */
+    private addToConversationHistory(
+        agentName: Namespaces,
+        userPrompt: string,
+        assistantResponse: any
+    ): void {
+        const key = this.getHistoryKey(agentName);
+        const history = this.conversationHistory.get(key) || [];
+
+        // Add user message
+        history.push({
+            role: 'user',
+            content: userPrompt,
+            timestamp: Date.now(),
+            agentName
+        });
+
+        // Add assistant response
+        const responseText = typeof assistantResponse === 'string'
+            ? assistantResponse
+            : JSON.stringify(assistantResponse);
+
+        history.push({
+            role: 'assistant',
+            content: responseText,
+            timestamp: Date.now(),
+            agentName
+        });
+
+        // Keep only last 20 exchanges (40 messages) to prevent memory bloat
+        if (history.length > 40) {
+            history.splice(0, history.length - 40);
+        }
+
+        this.conversationHistory.set(key, history);
+    }
+
+    /**
+     * Get history key for an agent (can be per-session or global)
+     */
+    private getHistoryKey(agentName: Namespaces): string {
+        return `${this.sessionId}:${agentName}`;
+    }
+
+    /**
+     * Clear conversation history for an agent or all agents
+     */
+    public clearConversationHistory(agentName?: Namespaces): void {
+        if (agentName) {
+            const key = this.getHistoryKey(agentName);
+            this.conversationHistory.delete(key);
+            this.logManager.log(`Cleared conversation history for ${agentName}`, State.INFO, true);
+        } else {
+            this.conversationHistory.clear();
+            this.logManager.log('Cleared all conversation history', State.INFO, true);
         }
     }
 

@@ -47,6 +47,9 @@ export interface ThinkResult {
 export interface GetNextActionContext {
     goal: string;
     lastAction: string | null;
+    visitedPages?: string[];
+    pagesFoundOnSite?: string[];
+    currentUrl: string;
     memory: string[];
     possibleLabels: any[];
     mainGoal?: string; // Optional main goal for the agent

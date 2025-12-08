@@ -29,6 +29,7 @@ export class GoalAgent extends Agent {
         this.stageHandSession = this.session as StagehandSession;
         this.localactionService = this.actionService as AutoActionService;
         this.imagePath = getBaseImageFolderPath(this.sessionId);
+        this.validatorWarningState = State.DECIDE;
     }
 
     public setBaseValues(url: string, mainGoal?: string): void {
@@ -57,8 +58,9 @@ export class GoalAgent extends Agent {
         this.localactionService = this.actionService as AutoActionService;
     }
 
-    public run(goal: string, extraWarnings?: string): void {
+    public run(goal: string, currentUrl: string, extraWarnings?: string): void {
         this.goal = goal;
+        this.currentUrl = currentUrl;
         this.setState(State.START);
         if (extraWarnings) {
             this.response = extraWarnings;
@@ -132,6 +134,8 @@ export class GoalAgent extends Agent {
                     const context = {
                         goal: this.goal,
                         vision: "",
+                        currentUrl: this.currentUrl,
+                        visitedPages: Array.from(pageMemory.getVisitedLinks()),
                         lastAction: this.lastAction || null,
                         memory: [...this.previousActions],
                         possibleLabels: (this as any).elements || [],
@@ -172,11 +176,18 @@ export class GoalAgent extends Agent {
                         this.setState(State.ERROR);
                         break;
                     }
+
                     const action: string = this.actionResponse?.step || "no_op";
 
                     if (!action || action === "no_op") {
                         this.logManager.log("No action to perform, skipping", this.state);
                         this.setState(State.DONE);
+                        break;
+                    }
+
+                    if (action === "error") {
+                        this.logManager.log("Error in action", this.state);
+                        this.setState(State.ERROR);
                         break;
                     }
 
@@ -188,8 +199,23 @@ export class GoalAgent extends Agent {
                         break;
                     }
 
+                    const t0 = Date.now();
+                    this.bus.emit({ ts: t0, type: "action_started", action: this.actionResponse, agentName: this.name });
+
                     try {
-                        this.stageHandSession.act(action);
+                        const result = await this.stageHandSession.act(action);
+                        if (!result.success) {
+                            this.logManager.error(`Action failed: ${result.message}`, this.buildState());
+                            const warning = `Validator warns that Action could not be performed because of: ${result.message}. Return error in action.step if no way forward.`;
+                            this.bus.emit({
+                                ts: Date.now(),
+                                type: "validator_warning",
+                                message: warning,
+                                agentName: this.name
+                            });
+                            break;
+                        }
+
                     } catch (err) {
                         this.logManager.error(`Action failed: ${String(err)}`, this.buildState());
                         this.setState(State.ERROR);
@@ -207,6 +233,7 @@ export class GoalAgent extends Agent {
                     this.previousActions.push(this.lastAction);
 
                     this.setState(State.DONE);
+                    this.bus.emit({ ts: Date.now(), type: "action_finished", action: this.actionResponse, agentName: this.name, elapsedMs: Date.now() - t0 });
                     this.logManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
                     break;
                 }

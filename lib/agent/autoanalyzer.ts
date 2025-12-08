@@ -74,9 +74,9 @@ export default class AutoAnalyzer extends Agent {
             return;
         }
 
-        if(!this.page){
+        if (!this.page) {
             const page = await this.stagehandSession.getPage();
-            if(!page){
+            if (!page) {
                 throw new Error("Page not initialized");
             }
             this.page = page;
@@ -104,7 +104,7 @@ export default class AutoAnalyzer extends Agent {
                     break;
 
                 case State.OBSERVE: {
-                    this.currentUrl = this.stagehandSession.getCurrentUrl();
+                    this.currentUrl = await this.stagehandSession.waitForStableUrl();
                     const filename = `screenshot_${this.step}_${this.sessionId.substring(0, 10)}.png`;
                     const expectedPath = path.resolve(this.imagePath, filename); // Use absolute path
 
@@ -117,10 +117,10 @@ export default class AutoAnalyzer extends Agent {
                             this.stopSystem("Screenshot failed");
                             break;
                         }
-                        this.screenshots= paths; // Use the actual returned path
+                        this.screenshots = paths; // Use the actual returned path
                     } else {
                         const allPaths = await getRelatedScreenshots(this.sessionId, this.step, this.imagePath);
-                        this.screenshots= allPaths;
+                        this.screenshots = allPaths;
                     }
 
                     this.bus.emit({ ts: Date.now(), type: "screenshot_taken", filename: this.screenshots[0], elapsedMs: 0 });
@@ -130,12 +130,14 @@ export default class AutoAnalyzer extends Agent {
                 }
 
                 case State.DECIDE: {
-                    const labels = this.queue.map((link) => link.description)
+                    const labels = this.queue.map((link) => link.description);
                     this.logManager.log(`Remaining links: ${labels.length} are: ${JSON.stringify(labels)}`, this.buildState(), false);
                     const nextActionContext = {
                         goal: this.goal,
                         vision: "",
                         lastAction: this.lastAction || null,
+                        visitedPages: Array.from(pageMemory.getVisitedLinks()),
+                        currentUrl: this.currentUrl,
                         memory: [],
                         possibleLabels: labels,
                     };
@@ -159,9 +161,9 @@ export default class AutoAnalyzer extends Agent {
                         break;
                     }
 
-                    if(command.noErrors) {
+                    if (command.noErrors) {
                         this.analyzerStatus = AnalyzerStatus.SUCCESS_CLICKED;
-                    }else{
+                    } else {
                         this.analyzerStatus = AnalyzerStatus.ERROR_INVALID;
                     }
 
@@ -183,6 +185,12 @@ export default class AutoAnalyzer extends Agent {
                     const t0 = Date.now();
                     this.bus.emit({ ts: t0, type: "action_started", action, agentName: this.name });
 
+                    if (action.step === 'error') {
+                        this.setState(State.ERROR);
+                        break;
+                    }
+
+                    // It's done with the page
                     if (action.step === 'done') {
                         this.setState(State.DONE);
                         crawlMap.recordPage(pageMemory.getPage(this.currentUrl), this.sessionId);
@@ -198,6 +206,7 @@ export default class AutoAnalyzer extends Agent {
                         break;
                     }
 
+                    // It's done with the entire page
                     if (action.step === 'all_done') {
                         this.setState(State.DONE);
                         this.queue = [];
@@ -227,6 +236,8 @@ export default class AutoAnalyzer extends Agent {
                             agentName: this.name
                         });
                         break
+                    } else {
+                        this.logManager.log(`Selected link is ${selectedLink?.href || selectedLink?.description} with selector ${selectedLink?.selector}`, this.buildState(), false);
                     }
 
                     try {
@@ -235,6 +246,18 @@ export default class AutoAnalyzer extends Agent {
                         this.logManager.error(String(error), this.state, false);
                         this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
                         this.setState(State.ERROR);
+                        break;
+                    }
+
+                    if (!result.success) {
+                        this.logManager.error(`Action failed: ${result.actionTaken}`, this.buildState());
+                        const warning = `Validator warns that Action could not be performed because of: ${result.actionTaken}. Return error in action.step if no way forward.`;
+                        this.bus.emit({
+                            ts: Date.now(),
+                            type: "validator_warning",
+                            message: warning,
+                            agentName: this.name
+                        });
                         break;
                     }
 
@@ -301,7 +324,6 @@ export default class AutoAnalyzer extends Agent {
     }
 
     private findMatchingLink(action: Action): LinkInfo | null {
-        // Try all possible fields the LLM might use
         const candidates = [
             action.step,
             action.possibleActionSelected,
@@ -309,14 +331,82 @@ export default class AutoAnalyzer extends Agent {
         ].filter(Boolean);
 
         for (const candidate of candidates) {
-            const match = this.queue.find(link =>
+            // 1. Exact match
+            const exactMatch = this.queue.find(link =>
                 link.description === candidate ||
-                link.selector === candidate
+                link.selector === candidate ||
+                link.href === candidate
             );
-            if (match) return match;
+            if (exactMatch) return exactMatch;
+
+            // 2. Partial match (very fast)
+            const partialMatch = this.queue.find(link => {
+                const normalizedCandidate = this.normalize(candidate);
+                const normalizedDesc = this.normalize(link.description);
+                const normalizedHref = this.normalize(link.href || '');
+
+                return normalizedDesc.includes(normalizedCandidate) ||
+                    normalizedCandidate.includes(normalizedDesc) ||
+                    normalizedHref.includes(normalizedCandidate);
+            });
+            if (partialMatch) return partialMatch;
+
+            // 3. Fuzzy match using Levenshtein distance (still fast, ~1ms)
+            const fuzzyMatch = this.queue
+                .map(link => ({
+                    link,
+                    score: this.similarity(this.normalize(candidate), this.normalize(link.description))
+                }))
+                .filter(({ score }) => score > 0.8)
+                .sort((a, b) => b.score - a.score)[0];
+
+            if (fuzzyMatch) return fuzzyMatch.link;
         }
 
         return null;
+    }
+
+    private normalize(str: string): string {
+        return str.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[^\w\s]/g, '');
+    }
+
+    // Levenshtein-based similarity (very fast, no ML needed)
+    private similarity(str1: string, str2: string): number {
+        const longer = str1.length > str2.length ? str1 : str2;
+        const shorter = str1.length > str2.length ? str2 : str1;
+
+        if (longer.length === 0) return 1.0;
+
+        const editDistance = this.levenshteinDistance(longer, shorter);
+        return (longer.length - editDistance) / longer.length;
+    }
+
+    private levenshteinDistance(str1: string, str2: string): number {
+        const matrix: number[][] = [];
+
+        for (let i = 0; i <= str2.length; i++) {
+            matrix[i] = [i];
+        }
+
+        for (let j = 0; j <= str1.length; j++) {
+            matrix[0][j] = j;
+        }
+
+        for (let i = 1; i <= str2.length; i++) {
+            for (let j = 1; j <= str1.length; j++) {
+                if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                    matrix[i][j] = matrix[i - 1][j - 1];
+                } else {
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j - 1] + 1,
+                        matrix[i][j - 1] + 1,
+                        matrix[i - 1][j] + 1
+                    );
+                }
+            }
+        }
+
+        return matrix[str2.length][str1.length];
     }
 }
 

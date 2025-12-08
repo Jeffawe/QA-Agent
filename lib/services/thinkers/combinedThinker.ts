@@ -55,7 +55,9 @@ export class CombinedThinker extends Thinker {
             const userMessage = `
                 Current Context:
                 - Goal: ${context.goal}
+                - Current Url: ${context.currentUrl}
                 - Last Action: ${context.lastAction || "None"}
+                - Visited Pages Url's: ${context.visitedPages?.join(", ") || "None"}
                 - Memory: ${context.memory.join("; ") || "None"}
                 - Possible Actions: ${context.possibleLabels.join(", ") || "None"}
                 - Extra Info: ${extraInfo || "None"}
@@ -66,7 +68,7 @@ export class CombinedThinker extends Thinker {
             // Use multimodal if we have an image
             if (!imageData?.imagepath) {
                 throw new Error("No image data provided.");
-            }else{
+            } else {
                 const optimize = dataMemory.getData("optimizeimages");
                 if (optimize) {
                     imageData.imagepath = await processImages(imageData.imagepath);
@@ -118,9 +120,11 @@ export class CombinedThinker extends Thinker {
             const userMessage = `
                     Current Context:
                     - Goal: ${context.goal} (Immediate next task to complete)
+                    - Current Url: ${context.currentUrl}
                     - Main Goal: ${context.mainGoal} (Full QA goal to complete)
                     - Last Action: ${context.lastAction || "None"}
                     - Memory: ${context.memory.join("; ") || "None"}
+                    - Visited Pages Url's: ${context.visitedPages?.join(", ") || "None"}
                     - Possible Actions: ${context.possibleLabels.join("; ") || "None"}
                     (This is the only list of available UI elements or links. Action must match one of these descriptions.)
                     - Extra Info (Validator Warnings): ${extraInfo || "None"}
@@ -131,7 +135,7 @@ export class CombinedThinker extends Thinker {
             // Use multimodal if we have an image
             if (!imageData?.imagepath) {
                 throw new Error("No image data provided.");
-            }else{
+            } else {
                 const optimize = dataMemory.getData("optimizeimages");
                 if (optimize) {
                     imageData.imagepath = await processImages(imageData.imagepath);

@@ -19,6 +19,13 @@ export abstract class Thinker {
 export abstract class LLM {
     public name: string;
 
+    protected conversationHistory = new Map<string, Array<{
+        role: 'user' | 'assistant';
+        content: string;
+        timestamp: number;
+        agentName: Namespaces;
+    }>>();
+
     constructor(name: string) {
         this.name = name;
     }
@@ -121,6 +128,9 @@ export abstract class LLM {
         const systemTokens = this.estimateTokens(systemInstruction);
         const imageTokens = imagePaths ? this.calculateImageTokens(imagePaths) : 0;
         let responseTokens = 0;
+
+        const historyLength = this.conversationHistory.size;
+        const historyTokens = historyLength * 200;
 
         if (response) {
             responseTokens = this.calculateResponseTokens(response);
