@@ -704,7 +704,7 @@ app.get('/status/:sessionId', async (req: Request, res: Response) => {
 app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
     try {
         const { sessionId } = req.params;
-        const { encryptedApiKey, testKey } = req.body;
+        const { encryptedApiKey } = req.body;
 
         // Load the private key
         const { privateKey } = loadKeys();
