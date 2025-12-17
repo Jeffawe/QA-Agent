@@ -9,7 +9,6 @@ import helmet from 'helmet';
 import { Worker } from 'worker_threads';
 
 import { MiniAgentConfig } from './types.js';
-import { checkUserKey } from './externalCall.js';
 import { getAgentsFast, getAgentsKeywordOnly, getEndpointConfig, initializeModel } from './agentConfig.js';
 
 import { clearSessions, deleteSession, getSession, getSessions, getSessionSize, hasSession, setSession } from './services/memory/sessionMemory.js';
@@ -685,110 +684,6 @@ app.get('/stop', async (req: Request, res: Response) => {
     }
 })
 
-app.post('/test/:key', async (req: Request, res: Response) => {
-    const { goal, url, data } = req.body;
-    const key = req.params.key;
-    const sessionId = "test_" + key;
-
-    if (getSessionSize() >= parseInt(process.env.MAX_SESSIONS ?? '10')) {
-        res.status(429).send('We have reached the maximum number of sessions. Try again another time');
-        return;
-    }
-
-    if (hasSession(sessionId)) {
-        console.log('Test Session already started.');
-        res.status(400).send('Test Session already started.');
-        return;
-    }
-
-    try {
-        if (!parentWSS) {
-            throw new Error('WebSocket server not initialized');
-        }
-        // PARALLEL EXECUTION: Run key validation and config loading simultaneously
-        const getKey: boolean = process.env.NODE_ENV === 'production';
-        const detailed = data['detailed'] || false;
-        const endpoint = data['endpoint'] || false;
-
-        const [keyValidationSuccess, serializableConfigs] = await Promise.all([
-            checkUserKey(sessionId, key, getKey).catch(() => false),
-            getCachedAgents(goal, detailed, endpoint)
-        ]);
-
-        if (!keyValidationSuccess) {
-            console.error('Unauthorized. Test Keys are not available for use in local environments if you are using the npm version. If not, try again with the api key.');
-            res.status(401).send('Unauthorized. Test Keys are not available for use in local environments if you are using the npm version. If not, try again with the api key.');
-            return;
-        }
-
-        if (!goal) {
-            res.status(500).send('USER_GOAL is not set. Please set the USER_GOAL (goal) variable.');
-            return;
-        }
-
-        const workerPool = WorkerPool.getInstance();
-        const worker = workerPool.getWorker(sessionId, url, data);
-
-        const websocketPort: number = await Promise.race([
-            setUpWorkerEvents(worker, endpoint, sessionId, goal, serializableConfigs),
-            new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("Worker initialization timeout")), 30000)
-            )
-        ]);
-
-        setSession(sessionId, {
-            worker,
-            status: 'running',
-            websocketPort: websocketPort
-        });
-
-        console.log(`⚡ Starting Test Session: ${sessionId} (optimized)`);
-
-        res.json({
-            message: `Test Session started successfully!`,
-            sessionId: sessionId,
-            websocketport: websocketPort || 8080
-        });
-    } catch (error) {
-        console.error(`❌ Error starting session ${sessionId}:`, error);
-
-        if (hasSession(sessionId)) {
-            try {
-                const session = getSession(sessionId);
-                if (session) {
-                    session.worker.postMessage({ command: 'stop' });
-                    setTimeout(() => {
-                        if (session.worker) {
-                            session.worker.removeAllListeners('message');
-                            session.worker.removeAllListeners('error');
-                            session.worker.removeAllListeners('exit');
-                            console.log(`⏰ Force terminating stuck worker ${sessionId}`);
-                            session.worker?.terminate();
-                        }
-
-                        deleteSession(sessionId);
-                    }, 5000);
-                }
-                console.log(`🧹 Worker terminated for failed session ${sessionId}`);
-            } catch (terminateError) {
-                console.error(`Error terminating worker for session ${sessionId}:`, terminateError);
-            }
-        }
-
-        if (error instanceof Error && error.message.includes('timeout')) {
-            res.status(408).json({
-                error: 'Session initialization timeout',
-                message: 'The session took too long to initialize. Please try again.'
-            });
-        } else {
-            res.status(500).json({
-                error: 'Failed to start session',
-                message: error instanceof Error ? error.message : 'Unknown error occurred'
-            });
-        }
-    }
-});
-
 app.get('/status/:sessionId', async (req: Request, res: Response) => {
     try {
         const sessionId = req.params.sessionId;
@@ -827,15 +722,6 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
         if (!sessionId) {
             res.status(400).json({ error: 'Session ID is required' });
             return;
-        }
-
-        if (testKey && apiKey.startsWith('TEST') && testKey == process.env.TEST_KEY) {
-            console.log('Test API key received');
-            if (!process.env.TEST_API_KEY) {
-                res.status(400).json({ error: 'Test API key is required' });
-                return;
-            }
-            newApiKey = process.env.TEST_API_KEY;
         }
 
         // Store encrypted key mapped to sessionId

@@ -50,7 +50,6 @@ Example config file (`agent.json`):
   "key": "your-api-key",
   "url": "http://localhost:3000",
   "port": 3001,
-  "test-mode": false,
   "auto-start": true,
   "detailed": true,
   "headless": true,
@@ -65,23 +64,23 @@ Example config file (`agent.json`):
 
 ## ⚙️ CLI Arguments
 
-| Flag            | Description                                                                 | Required | Default |
-|-----------------|-----------------------------------------------------------------------------|----------|---------|
-| `--goal`        | Goal for the QA agent (what to test/achieve)                               | ✅       | -       |
-| `--url`         | Base URL of the site to test                                               | ✅       | -       |
-| `--key`         | Google GenAI API Key                                                       | ✅       | -       |
-| `--port`        | Local server port                                                          | ❌       | 3001    |
-| `--config, -c`  | Path to JSON config file                                                   | ❌       | -       |
-| `--test-mode`   | Enable test mode (requires key starting with `TEST`)                       | ❌       | false   |
-| `--auto-start`  | Automatically start the agent                                              | ❌       | true    |
-| `--daemon, -d`  | Run in background (daemon mode)                                            | ❌       | false   |
-| `--sessionId`   | Session identifier for multi-run tracking                                  | ❌       | "1"     |
-| `--headless`    | Run browser in headless mode                                               | ❌       | false   |
-| `--detailed`    | Test **every** UI element across all pages (more exhaustive, slower)       | ❌       | false   |
-| `--endpoint`    | Run agent in API endpoint testing mode                                     | ❌       | false   |
-| `--autoconnect` | Automatically open the updates dashboard in the browser                    | ❌       | true    |
-| `--help, -h`    | Show help message                                                          | ❌       | -       |
-
+| Flag             | Description                                                                 | Required | Default |
+|------------------|-----------------------------------------------------------------------------|----------|---------|
+| `--goal`         | Goal for the QA agent (what to test/achieve)                                | ✅       | -       |
+| `--url`          | Base URL of the site to test                                                | ✅       | -       |
+| `--key`          | Google GenAI API Key                                                        | ✅       | -       |
+| `--port`         | Local server port                                                           | ❌       | 3001    |
+| `--config, -c`   | Path to JSON config file                                                    | ❌       | -       |
+| `--auto-start`   | Automatically start the agent                                               | ❌       | true    |
+| `--daemon, -d`   | Run in background (daemon mode)                                             | ❌       | false   |
+| `--sessionId`    | Session identifier for multi-run tracking                                   | ❌       | "1"     |
+| `--headless`     | Run browser in headless mode                                                | ❌       | false   |
+| `--detailed`     | Test **every** UI element across all pages (more exhaustive, slower)        | ❌       | false   |
+| `--endpoint`     | Run agent in API endpoint testing mode                                      | ❌       | false   |
+| `--autoconnect`  | Automatically open the updates dashboard in the browser                     | ❌       | true    |
+| `--help, -h`     | Show help message                                                           | ❌       | -       |
+| `optimize-images`| Optimize images. Lead to more accurate results but takes more time.         | ❌       | false.  |
+| `cross-platform` | The agent will test on desktop, mobile and tablet.                          | ❌       | false.  |
 ---
 
 ## 📑 Logs & Monitoring

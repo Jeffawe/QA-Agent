@@ -115,7 +115,7 @@ export class LogManager {
     this.logs.push(errorMessage);
     const eventBus = eventBusManager.getBusIfExists();
     eventBus?.emit({ ts: Date.now(), type: "new_log", message: String(message) });
-    eventBus?.emit({ ts: Date.now(), type: "error", message: String(message) });
+    eventBus?.emit({ ts: Date.now(), type: "error", message: String(message), buildState: state || State.ERROR });
 
     if (logToConsole) {
       console.error(errorMessage);

@@ -116,7 +116,7 @@ export default class ManualAnalyzer extends Agent {
                         await this.localactionService.clickSelector(this.activeLink.selector);
                     } catch (error) {
                         this.logManager.error(String(error), this.state, false);
-                        this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
+                        this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error), buildState: this.buildState() });
                         this.setState(State.ERROR);
                         break;
                     }
@@ -144,7 +144,8 @@ export default class ManualAnalyzer extends Agent {
                                 ts: Date.now(),
                                 type: "error",
                                 message: `Failed to goBack() after external page nav: ${err instanceof Error ? err.message : String(err)}`,
-                                error: err instanceof Error ? err : undefined
+                                error: err instanceof Error ? err : undefined,
+                                buildState: this.buildState()
                             });
                             this.logManager.error(`Failed to goBack() after external page nav: ${err instanceof Error ? err.message : String(err)}`, this.state);
                             this.setState(State.ERROR);

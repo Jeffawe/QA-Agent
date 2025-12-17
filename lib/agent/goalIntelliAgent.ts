@@ -1,5 +1,5 @@
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { Action, AnalyzerStatus, ImageData, State } from "../types.js";
+import { Action, AnalyzerStatus, ImageData, StageHandObserveResult, State } from "../types.js";
 import { setTimeout } from "node:timers/promises";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import { pageMemory } from "../services/memory/pageMemory.js";
@@ -203,7 +203,7 @@ export class GoalAgent extends Agent {
                     this.bus.emit({ ts: t0, type: "action_started", action: this.actionResponse, agentName: this.name });
 
                     try {
-                        const result = await this.stageHandSession.act(action);
+                        const result = await this.stageHandSession.act_string(action);
                         if (!result.success) {
                             this.logManager.error(`Action failed: ${result.message}`, this.buildState());
                             const warning = `Validator warns that Action could not be performed because of: ${result.message}. Return error in action.step if no way forward.`;

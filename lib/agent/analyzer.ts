@@ -205,7 +205,7 @@ export default class Analyzer extends Agent {
                         result = await this.localactionService.executeAction(action, (this as any).clickableElements, this.buildState());
                     } catch (error) {
                         this.logManager.error(String(error), this.state, false);
-                        this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
+                        this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error), buildState: this.buildState() });
                         this.setState(State.ERROR);
                         break;
                     }

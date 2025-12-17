@@ -2,12 +2,12 @@ import { ObserveResult, Page, Stagehand } from "@browserbasehq/stagehand";
 import { Session } from "../utility/abstract.js";
 import fs from 'fs';
 import path from 'path';
-import { State } from "../types.js";
+import { StageHandObserveResult, State } from "../types.js";
 import { eventBusManager } from "../services/events/eventBus.js";
 import { getApiKeyForAgent } from "../services/memory/apiMemory.js";
 import { dataMemory } from "../services/memory/dataMemory.js";
 
-export interface ActResult{
+export interface ActResult {
     success: boolean,
     message: string
 }
@@ -550,18 +550,88 @@ export default class StagehandSession extends Session<Page> {
         });
     }
 
+
     /**
-     * Executes an action on a page and tracks the success state.
-     * This method is intended to be used for executing actions on a page
-     * and tracking the success state.
-     * If the action causes a navigation, the method will wait until the
-     * navigation completes before resolving.
-     * @param action The action to execute on the page.
-     * @param agentId The agentId to use for the action.
-     * @returns A promise that resolves to a boolean indicating whether the
-     * action completed successfully.
+     * Takes an action and performs it on the page.
+     * Waits for the action to complete and then updates the tracked URL.
+     * If the action causes navigation, logs the navigation.
+     * If an error occurs during the action, logs the error and clears the pending URL.
+     * @param action The action to take on the page.
+     * @param agentId The agent ID to use for the action. If not provided, uses the shared page.
+     * @returns A promise that resolves to an object containing the result of the action.
      */
-    public async act(action: string, agentId?: string): Promise<ActResult> {
+    public async act(action: StageHandObserveResult, agentId?: string): Promise<ActResult> {
+        const urlBefore = this.getCurrentUrl();
+
+        let success = false; // Track success state
+        let message = "";
+
+        await this.queueNavigation(async () => {
+            if (!this.page) {
+                throw new Error("Page not initialized");
+            }
+
+            const pageToUse: Page = agentId ? await this.getPage(agentId) : this.page;
+            this.logManager.log(`[ACT] Before: ${urlBefore}, Action: ${action}`, State.INFO);
+
+            try {
+                const result = await pageToUse.act(action);
+                this.logManager.log(`[ACT] Result: ${JSON.stringify(result)}`, State.INFO);
+
+                if (result.success == false) {
+                    success = false; // ✅ Explicitly set false
+                    message = result.message;
+                    return;
+                }
+
+                // Wait for potential navigation
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const urlAfter = pageToUse.url();
+
+                // ✅ Update tracked URL if it changed
+                if (urlBefore !== urlAfter) {
+                    this._currentUrl = urlAfter;
+                    this.logManager.log(`[ACT] URL changed: ${urlBefore} -> ${urlAfter}`, State.INFO);
+                } else {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    const urlFinal = pageToUse.url();
+                    if (urlFinal !== urlBefore) {
+                        this._currentUrl = urlFinal;
+                        this.logManager.log(`[ACT] URL changed (delayed): ${urlBefore} -> ${urlFinal}`, State.INFO);
+                    }
+                }
+
+                success = true; // ✅ Action completed successfully
+
+            } catch (err: any) {
+                if (err.message?.includes('ERR_ABORTED') ||
+                    err.message?.includes('frame was detached') ||
+                    err.message?.includes('Execution context was destroyed') ||
+                    err.message?.includes('Target page, context or browser has been closed')) {
+                    // ✅ Update URL even after detachment
+                    this._currentUrl = this.page?.url() || this._currentUrl;
+                    this.logManager.log(`[ACT] Navigation caused detachment, at: ${this._currentUrl}`, State.INFO);
+                    success = true; // ✅ Detachment is actually success (navigation happened)
+                    return;
+                }
+                success = false; // ✅ Real error
+                message = err.message;
+                throw err;
+            }
+        });
+
+        return { success, message }; // ✅ Return the tracked success state
+    }
+
+
+    /**
+     * Act on a string action (e.g. clicking a button).
+     * 
+     * @param {string} action - The action to take (e.g. "click on #myButton").
+     * @param {string} [agentId] - The agent ID to use for the action.
+     * @returns {Promise<ActResult>} - A promise that resolves to an object containing the result of the action taken.
+     */
+    public async act_string(action: string, agentId?: string): Promise<ActResult> {
         const urlBefore = this.getCurrentUrl();
 
         let success = false; // Track success state
@@ -581,7 +651,6 @@ export default class StagehandSession extends Session<Page> {
                     await element.scrollIntoViewIfNeeded().catch(() => { });
                     await new Promise(resolve => setTimeout(resolve, 200));
                 }
-
                 const result = await pageToUse.act(action);
                 this.logManager.log(`[ACT] Result: ${JSON.stringify(result)}`, State.INFO);
 

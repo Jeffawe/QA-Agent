@@ -1,5 +1,5 @@
 import { setTimeout } from 'node:timers/promises';
-import { Action, ActionResult, LinkInfo, NamespacedState, Rect, State } from '../../types.js';
+import { Action, ActionResult, LinkInfo, NamespacedState, Rect, StageHandObserveResult, State } from '../../types.js';
 import StagehandSession from '../../browserAuto/stagehandSession.js';
 import { ActionService } from '../../utility/abstract.js';
 
@@ -23,22 +23,34 @@ export default class AutoActionService extends ActionService {
     async executeAction(action: Action, detailedAction: LinkInfo, state: State | NamespacedState = State.ACT): Promise<ActionResult> {
         this.intOrext = "external";
         try {
-            let finalAction : string = action.step;
+            let finalAction: string = action.step;
             if (action.step === "wait") {
                 this.logManager.log("Waiting for a while before next action", state);
                 await this.wait(action.args[0] || 5000);
-            }else{
+            } else {
                 const validSteps = ['move_mouse_to', 'click', 'press_key', 'no_op'] as const;
                 if (validSteps.includes(action.step as any)) {
-                    if(action.args && action.args.length > 0){
+                    if (action.args && action.args.length > 0) {
                         finalAction = action.args[0] as string;
-                    }else{
+                    } else {
                         throw new Error(`Invalid action step: ${action.step}`);
                     }
                 }
 
-                finalAction = detailedAction.selector ?? finalAction;
-                const result = await this.localsession.act(finalAction);
+                if(!detailedAction){
+                    this.localsession.act_string(finalAction);
+                    return { success: true, linkType: this.intOrext, actionTaken: finalAction };
+                }
+
+                const actionResult: StageHandObserveResult = {
+                    description: detailedAction.description,
+                    selector: detailedAction.selector,
+                    method: detailedAction.method,
+                    extractedUrl: detailedAction.href,
+                    arguments: detailedAction.arguments,
+                };
+
+                const result = await this.localsession.act(actionResult);
 
                 if (!result.success) {
                     return { success: false, linkType: this.intOrext, actionTaken: result.message };

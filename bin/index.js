@@ -264,7 +264,6 @@ const goal = args.goal || config.goal || '';
 const port = args.port || config.port || 3001;
 const key = args.key || config.key || '';
 const url = args.url || config.url || '';
-const testMode = args['test-mode'] || config['test-mode'] || false;
 const autoStart = args['auto-start'] || config['auto-start'] || true;
 const daemonMode = args.daemon || args.d || false;
 const sessionid = args.sessionid || config.sessionid || null;
@@ -286,7 +285,6 @@ if (args.help || args.h) {
       --key            Google GenAI API key (required)  
       --url            Base URL (required)
       --port           Server port (default: 3001)
-      --test-mode      Enable test mode (default: false)
       --auto-start     Automatically start the agent (default: true)
       --help, -h       Show this help message
       --daemon, -d     Run in daemon mode
@@ -313,7 +311,6 @@ if (args.help || args.h) {
         "key": "your-api-key",
         "url": "http://localhost:3000",
         "port": 3001,
-        "test-mode": true,
         "auto-start": true,
         "detailed": true,
         "headless": true,
@@ -415,21 +412,9 @@ process.env.CROSS_PLATFORM = String(crossPlatform).toLowerCase();
 
 console.log('🚀 Starting server...');
 
-if (testMode) {
-  if (!key.startsWith('TEST')) {
-    console.log('❌ Invalid Test Key inputted.');
-    process.exit(1);
-  }
-
-  console.log('🧪 Test mode enabled');
-}
-
 if (!autoStart) {
   console.log(`➡️  Run: curl http://localhost:${port}/start/1 to start the agent.`);
   console.log(`➡️  Run: curl http://localhost:${port}/stop to stop the agent.`);
-  if (testMode) {
-    console.log(`➡️  Run: curl http://localhost:${port}/test/{test-key} to run in test mode.`);
-  }
 }
 
 if (daemonMode) {
@@ -468,7 +453,6 @@ if (daemonMode) {
     const cmd = getCmdlineForPid(existingPid);
     if (isOurServerCommand(cmd)) {
       console.log(`✅ Reusing existing agent server (PID: ${existingPid}) on http://localhost:${port}`);
-      // don't import/start — continue to auto-start logic to call /start or /test
     } else {
       // port is occupied by another process (this branch should have exited earlier), attempt to start otherwise
       console.log('🚀 Starting server (in-process)...');
@@ -493,7 +477,7 @@ if (autoStart) {
 
     const sessionId = sessionid ?? '1';
 
-    const finalEndpoint = testMode ? `/test/${key}` : `/start/${sessionId}`;
+    const finalEndpoint = `/start/${sessionId}`;
     const baseUrl = `http://localhost:${port}`;
 
     // Wait a bit more to ensure server is fully initialized

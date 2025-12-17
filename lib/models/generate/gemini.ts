@@ -4,7 +4,6 @@ import { Action, ThinkResult, Namespaces, State, TokenUsage } from "../../types.
 import fs from 'fs';
 import path from 'path';
 import { getSystemPrompt, getSystemSchema, STOP_LEVEL_ERRORS } from "./prompts.js";
-import { generateContent } from "../../externalCall.js";
 import { getApiKeyForAgent } from "../../services/memory/apiMemory.js";
 
 import { GoogleGenAI, createPartFromUri, createUserContent } from "@google/genai";
@@ -52,7 +51,7 @@ export class GeminiLLm extends LLM {
                     apiKey: this.apiKey
                 });
             } catch (err) {
-                this.logManager.error(`Failed to create Googlethis.genAI instance: ${err}`, State.ERROR, true);
+                this.logManager.error(`Failed to create Google genAI instance: ${err}`, State.ERROR, true);
 
                 // Emit a stop event as the agent cannot function without the LLM
                 this.eventBus.emit({
@@ -75,19 +74,14 @@ export class GeminiLLm extends LLM {
 
         const startTime = Date.now();
         const testPrompt = "Please respond with exactly: 'Model is working correctly'";
-        const expectedResponse = "Model is working correctly";
 
         try {
             let response: string | null = null;
 
             if (this.apiKey?.startsWith('TEST')) {
-                console.log("Using generateContent path");
-                const result = await generateContent({
-                    prompt: testPrompt,
-                    systemInstruction: "You are a helpful assistant. Follow instructions exactly."
-                });
-                response = result?.toString() || null;
-                console.log("generateContent result:", result);
+                const response = "Test Keys are not working. Please use a genuine API_KEY or contact the developer. If you're in local mode, test keys don't work.";
+                this.logManager.log(response, State.ERROR, true);
+                throw new Error(response);
             } else {
                 const messages = [
                     new SystemMessage("You are a helpful assistant. Follow instructions exactly."),

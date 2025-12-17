@@ -1,4 +1,4 @@
-import { Action, Namespaces, PageDetails, State, Statistics } from "../../types.js";
+import { Action, NamespacedState, Namespaces, PageDetails, State, Statistics } from "../../types.js";
 import { EventEmitter } from 'events';
 import { Page } from "playwright";
 
@@ -8,7 +8,7 @@ export type Event =
     | { ts: number; type: 'action_finished'; action: Action; agentName: Namespaces; elapsedMs: number }
     | { ts: number; type: 'llm_call'; model_name: string; promptTokens: number; respTokens: number }
     | { ts: number; type: 'screenshot_taken'; filename: string; elapsedMs: number }
-    | { ts: number; type: 'error'; message: string; error?: Error }
+    | { ts: number; type: 'error'; message: string; error?: Error; buildState: NamespacedState | State }
     | { ts: number; type: 'validator_warning'; message: string; agentName: Namespaces | "all" }
     | { ts: number; type: 'crawl_map_updated'; page: PageDetails }
     | { ts: number; type: 'new_log'; message: string }
@@ -101,7 +101,8 @@ export class LocalEventBus implements EventBus {
           ts: Date.now(),
           type: 'error',
           message: `Handler error for ${type}: ${error instanceof Error ? error.message : String(error)}`,
-          error: error instanceof Error ? error : new Error(String(error))
+          error: error instanceof Error ? error : new Error(String(error)),
+          buildState: State.ERROR
         });
       }
     };

@@ -2,7 +2,7 @@ import { Page } from "@browserbasehq/stagehand";
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import AutoActionService from "../services/actions/autoActionService.js";
 import { pageMemory } from "../services/memory/pageMemory.js";
-import { Action, LinkInfo, State } from "../types.js";
+import { Action, LinkInfo, StageHandObserveResult, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { isSameOriginWithPath } from "../utility/functions.js";
 
@@ -126,7 +126,14 @@ export default class ManualAutoAnalyzer extends Agent {
                         }
                         this.bus.emit({ ts: t0, type: "action_started", action: action, agentName: this.name });
                         this.logManager.log(`Acting on ${this.activeLink.description}`, this.buildState(), true);
-                        const result = await this.stageHandSession.act(this.activeLink.selector);
+                        const actionResult: StageHandObserveResult = {
+                            description: this.activeLink.description,
+                            selector: this.activeLink.selector,
+                            method: this.activeLink.method,
+                            extractedUrl: this.activeLink.href,
+                            arguments: this.activeLink.arguments
+                        };
+                        const result = await this.stageHandSession.act(actionResult);
                         if (!result.success) {
                             this.logManager.error(`Action failed: ${result.message}`, this.buildState());
                             this.setState(State.START);
@@ -137,7 +144,7 @@ export default class ManualAutoAnalyzer extends Agent {
                         const err = error as Error;
                         // Real error - propagate it
                         this.logManager.error(`Action failed: ${err.message}`, this.buildState());
-                        this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error) });
+                        this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error), buildState: this.buildState() });
 
                         this.setState(State.ERROR);
                         break;
@@ -171,7 +178,8 @@ export default class ManualAutoAnalyzer extends Agent {
                                 ts: Date.now(),
                                 type: "error",
                                 message: `Failed to goBack() after external page nav: ${err instanceof Error ? err.message : String(err)}`,
-                                error: err instanceof Error ? err : undefined
+                                error: err instanceof Error ? err : undefined,
+                                buildState: this.buildState()
                             });
                             this.logManager.error(`Failed to goBack() after external page nav: ${err instanceof Error ? err.message : String(err)}`, this.state);
                             this.setState(State.ERROR);

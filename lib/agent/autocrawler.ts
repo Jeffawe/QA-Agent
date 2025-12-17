@@ -158,13 +158,13 @@ export class AutoCrawler extends Agent {
                         if (previousPage) {
                             pageMemory.setAllLinksVisited(previousPage);
                         }
-                        this.backtrack(this.page);
+                        await this.backtrack(this.page);
                         break;
                     }
 
                     if (pageMemory.isFullyExplored(this.currentUrl)) {
                         this.logManager.log(`All links visited on page ${this.currentUrl}`, this.buildState(), false);
-                        this.backtrack(this.page);
+                        await this.backtrack(this.page);
                     } else {
                         // Mark the Link that was clicked last by the analyzer as visited (Did this here instead of act to avoid isFullyExplored beleiving we were done)
                         if (this.currentLinkclicked) {
@@ -239,7 +239,7 @@ export class AutoCrawler extends Agent {
                         const newpage = await this.stagehandSession.waitForStableUrl();
                         if (newpage === this.currentUrl) {
                             this.setState(State.OBSERVE);
-                            return;
+                            break;
                         }
 
                         this.logManager.log(`Navigated to ${newpage} from ${this.currentUrl}`, this.buildState(), false);
@@ -251,7 +251,7 @@ export class AutoCrawler extends Agent {
                             pageMemory.markLinkVisited(this.currentUrl, this.currentLinkclicked.href || this.currentLinkclicked.description);
                             this.currentLinkclicked = null;
                             this.setState(State.OBSERVE);
-                            return;
+                            break;
                         }
 
                         crawlMap.recordPage(pageMemory.getPage(this.currentUrl), this.sessionId);
@@ -268,12 +268,16 @@ export class AutoCrawler extends Agent {
                     } else {
                         // dead-end → backtrack
                         this.logManager.log("Backtracking. No more links", this.buildState(), false);
-                        this.backtrack(this.page);
+                        await this.backtrack(this.page);
                     }
 
-                    const endTime = performance.now();
-                    this.timeTaken = endTime - (this as any).startTime;
-                    this.logManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
+                    if (this.buildState() === `${this.name}.${State.DONE}`) {
+                        const endTime = performance.now();
+                        this.timeTaken = endTime - (this as any).startTime;
+                        this.logManager.log(`${this.name} agent finished in: ${this.timeTaken.toFixed(2)} ms`, this.buildState(), false);
+                    }
+
+                    this.logManager.log(`State is going to be ${this.buildState()}`, this.buildState(), true);
                     await setTimeout(500);
                     break;
                 }
