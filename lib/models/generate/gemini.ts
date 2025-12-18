@@ -13,6 +13,7 @@ import { EventBus } from "../../services/events/event.js";
 import { eventBusManager } from "../../services/events/eventBus.js";
 import { LogManager } from "../../utility/logManager.js";
 import { logManagers } from "../../services/memory/logMemory.js";
+import { extractErrorMessage } from '../../utility/functions.js';
 
 dotenv.config();
 
@@ -51,14 +52,15 @@ export class GeminiLLm extends LLM {
                     apiKey: this.apiKey
                 });
             } catch (err) {
-                this.logManager.error(`Failed to create Google genAI instance: ${err}`, State.ERROR, true);
+                const errorMessage = extractErrorMessage(err);
+                this.logManager.error(`Failed to create Google genAI instance: ${errorMessage}`, State.ERROR, true);
 
                 // Emit a stop event as the agent cannot function without the LLM
                 this.eventBus.emit({
                     ts: Date.now(),
                     type: "stop",
                     sessionId: this.sessionId,
-                    message: `Failed to generate multimodal action: ${err}`,
+                    message: `Failed to generate multimodal action: ${errorMessage}`,
                 });
 
                 this.genAI = null;
@@ -201,13 +203,13 @@ export class GeminiLLm extends LLM {
                     this.addToConversationHistory(agentName, prompt, response?.content || response);
                 }
             } catch (error) {
-                const err = error as Error;
-                if (err.message.includes('API key not valid')) {
+                const errorMessage = extractErrorMessage(error);
+                if (errorMessage.includes('API key not valid')) {
                     throw new Error('Invalid Gemini API key');
-                } else if (err.message.includes('quota')) {
+                } else if (errorMessage.includes('quota')) {
                     throw new Error('Gemini API quota exceeded');
                 } else {
-                    throw err;
+                    throw error;
                 }
             }
 
@@ -242,9 +244,9 @@ export class GeminiLLm extends LLM {
                 : this.parseDecisionFromResponse(finalContent);
 
         } catch (error) {
-            const err = error as Error;
+            const err = extractErrorMessage(error);
             const isStopLevel = STOP_LEVEL_ERRORS.some(stopError =>
-                err.message.startsWith(stopError) || err.message.includes(stopError)
+                err.startsWith(stopError) || err.includes(stopError)
             );
 
             if (isStopLevel) {

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { extractErrorMessage } from './functions.js';
 
 async function sendDiscordError(error: Error | string, context?: Record<string, any>): Promise<void> {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
@@ -9,7 +10,12 @@ async function sendDiscordError(error: Error | string, context?: Record<string, 
   }
 
   try {
-    const errorMessage = error instanceof Error ? error.message : error;
+    const errorMessage = extractErrorMessage(error);
+    
+    if (errorMessage.includes('API key not valid')){
+      return
+    }
+
     const errorStack = error instanceof Error ? error.stack : undefined;
     
     // Build embed fields

@@ -298,8 +298,7 @@ export class AutoCrawler extends Agent {
         } catch (err) {
             const errorMessage = extractErrorMessage(err);
             this.logManager.error(`Crawler tick error on ${this.currentUrl}: ${errorMessage}`, this.buildState());
-            this.errorMessage = errorMessage;
-            this.setState(State.ERROR);
+            this.setStateError(errorMessage);
         }
     }
 

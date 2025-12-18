@@ -7,6 +7,7 @@ import { EventBus } from "../events/event.js";
 import { eventBusManager } from "../events/eventBus.js";
 import { processImages } from "../imageProcessor.js";
 import { dataMemory } from "../memory/dataMemory.js";
+import { extractErrorMessage } from "../../utility/functions.js";
 
 const thinkerState = State.DECIDE
 
@@ -78,7 +79,7 @@ export class CombinedThinker extends Thinker {
             const result = await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath, recurrent, agentName);
             return result;
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorMessage = extractErrorMessage(error);
             this.logManager.error(`Error generating next action: ${errorMessage}`, State.DECIDE, false);
             this.eventBus.emit({
                 ts: Date.now(),
@@ -145,7 +146,7 @@ export class CombinedThinker extends Thinker {
             const result = await this.modelClient.generateMultimodalAction(userMessage, imageData.imagepath, recurrent, agentName);
             return result;
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorMessage = extractErrorMessage(error);
             this.logManager.error(`Error generating next goal: ${errorMessage}`, State.DECIDE, false);
             this.eventBus?.emit({
                 ts: Date.now(),

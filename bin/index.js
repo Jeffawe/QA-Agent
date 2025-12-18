@@ -4,6 +4,7 @@ import { execSync, spawn } from 'child_process';
 import net from 'net';
 import fs from 'fs';
 import path from 'path';
+import 'dotenv/config';
 
 // Function to check if a port is available
 function checkPort(port) {
@@ -23,6 +24,34 @@ function checkPort(port) {
       resolve(false); // Port is in use
     });
   });
+}
+
+function resolveApiKey (inputKey) {
+  const UNIQUE_KEY = process.env.UNIQUE_KEY;
+  if (!UNIQUE_KEY) return inputKey;
+
+  const match = inputKey.match(/^(f|t)_([a-zA-Z0-9]+)$/);
+  if (!match) return inputKey;
+
+  const [, type, hash] = match;
+
+  if (hash !== UNIQUE_KEY) return inputKey;
+
+  if (type === "f") {
+    if (!process.env.FREE_TRIAL_API_KEY) {
+      throw new Error("FREE_TRIAL_API_KEY not configured");
+    }
+    return process.env.FREE_TRIAL_API_KEY;
+  }
+
+  if (type === "t") {
+    if (!process.env.TEST_API_KEY) {
+      throw new Error("TEST_API_KEY not configured");
+    }
+    return process.env.TEST_API_KEY;
+  }
+
+  return inputKey;
 }
 
 // Function to read and parse config file
@@ -262,7 +291,7 @@ if (args.config || args.c) {
 
 const goal = args.goal || config.goal || '';
 const port = args.port || config.port || 3001;
-const key = args.key || config.key || '';
+let key = args.key || config.key || '';
 const url = args.url || config.url || '';
 const autoStart = args['auto-start'] || config['auto-start'] || true;
 const daemonMode = args.daemon || args.d || false;
@@ -326,6 +355,8 @@ if (args.help || args.h) {
   `);
   process.exit(0);
 }
+
+key = resolveApiKey(key);
 
 if (subcommand === 'stop') {
   console.log('⏳ Stopping agent...');

@@ -18,7 +18,7 @@ import { ParentWebSocketServer } from './services/events/parentWebSocket.js';
 import { createServer } from 'http';
 import testRoutes from './test/testAgent.js'
 import { WorkerPool } from './workerPool.js';
-import { withTimeout } from './utility/functions.js';
+import { resolveApiKey, withTimeout } from './utility/functions.js';
 import path, { dirname } from "path";
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -724,12 +724,7 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
             return;
         }
 
-        if (newApiKey.startsWith('f') || newApiKey.startsWith('t')) {
-            const uniqueHash = newApiKey.split('_')[1];
-            if (uniqueHash && uniqueHash == process.env.UNIQUE_KEY) {
-                newApiKey = newApiKey.startsWith('f') ? process.env.FREE_TRIAL_API_KEY || apiKey : process.env.TEST_API_KEY || apiKey;
-            }
-        }
+        newApiKey = resolveApiKey(apiKey);
 
         // Store encrypted key mapped to sessionId
         storeSessionApiKey(sessionId, newApiKey ?? apiKey);

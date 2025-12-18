@@ -6,6 +6,7 @@ import { StageHandObserveResult, State } from "../types.js";
 import { eventBusManager } from "../services/events/eventBus.js";
 import { getApiKeyForAgent } from "../services/memory/apiMemory.js";
 import { dataMemory } from "../services/memory/dataMemory.js";
+import { extractErrorMessage } from "../utility/functions.js";
 
 export interface ActResult {
     success: boolean,
@@ -130,8 +131,8 @@ export default class StagehandSession extends Session<Page> {
 
             return true;
         } catch (error) {
-            const err = error as Error;
-            this.logManager.error(`Failed to start Stagehand session: ${err.message}`);
+            const err = extractErrorMessage(error);
+            this.logManager.error(`Failed to start Stagehand session: ${err}`);
             return false
         }
     }
@@ -386,7 +387,7 @@ export default class StagehandSession extends Session<Page> {
 
                     screenshotPaths.push(filename);
                 } catch (error) {
-                    console.error(`Error taking ${device} screenshot:`, error);
+                    this.logManager.error(`Error taking ${device} screenshot:`, State.ERROR, true);
                     continue;
                 }
             }
@@ -396,7 +397,8 @@ export default class StagehandSession extends Session<Page> {
 
             return screenshotPaths;
         } catch (error) {
-            console.error("Error taking multi-device screenshots:", error);
+            const errorMessage = extractErrorMessage(error);
+            this.logManager.error(`Error taking multi-device screenshots: ${errorMessage}`, State.ERROR, true);
             return [];
         }
     }
