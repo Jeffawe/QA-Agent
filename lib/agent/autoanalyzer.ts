@@ -1,7 +1,7 @@
 import { setTimeout } from "node:timers/promises";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { LinkInfo, State, ImageData, Action, ActionResult, AnalyzerStatus, } from "../types.js";
-import { fileExists } from "../utility/functions.js";
+import { extractErrorMessage, fileExists } from "../utility/functions.js";
 import { pageMemory } from "../services/memory/pageMemory.js";
 import { crawlMap } from "../utility/crawlMap.js";
 import StagehandSession from "../browserAuto/stagehandSession.js";
@@ -51,6 +51,7 @@ export default class AutoAnalyzer extends Agent {
     protected validateSessionType(): void {
         if (!(this.session instanceof StagehandSession)) {
             this.logManager.error(`AutoAnalyzer requires stagehandSession, got ${this.session.constructor.name}`);
+            this.errorMessage = `AutoAnalyzer requires stagehandSession, got ${this.session.constructor.name}`;
             this.setState(State.ERROR);
             throw new Error(`AutoAnalyzer requires stagehandSession, got ${this.session.constructor.name}`);
         }
@@ -61,6 +62,7 @@ export default class AutoAnalyzer extends Agent {
     protected validateActionService(): void {
         if (!(this.actionService instanceof AutoActionService)) {
             this.logManager.error(`AutoAnalyzer requires an appropriate action service`);
+            this.errorMessage = `AutoAnalyzer requires an appropriate action service`;
             this.setState(State.ERROR);
             throw new Error(`AutoAnalyzer requires an appropriate action service`);
         }
@@ -113,6 +115,7 @@ export default class AutoAnalyzer extends Agent {
                         const paths = await this.stagehandSession.takeMultiDeviceScreenshots(this.imagePath, filename);
                         if (!paths || paths.length === 0) {
                             this.logManager.error("Screenshot failed", this.state);
+                            this.errorMessage = "Screenshot failed";
                             this.setState(State.ERROR);
                             this.stopSystem("Screenshot failed");
                             break;
@@ -157,6 +160,7 @@ export default class AutoAnalyzer extends Agent {
                     );
                     if (!command?.action) {
                         this.logManager.error("Thinker produced no action", this.state, false);
+                        this.errorMessage = "Thinker produced no action";
                         this.setState(State.ERROR);
                         break;
                     }
@@ -186,6 +190,7 @@ export default class AutoAnalyzer extends Agent {
                     this.bus.emit({ ts: t0, type: "action_started", action, agentName: this.name });
 
                     if (action.step === 'error') {
+                        this.errorMessage = "Failed to take action";
                         this.setState(State.ERROR);
                         break;
                     }
@@ -243,8 +248,10 @@ export default class AutoAnalyzer extends Agent {
                     try {
                         result = await this.localactionService.executeAction(action, selectedLink, this.buildState());
                     } catch (error) {
-                        this.logManager.error(String(error), this.state, false);
-                        this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error), buildState: this.buildState() });
+                        const message = extractErrorMessage(error);
+                        this.logManager.error(message, this.state, false);
+                        this.bus.emit({ ts: Date.now(), type: "error", message: message, error: (error as Error), buildState: this.buildState() });
+                        this.errorMessage = message;
                         this.setState(State.ERROR);
                         break;
                     }
@@ -302,7 +309,9 @@ export default class AutoAnalyzer extends Agent {
                     break;
             }
         } catch (error) {
-            this.logManager.error(String(error), this.buildState(), false);
+            const message = extractErrorMessage(error);
+            this.logManager.error(message, this.buildState(), false);
+            this.errorMessage = message;
             this.setState(State.ERROR);
         }
     }

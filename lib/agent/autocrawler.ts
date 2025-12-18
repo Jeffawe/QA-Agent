@@ -9,7 +9,7 @@ import AutoActionService from "../services/actions/autoActionService.js";
 import AutoAnalyzer from "./autoanalyzer.js";
 import { UniqueInternalLinkExtractor } from "../utility/links/linkExtractor.js";
 import { Page } from "@browserbasehq/stagehand";
-import { isSameOriginWithPath } from "../utility/functions.js";
+import { extractErrorMessage, isSameOriginWithPath } from "../utility/functions.js";
 import { dataMemory } from "../services/memory/dataMemory.js";
 
 export class AutoCrawler extends Agent {
@@ -43,6 +43,7 @@ export class AutoCrawler extends Agent {
     protected validateSessionType(): void {
         if (!(this.session instanceof StagehandSession)) {
             this.logManager.error(`AutoCrawler requires stagehandSession, got ${this.session.constructor.name}`);
+            this.errorMessage = `AutoCrawler requires stagehandSession, got ${this.session.constructor.name}`;
             this.setState(State.ERROR);
             throw new Error(`AutoCrawler requires stagehandSession, got ${this.session.constructor.name}`);
         }
@@ -53,6 +54,7 @@ export class AutoCrawler extends Agent {
     protected validateActionService(): void {
         if (!(this.actionService instanceof AutoActionService)) {
             this.logManager.error(`AutoCrawler requires an appropriate action service`);
+            this.errorMessage = `AutoCrawler requires an appropriate action service`;
             this.setState(State.ERROR);
             throw new Error(`AutoCrawler requires an appropriate action service`);
         }
@@ -74,6 +76,7 @@ export class AutoCrawler extends Agent {
             const page = await this.stagehandSession.getPage();
             if (!page) {
                 this.logManager.error("Page not initialized", this.buildState());
+                this.errorMessage = "Page not initialized";
                 this.setState(State.ERROR);
                 return;
             }
@@ -82,12 +85,15 @@ export class AutoCrawler extends Agent {
 
         if (!this.baseUrl) {
             this.logManager.error("BaseURL not found", this.buildState());
+            this.errorMessage = "BaseURL not found";
             this.setState(State.ERROR);
             return;
         }
         if (!this.bus) return;
 
         if (!this.currentUrl) {
+            this.logManager.error("CurrentURL not found", this.buildState());
+            this.errorMessage = "CurrentURL not found";
             this.setState(State.ERROR);
             return;
         }
@@ -290,7 +296,9 @@ export class AutoCrawler extends Agent {
                     break;
             }
         } catch (err) {
-            this.logManager.error(`Crawler tick error on ${this.currentUrl}: ${err}`, this.buildState());
+            const errorMessage = extractErrorMessage(err);
+            this.logManager.error(`Crawler tick error on ${this.currentUrl}: ${errorMessage}`, this.buildState());
+            this.errorMessage = errorMessage;
             this.setState(State.ERROR);
         }
     }

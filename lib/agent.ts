@@ -9,6 +9,7 @@ import { clearAllImages } from './services/imageProcessor.js';
 import { eventBusManager } from './services/events/eventBus.js';
 import { logManagers } from './services/memory/logMemory.js';
 import { ActionServiceFactory, SessionFactory, ThinkerFactory } from "./agentFactory.js";
+import { extractErrorMessage } from "./utility/functions.js";
 
 export interface AgentDependencies {
   sessionId: string;
@@ -128,7 +129,8 @@ export default class BossAgent {
 
           this.logManager.log(`Initialized agent: ${config.name}`, State.INFO);
         } catch (error) {
-          this.logManager.error(`Failed to initialize agent ${config.name}: ${error}`, State.ERROR);
+          const errorMessage = extractErrorMessage(error);
+          this.logManager.error(`Failed to initialize agent ${config.name}: ${errorMessage}`, State.ERROR);
           throw error;
         }
       }
@@ -136,7 +138,7 @@ export default class BossAgent {
       // Second pass: Validate agent dependencies
       this.validateAgentDependencies(agentConfigs);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = extractErrorMessage(error);
       if (this.logManager) {
         this.logManager.error(`Failed to initialize agents: ${errorMessage}`, State.ERROR);
       }
@@ -185,7 +187,7 @@ export default class BossAgent {
       try {
         await Promise.all(sessionPromises);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = extractErrorMessage(error);
         this.logManager.error(errorMessage, State.ERROR);
         return;
       }
@@ -258,7 +260,8 @@ export default class BossAgent {
       this.logManager.log(JSON.stringify(statistics, null, 2), State.DONE, true);
     }
     catch (error) {
-      this.logManager.error(`Error starting agent: ${error}`, State.ERROR, true);
+      const errorMessage = extractErrorMessage(error);
+      this.logManager.error(`Error starting agent: ${errorMessage}`, State.ERROR, true);
       await this.stop();
       throw error;
     }
@@ -327,7 +330,7 @@ export default class BossAgent {
           this.bus.emit({
             ts: Date.now(),
             type: "stop",
-            message: `There was an error with ${result.agent.name} agent`,
+            message: `${result.agent.errorMessage}. Error occurred in ${result.agent.name} agent`,
             sessionId: this.sessionId
           });
           break;
@@ -356,7 +359,8 @@ export default class BossAgent {
       this.logManager.log("All Services have been stopped", State.DONE, true);
       return true;
     } catch (err) {
-      this.logManager.error(`Error stopping agent: ${err}`, State.ERROR, true);
+      const errorMessage = extractErrorMessage(err);
+      this.logManager.error(`Error stopping agent: ${errorMessage}`, State.ERROR, true);
       return false;
     }
   }

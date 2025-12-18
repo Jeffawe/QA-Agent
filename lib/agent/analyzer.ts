@@ -3,7 +3,7 @@ import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
 import { LinkInfo, State, ImageData, Action, ActionResult, InteractiveElement, AnalyzerStatus, } from "../types.js";
 import { getBaseImageFolderPath, processScreenshot } from "../services/imageProcessor.js";
 import { getInteractiveElements } from "../services/UIElementDetector.js";
-import { fileExists } from "../utility/functions.js";
+import { extractErrorMessage, fileExists } from "../utility/functions.js";
 import { pageMemory } from "../services/memory/pageMemory.js";
 import { crawlMap } from "../utility/crawlMap.js";
 import playwrightSession from "../browserAuto/playWrightSession.js";
@@ -204,8 +204,9 @@ export default class Analyzer extends Agent {
                     try {
                         result = await this.localactionService.executeAction(action, (this as any).clickableElements, this.buildState());
                     } catch (error) {
-                        this.logManager.error(String(error), this.state, false);
-                        this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error), buildState: this.buildState() });
+                        const errorMessage = extractErrorMessage(error);
+                        this.logManager.error(errorMessage, this.state, false);
+                        this.bus.emit({ ts: Date.now(), type: "error", message: errorMessage, error: (error as Error), buildState: this.buildState() });
                         this.setState(State.ERROR);
                         break;
                     }

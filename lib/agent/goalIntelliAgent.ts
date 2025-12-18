@@ -5,6 +5,7 @@ import StagehandSession from "../browserAuto/stagehandSession.js";
 import { pageMemory } from "../services/memory/pageMemory.js";
 import AutoActionService from "../services/actions/autoActionService.js";
 import { getBaseImageFolderPath } from "../services/imageProcessor.js";
+import { extractErrorMessage } from "../utility/functions.js";
 
 export class GoalAgent extends Agent {
     public goal: string;
@@ -41,7 +42,7 @@ export class GoalAgent extends Agent {
     protected validateSessionType(): void {
         if (!(this.session instanceof StagehandSession)) {
             this.logManager.error(`GoalAgent requires StagehandSession, got ${this.session.constructor.name}`);
-            this.setState(State.ERROR);
+            this.setStateError(`GoalAgent requires StagehandSession, got ${this.session.constructor.name}`);
             throw new Error(`GoalAgent requires StagehandSession, got ${this.session.constructor.name}`);
         }
 
@@ -51,7 +52,7 @@ export class GoalAgent extends Agent {
     protected validateActionService(): void {
         if (!(this.actionService instanceof AutoActionService)) {
             this.logManager.error(`GoalAgent requires an appropriate action service`);
-            this.setState(State.ERROR);
+            this.setStateError(`GoalAgent requires an appropriate action service`);
             throw new Error(`GoalAgent requires an appropriate action service`);
         }
 
@@ -90,7 +91,7 @@ export class GoalAgent extends Agent {
                     this.currentPage = this.stageHandSession.getCurrentUrl();
                     if (!this.goal) {
                         this.logManager.error("GoalAgent started without a goal", this.buildState());
-                        this.setState(State.ERROR);
+                        this.setStateError("GoalAgent started without a goal");
                         this.bus.emit({
                             ts: Date.now(),
                             type: "stop",
@@ -113,7 +114,7 @@ export class GoalAgent extends Agent {
                     const success = await this.stageHandSession.takeScreenshot(this.imagePath, filename);
                     if (!success) {
                         this.logManager.error("Screenshot failed", this.state);
-                        this.setState(State.ERROR);
+                        this.setStateError("Screenshot failed");
                         this.stopSystem("Screenshot failed");
                         break;
                     }
@@ -149,7 +150,7 @@ export class GoalAgent extends Agent {
 
                     if (!command || !command.action) {
                         this.logManager.error("Thinker returned no action", this.state);
-                        this.setState(State.ERROR);
+                        this.setStateError("Thinker returned no action");
                         break;
                     }
 
@@ -173,7 +174,7 @@ export class GoalAgent extends Agent {
                 case State.ACT: {
                     if (!this.actionResponse) {
                         this.logManager.error("No action response to act upon", this.state);
-                        this.setState(State.ERROR);
+                        this.setStateError("No action response to act upon");
                         break;
                     }
 
@@ -187,7 +188,7 @@ export class GoalAgent extends Agent {
 
                     if (action === "error") {
                         this.logManager.log("Error in action", this.state);
-                        this.setState(State.ERROR);
+                        this.setStateError("Error in action");
                         break;
                     }
 
@@ -217,8 +218,9 @@ export class GoalAgent extends Agent {
                         }
 
                     } catch (err) {
-                        this.logManager.error(`Action failed: ${String(err)}`, this.buildState());
-                        this.setState(State.ERROR);
+                        const message = extractErrorMessage(err);
+                        this.logManager.error(`Action failed: ${message}`, this.buildState());
+                        this.setStateError(`Action failed: ${message}`);
                         break;
                     }
 
@@ -247,8 +249,9 @@ export class GoalAgent extends Agent {
                     break;
             }
         } catch (err) {
-            this.logManager.error(String(err), this.buildState());
-            this.setState(State.ERROR);
+            const errorMessage = extractErrorMessage(err);
+            this.logManager.error(errorMessage, this.buildState());
+            this.setStateError(errorMessage);
         }
     }
 

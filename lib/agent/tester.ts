@@ -7,6 +7,7 @@ import { Page } from "@browserbasehq/stagehand";
 import { pageMemory } from "../services/memory/pageMemory.js";
 import { TestingThinker } from "../services/thinkers/testingThinker.js";
 import { batchTestElements, quickTestButtonElement } from "../utility/links/linktesterUtilities.js";
+import { extractErrorMessage } from "../utility/functions.js";
 
 export default class Tester extends Agent {
     public nextLink: LinkInfo | null = null;
@@ -52,7 +53,7 @@ export default class Tester extends Agent {
 
         if (this.stagehandSession.page === null) {
             this.logManager.error('Page not initialized', this.buildState(), true);
-            this.setState(State.ERROR);
+            this.setStateError('Page not initialized');
             throw new Error('Page not initialized');
         }
     }
@@ -60,7 +61,7 @@ export default class Tester extends Agent {
     protected validateSessionType(): void {
         if (!(this.session instanceof StagehandSession)) {
             this.logManager.error(`Tester requires stagehandSession, got ${this.session.constructor.name}`);
-            this.setState(State.ERROR);
+            this.setStateError(`Tester requires stagehandSession, got ${this.session.constructor.name}`);
             throw new Error(`Tester requires stagehandSession, got ${this.session.constructor.name}`);
         }
 
@@ -70,7 +71,7 @@ export default class Tester extends Agent {
     protected validateActionService(): void {
         if (!(this.actionService instanceof AutoActionService)) {
             this.logManager.error(`Tester requires an appropriate action service`);
-            this.setState(State.ERROR);
+            this.setStateError(`Tester requires an appropriate action service`);
             throw new Error(`Tester requires an appropriate action service`);
         }
 
@@ -120,8 +121,9 @@ export default class Tester extends Agent {
 
                         this.setState(State.DECIDE);
                     } catch (e) {
-                        this.logManager.error(`Error observing page: ${String(e)}`, this.buildState());
-                        this.setState(State.ERROR);
+                        const err = extractErrorMessage(e);
+                        this.logManager.error(`Error observing page: ${err}`, this.buildState());
+                        this.setStateError(`Error observing page: ${err}`);
                     }
                     break;
 
@@ -192,8 +194,9 @@ export default class Tester extends Agent {
                         pageMemory.setTestResults(this.currentUrl, this.testResults);
                         this.setState(State.EVALUATE);
                     } catch (e) {
-                        this.logManager.error(`Error validating results: ${String(e)}`, this.buildState());
-                        this.setState(State.ERROR);
+                        const err = extractErrorMessage(e);
+                        this.logManager.error(`Error validating results: ${err}`, this.buildState());
+                        this.setStateError(`Error validating results: ${err}`);
                     }
                     break;
 
@@ -210,8 +213,9 @@ export default class Tester extends Agent {
                     break;
             }
         } catch (e) {
-            this.logManager.error(`Tester Agent Error: ${String(e)}`, this.buildState());
-            this.setState(State.ERROR);
+            const err = extractErrorMessage(e);
+            this.logManager.error(`Tester Agent Error: ${err}`, this.buildState());
+            this.setStateError(`Tester Agent Error: ${err}`);
         }
     }
 

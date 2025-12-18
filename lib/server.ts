@@ -712,7 +712,7 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
         // Decrypt the API key
         const apiKey = decryptApiKeyFromFrontend(encryptedApiKey, privateKey);
 
-        let newApiKey = apiKey;
+        let newApiKey: string = apiKey;
 
         if (!apiKey) {
             res.status(400).json({ error: 'API key is required' });
@@ -722,6 +722,13 @@ app.post('/setup-key/:sessionId', (req: Request, res: Response) => {
         if (!sessionId) {
             res.status(400).json({ error: 'Session ID is required' });
             return;
+        }
+
+        if (newApiKey.startsWith('f') || newApiKey.startsWith('t')) {
+            const uniqueHash = newApiKey.split('_')[1];
+            if (uniqueHash && uniqueHash == process.env.UNIQUE_KEY) {
+                newApiKey = newApiKey.startsWith('f') ? process.env.FREE_TRIAL_API_KEY || apiKey : process.env.TEST_API_KEY || apiKey;
+            }
         }
 
         // Store encrypted key mapped to sessionId

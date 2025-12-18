@@ -6,6 +6,7 @@ import PlaywrightSession from "../browserAuto/playWrightSession.js";
 import ManualActionService from "../services/actions/actionService.js";
 import { pageMemory } from "../services/memory/pageMemory.js";
 import { crawlMap } from "../utility/crawlMap.js";
+import { extractErrorMessage } from "../utility/functions.js";
 
 const MAX_CHARS = 1200; // safe limit for logs/results
 const MAX_LINES = 200; // also limit lines for extremely long newline-separated payloads
@@ -43,9 +44,9 @@ export default class EndPoints extends Agent {
 
     protected validateSessionType(): void {
         if (!(this.session instanceof PlaywrightSession)) {
-            this.logManager.error(`PlannerAgent requires PuppeteerSession, got ${this.session.constructor.name}`);
-            this.setState(State.ERROR);
-            throw new Error(`PlannerAgent requires PuppeteerSession, got ${this.session.constructor.name}`);
+            this.logManager.error(`EndpointAgent requires PuppeteerSession, got ${this.session.constructor.name}`);
+            this.setStateError(`EndpointAgent requires PuppeteerSession, got ${this.session.constructor.name}`);
+            throw new Error(`EndpointAgent requires PuppeteerSession, got ${this.session.constructor.name}`);
         }
 
         this.playwrightSession = this.session as PlaywrightSession;
@@ -53,9 +54,9 @@ export default class EndPoints extends Agent {
 
     protected validateActionService(): void {
         if (!(this.actionService instanceof ManualActionService)) {
-            this.logManager.error(`PlannerAgent requires an appropriate action service`);
-            this.setState(State.ERROR);
-            throw new Error(`PlannerAgent requires an appropriate action service`);
+            this.logManager.error(`EndpointAgent requires an appropriate action service`);
+            this.setStateError(`EndpointAgent requires an appropriate action service`);
+            throw new Error(`EndpointAgent requires an appropriate action service`);
         }
 
         this.localactionService = this.actionService as ManualActionService;
@@ -130,8 +131,9 @@ export default class EndPoints extends Agent {
             }
         }
         catch (e) {
-            this.logManager.error(String(e), this.buildState());
-            this.setState(State.ERROR);
+            const err = extractErrorMessage(e);
+            this.logManager.error(err, this.buildState());
+            this.setStateError(err);
         }
     }
 

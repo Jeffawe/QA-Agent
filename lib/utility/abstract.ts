@@ -189,6 +189,8 @@ export abstract class Agent {
     protected paused: boolean = false;
     protected uniqueId: string = "";
 
+    public errorMessage: string = "";
+
     protected requiredAgents: Agent[] = [];
 
     // Default state to go to after a validator warning
@@ -222,7 +224,7 @@ export abstract class Agent {
         });
 
         this.bus.on('stop', async (evt) => {
-            this.setState(State.ERROR);
+            this.setStateError(evt.message);
             this.logManager.log(`${this.name} Agent stopped because of ${evt.message}`, State.ERROR, true);
         });
 
@@ -234,6 +236,11 @@ export abstract class Agent {
     public setBaseValues(url: string, mainGoal?: string): void {
         this.baseUrl = url;
         this.currentUrl = url;
+    }
+
+    protected setStateError(message: string): void {
+        this.errorMessage = message;
+        this.setState(State.ERROR);
     }
 
     public pauseAgent(): void {
@@ -261,7 +268,7 @@ export abstract class Agent {
     protected stopSystem(reason: string): void {
         this.logManager.log(`${this.name} Agent stopped because of ${reason}`, State.ERROR, true);
         this.bus.emit({ ts: Date.now(), type: "stop", message: reason, sessionId: this.sessionId });
-        this.setState(State.ERROR);
+        this.setStateError(reason);
     }
 
     public isPaused(): boolean {
@@ -282,7 +289,7 @@ export abstract class Agent {
         const agent = this.getAgent<T>(name);
         if (!agent) {
             this.logManager.error(`Required agent '${name}' not found`, this.buildState());
-            this.setState(State.ERROR);
+            this.setStateError(`Required agent '${name}' not found`);
             throw new Error(`Required agent '${name}' not found`);
         }
 

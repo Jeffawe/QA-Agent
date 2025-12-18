@@ -4,7 +4,7 @@ import AutoActionService from "../services/actions/autoActionService.js";
 import { pageMemory } from "../services/memory/pageMemory.js";
 import { Action, LinkInfo, StageHandObserveResult, State } from "../types.js";
 import { Agent, BaseAgentDependencies } from "../utility/abstract.js";
-import { isSameOriginWithPath } from "../utility/functions.js";
+import { extractErrorMessage, isSameOriginWithPath } from "../utility/functions.js";
 
 export default class ManualAutoAnalyzer extends Agent {
     public activeLink: LinkInfo | null = null;
@@ -34,7 +34,7 @@ export default class ManualAutoAnalyzer extends Agent {
     protected validateSessionType(): void {
         if (!(this.session instanceof StagehandSession)) {
             this.logManager.error(`ManualAutoAnalyzer requires stagehandSession, got ${this.session.constructor.name}`);
-            this.setState(State.ERROR);
+            this.setStateError(`ManualAutoAnalyzer requires stagehandSession, got ${this.session.constructor.name}`);
             throw new Error(`ManualAutoAnalyzer requires stagehandSession, got ${this.session.constructor.name}`);
         }
 
@@ -44,7 +44,7 @@ export default class ManualAutoAnalyzer extends Agent {
     protected validateActionService(): void {
         if (!(this.actionService instanceof AutoActionService)) {
             this.logManager.error(`ManualAnalyzer requires an appropriate action service`);
-            this.setState(State.ERROR);
+            this.setStateError(`ManualAnalyzer requires an appropriate action service`);
             throw new Error(`ManualAnalyzer requires an appropriate action service`);
         }
 
@@ -141,12 +141,12 @@ export default class ManualAutoAnalyzer extends Agent {
                         }
                         this.bus.emit({ ts: t0, type: "action_started", action: action, agentName: this.name });
                     } catch (error: unknown) {
-                        const err = error as Error;
+                        const err = extractErrorMessage(error);
                         // Real error - propagate it
-                        this.logManager.error(`Action failed: ${err.message}`, this.buildState());
-                        this.bus.emit({ ts: Date.now(), type: "error", message: String(error), error: (error as Error), buildState: this.buildState() });
+                        this.logManager.error(`Action failed: ${err}`, this.buildState());
+                        this.bus.emit({ ts: Date.now(), type: "error", message: err, error: (error as Error), buildState: this.buildState() });
 
-                        this.setState(State.ERROR);
+                        this.setStateError(`Action failed: ${err}`);
                         break;
                     }
 
@@ -174,15 +174,16 @@ export default class ManualAutoAnalyzer extends Agent {
                             this.queue = pageMemory.getAllUnvisitedLinks(this.currentUrl);
                             this.setState(State.START);
                         } catch (err) {
+                            const errorMessage = extractErrorMessage(err);
                             this.bus.emit({
                                 ts: Date.now(),
                                 type: "error",
-                                message: `Failed to goBack() after external page nav: ${err instanceof Error ? err.message : String(err)}`,
+                                message: `Failed to goBack() after external page nav: ${errorMessage}`,
                                 error: err instanceof Error ? err : undefined,
                                 buildState: this.buildState()
                             });
-                            this.logManager.error(`Failed to goBack() after external page nav: ${err instanceof Error ? err.message : String(err)}`, this.state);
-                            this.setState(State.ERROR);
+                            this.logManager.error(`Failed to goBack() after external page nav: ${errorMessage}`, this.state);
+                            this.setStateError(`Failed to goBack() after external page nav: ${errorMessage}`);
                         }
                     } else {
                         this.setState(State.DONE);
@@ -200,8 +201,9 @@ export default class ManualAutoAnalyzer extends Agent {
                     break;
             }
         } catch (error) {
-            this.logManager.error(String(error), this.buildState(), false);
-            this.setState(State.ERROR);
+            const errorMessage = extractErrorMessage(error);
+            this.logManager.error(errorMessage, this.buildState(), false);
+            this.setStateError(errorMessage);
         }
     }
 

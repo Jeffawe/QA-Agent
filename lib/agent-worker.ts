@@ -15,6 +15,7 @@ import { pageMemory } from './services/memory/pageMemory.js';
 import { dataMemory } from './services/memory/dataMemory.js';
 import { LocalEventBridge } from './services/events/localEventBridge.js';
 import { crawlMap } from './utility/crawlMap.js';
+import { extractErrorMessage } from './utility/functions.js';
 
 let agent: BossAgent | null = null;
 let isInitialized = false;
@@ -149,9 +150,10 @@ const initializeWorker = async () => {
 
     } catch (error) {
         console.error('❌ Worker initialization error:', error);
+        const errorMessage = extractErrorMessage(error);
         parentPort?.postMessage({
             type: 'error',
-            error: error instanceof Error ? error.message : String(error)
+            error: errorMessage
         });
 
         process.exit(1);
@@ -232,10 +234,11 @@ const activateSession = async (sessionId: string, url: any, data: any) => {
 
     } catch (error) {
         console.error(`❌ Error activating session ${sessionId}:`, error);
+        const errorMessage = extractErrorMessage(error);
         parentPort?.postMessage({
             type: 'error',
             sessionId,
-            error: error instanceof Error ? error.message : String(error)
+            error: errorMessage
         });
     }
 };
@@ -298,11 +301,12 @@ if (parentPort) {
 
                     } catch (error) {
                         console.error('Error during cleanup:', error);
+                        const errorMessage = extractErrorMessage(error);
 
                         parentPort?.postMessage({
                             type: 'session_cleanup',
                             sessionId: sessionId,
-                            error: error instanceof Error ? error.message : String(error)
+                            error: errorMessage
                         });
                     } finally {
                         eventBus.off('stop', stopHandler);
@@ -389,11 +393,12 @@ if (parentPort) {
 
         } catch (error) {
             console.error(`❌ [Worker ${workerId}] Stop worker error:`, error);
+            const errorMessage = extractErrorMessage(error);
 
             parentPort?.postMessage({
                 type: 'session_cleanup',
                 sessionId: workerData.sessionId,
-                error: error instanceof Error ? error.message : String(error),
+                error: errorMessage,
                 workerId: workerId
             });
         } finally {

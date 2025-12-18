@@ -5,7 +5,7 @@ import { pipeline } from '@xenova/transformers';
 import StagehandSession from "../browserAuto/stagehandSession.js";
 import { ExtractorOptions } from "../types.js";
 import AutoActionService from "../services/actions/autoActionService.js";
-import { isSameOriginWithPath } from "../utility/functions.js";
+import { extractErrorMessage, isSameOriginWithPath } from "../utility/functions.js";
 
 interface ClassificationResult {
     label: string;
@@ -53,9 +53,9 @@ export default class PlannerAgent extends Agent {
 
     protected validateSessionType(): void {
         if (!(this.session instanceof StagehandSession)) {
-            this.logManager.error(`PlannerAgent requires PuppeteerSession, got ${this.session.constructor.name}`);
-            this.setState(State.ERROR);
-            throw new Error(`PlannerAgent requires PuppeteerSession, got ${this.session.constructor.name}`);
+            this.logManager.error(`PlannerAgent requires StagehandSession, got ${this.session.constructor.name}`);
+            this.setStateError(`PlannerAgent requires StagehandSession, got ${this.session.constructor.name}`);
+            throw new Error(`PlannerAgent requires StagehandSession, got ${this.session.constructor.name}`);
         }
 
         this.stageHandSession = this.session as StagehandSession;
@@ -64,7 +64,7 @@ export default class PlannerAgent extends Agent {
     protected validateActionService(): void {
         if (!(this.actionService instanceof AutoActionService)) {
             this.logManager.error(`PlannerAgent requires an appropriate action service`);
-            this.setState(State.ERROR);
+            this.setStateError(`PlannerAgent requires an appropriate action service`);
             throw new Error(`PlannerAgent requires an appropriate action service`);
         }
 
@@ -144,8 +144,9 @@ export default class PlannerAgent extends Agent {
             }
         }
         catch (e) {
-            this.logManager.error(String(e), this.buildState());
-            this.setState(State.ERROR);
+            const err = extractErrorMessage(e);
+            this.logManager.error(err, this.buildState());
+            this.setStateError(err);
         }
     }
 
@@ -167,7 +168,7 @@ export default class PlannerAgent extends Agent {
 
             if (!goalProgress) {
                 this.logManager.error("Goal progress description is empty.", this.buildState(), true);
-                this.setState(State.ERROR);
+                this.setStateError("Goal progress description is empty.");
                 return false;
             }
 
@@ -204,8 +205,9 @@ export default class PlannerAgent extends Agent {
                 return false;
             }
         } catch (error) {
-            this.logManager.error(`Error validating goal: ${error}`, this.buildState(), true);
-            this.setState(State.ERROR);
+            const errorMessage = extractErrorMessage(error);
+            this.logManager.error(`Error validating goal: ${errorMessage}`, this.buildState(), true);
+            this.setStateError(`Error validating goal: ${errorMessage}`);
             return false;
         }
     }
